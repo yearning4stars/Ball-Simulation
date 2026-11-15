@@ -41,7 +41,15 @@ class Battle {
 
   update(dt) {
     this.events.length = 0;
-    if (this.winner !== null) return;
+    if (this.winner !== null) {
+      // จบแมตช์แล้ว: คนชนะยังเด้งไปมาต่อ ส่วนคนแพ้ไม่ถูกคำนวณอีก (ตัววาดจะทำให้แตกกระจาย)
+      for (const f of this.fighters) {
+        if (f.hp <= 0) continue;
+        f.hitFlash = Math.max(0, f.hitFlash - dt);
+        this._move(f, dt);
+      }
+      return;
+    }
     this.time += dt;
     this.contactCooldown = Math.max(0, this.contactCooldown - dt);
 
@@ -218,6 +226,7 @@ class Battle {
     else if (b.hp <= 0) this.winner = 0;
     if (this.winner !== null) {
       this.events.push({ type: "ko" });
+      this.projectiles = []; // กระสุนที่ค้างอยู่หายไปพร้อมจบแมตช์
       for (const f of this.fighters) {
         f.cast = null;
         f.frame = "idle";

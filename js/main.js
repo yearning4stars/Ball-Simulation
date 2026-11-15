@@ -5,6 +5,7 @@ const canvas = document.getElementById("arena");
 const ctx = canvas.getContext("2d");
 const W = canvas.width;
 const H = canvas.height;
+const FONT = '"Prompt", "Noto Sans Thai", system-ui, sans-serif';
 
 const selA = document.getElementById("charA");
 const selB = document.getElementById("charB");
@@ -16,6 +17,7 @@ const sfx = new SoundFX();
 
 let battle = null;
 let particles = [];
+let shards = []; // เศษภาพของตัวที่แพ้
 let floaters = [];
 let speedMult = 1;
 let lastTs = 0;
@@ -64,6 +66,7 @@ function startBattle() {
   battle = new Battle(W, H, CHARACTERS[selA.value], CHARACTERS[selB.value]);
   battle.fighters.forEach((f) => { f.trailHp = f.hp; }); // แถบเลือดที่ค่อยๆ ลดตามหลัง
   particles = [];
+  shards = [];
   floaters = [];
   shake = 0;
 }
@@ -98,6 +101,42 @@ function spawnParticles(x, y, color, n, power) {
   }
 }
 
+// หั่นภาพตัวละครเป็นตาราง N x N แล้วให้แต่ละชิ้นกระเด็นออกจากจุดกึ่งกลาง
+function spawnShards(f, key) {
+  const img = images[key] && (images[key][f.frame] || images[key].idle);
+  const size = f.r * 2.6;
+  const N = 6;
+  const tile = size / N;
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const ox = (i + 0.5) * tile - size / 2; // ตำแหน่งชิ้นในภาพ (ก่อนกลับด้าน)
+      const oy = (j + 0.5) * tile - size / 2;
+      const wx = ox * f.facing;
+      const ang = Math.atan2(oy, wx) + (Math.random() - 0.5) * 0.9;
+      const sp = 140 + Math.random() * 380;
+      const life = 0.9 + Math.random() * 0.6;
+      shards.push({
+        img,
+        color: f.def.color,
+        sx: img ? i * (img.width / N) : 0,
+        sy: img ? j * (img.height / N) : 0,
+        sw: img ? img.width / N : 0,
+        sh: img ? img.height / N : 0,
+        tile,
+        facing: f.facing,
+        x: f.x + wx,
+        y: f.y + oy,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 120,
+        rot: 0,
+        vr: (Math.random() - 0.5) * 14,
+        life,
+        maxLife: life,
+      });
+    }
+  }
+}
+
 function handleEvents(events) {
   for (const e of events) {
     if (e.type === "hit") {
@@ -113,7 +152,12 @@ function handleEvents(events) {
       sfx.dash();
     } else if (e.type === "ko") {
       shake = 16;
-      for (const f of battle.fighters) if (f.hp <= 0) spawnParticles(f.x, f.y, f.def.color, 40, 420);
+      const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def);
+      for (const f of battle.fighters) {
+        if (f.hp > 0) continue;
+        spawnParticles(f.x, f.y, f.def.color, 40, 420);
+        spawnShards(f, keyOf(f.def));
+      }
       sfx.ko();
       if (battle.winner === "draw") sfx.draw();
       else sfx.win();
@@ -130,6 +174,15 @@ function updateEffects(dt) {
     p.life -= dt;
   }
   particles = particles.filter((p) => p.life > 0);
+  for (const s of shards) {
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.vy += 520 * dt; // แรงโน้มถ่วงเบาๆ ให้เศษร่วง
+    s.vx *= 0.995;
+    s.rot += s.vr * dt;
+    s.life -= dt;
+  }
+  shards = shards.filter((s) => s.life > 0);
   for (const f of floaters) {
     f.y -= 40 * dt;
     f.life -= dt;
@@ -195,7 +248,7 @@ function drawFighter(f, key) {
 }
 
 function drawHud(b) {
-  const barW = 330;
+  const barW = (W - 60) / 2; // หลอดสองฝั่งพอดีความกว้างสนาม เว้นขอบ 20 และช่องกลาง 20
   const barH = 30;
   b.fighters.forEach((f, i) => {
     const x = i === 0 ? 20 : W - 20 - barW;
@@ -221,7 +274,7 @@ function drawHud(b) {
     ctx.fillRect(...rect(ratio));
 
     // ตัวเลขเลือดกลางหลอด: 73 / 100
-    ctx.font = "bold 18px sans-serif";
+    ctx.font = "700 18px " + FONT;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const label = Math.ceil(f.hp) + " / " + f.maxHp;
@@ -232,22 +285,46 @@ function drawHud(b) {
     ctx.fillText(label, x + barW / 2, y + barH / 2 + 1);
     ctx.textBaseline = "alphabetic";
 
-    ctx.font = "bold 15px sans-serif";
+    ctx.font = "700 15px " + FONT;
     ctx.textAlign = i === 0 ? "left" : "right";
     ctx.fillText(f.def.name, i === 0 ? x : x + barW, y + barH + 22);
   });
 }
 
-function drawWinner(b) {
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "#fff";
+// ป้ายผู้ชนะ วาดไว้ "หลัง" ตัวละคร เพื่อให้คนชนะที่ยังเด้งอยู่วิ่งผ่านหน้าป้ายได้
+function drawWinnerBanner(b) {
+  ctx.fillStyle = "rgba(0,0,0,0.38)";
+  ctx.fillRect(0, H / 2 - 80, W, 150);
   ctx.textAlign = "center";
-  ctx.font = "bold 56px sans-serif";
+  ctx.textBaseline = "alphabetic";
   const text = b.winner === "draw" ? "เสมอ!" : b.fighters[b.winner].def.name + " ชนะ!";
-  ctx.fillText(text, W / 2, H / 2);
-  ctx.font = "20px sans-serif";
-  ctx.fillText("กด \"เริ่มสู้\" เพื่อเล่นอีกครั้ง", W / 2, H / 2 + 44);
+  ctx.font = "700 56px " + FONT;
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "rgba(0,0,0,0.6)";
+  ctx.strokeText(text, W / 2, H / 2 + 8);
+  ctx.fillStyle = "#fff";
+  ctx.fillText(text, W / 2, H / 2 + 8);
+  ctx.font = "400 20px " + FONT;
+  ctx.fillStyle = "#e8ebf5";
+  ctx.fillText("กด \"เริ่มสู้\" เพื่อเล่นอีกครั้ง", W / 2, H / 2 + 50);
+}
+
+function drawShards() {
+  for (const s of shards) {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, s.life / (s.maxLife * 0.6)));
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.rot);
+    ctx.scale(s.facing, 1);
+    if (s.img) {
+      ctx.drawImage(s.img, s.sx, s.sy, s.sw, s.sh, -s.tile / 2, -s.tile / 2, s.tile + 1, s.tile + 1);
+    } else {
+      ctx.fillStyle = s.color;
+      ctx.fillRect(-s.tile / 2, -s.tile / 2, s.tile, s.tile);
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function render() {
@@ -258,7 +335,9 @@ function render() {
     const keys = [selA.value, selB.value];
     // หา key ของตัวละครจาก def (กันกรณีเปลี่ยน select กลางเกม)
     const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def) || keys[0];
-    battle.fighters.forEach((f) => { if (f.hp > 0 || battle.winner === null) drawFighter(f, keyOf(f.def)); });
+    if (battle.winner !== null) drawWinnerBanner(battle);
+    battle.fighters.forEach((f) => { if (f.hp > 0) drawFighter(f, keyOf(f.def)); });
+    drawShards();
 
     for (const p of battle.projectiles) {
       ctx.fillStyle = "#fff6c2";
@@ -276,7 +355,7 @@ function render() {
     }
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#fff";
-    ctx.font = "bold 22px sans-serif";
+    ctx.font = "700 22px " + FONT;
     ctx.textAlign = "center";
     for (const f of floaters) {
       ctx.globalAlpha = Math.min(1, f.life / 0.4);
@@ -284,11 +363,10 @@ function render() {
     }
     ctx.globalAlpha = 1;
     drawHud(battle);
-    if (battle.winner !== null) drawWinner(battle);
   } else {
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
-    ctx.font = "24px sans-serif";
+    ctx.font = "400 24px " + FONT;
     ctx.fillText("เลือกตัวละครแล้วกด \"เริ่มสู้\"", W / 2, H / 2);
   }
   ctx.restore();
@@ -310,6 +388,16 @@ function loop(ts) {
   requestAnimationFrame(loop);
 }
 
+// รอฟอนต์โหลดก่อนเริ่มวาด (ไม่เกิน 2 วินาที ถ้าโหลดไม่ได้ก็ใช้ฟอนต์สำรอง)
+function loadFonts() {
+  if (typeof document === "undefined" || !document.fonts || !document.fonts.load) return Promise.resolve();
+  const jobs = Promise.all([
+    document.fonts.load('400 20px "Prompt"'),
+    document.fonts.load('700 20px "Prompt"'),
+  ]).catch(() => {});
+  return Promise.race([jobs, new Promise((r) => setTimeout(r, 2000))]);
+}
+
 fillSelects();
 updateMuteLabel();
-loadAllImages().then(() => requestAnimationFrame(loop));
+Promise.all([loadAllImages(), loadFonts()]).then(() => requestAnimationFrame(loop));
