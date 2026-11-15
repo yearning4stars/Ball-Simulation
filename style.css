@@ -17,7 +17,22 @@ main {
   text-align: center;
 }
 
-h1 { margin: 8px 0 14px; letter-spacing: 1px; }
+h1 { margin: 4px 0 10px; font-size: 1.5rem; letter-spacing: 1px; }
+
+.ver {
+  margin: 10px 0 0;
+  font-size: 0.75rem;
+  color: #7c85a8;
+}
+
+.ver.warn {
+  color: #ffb4a8;
+  background: #3a1c1c;
+  border: 1px solid #7a3030;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
 
 .controls {
   display: flex;
@@ -58,9 +73,10 @@ button.secondary {
 canvas {
   display: block;
   margin: 0 auto;
-  width: 100%;
-  max-width: 720px;
-  aspect-ratio: 1 / 1; /* สนามเป็นสี่เหลี่ยมจัตุรัสเสมอ ทุกขนาดหน้าจอ */
+  /* ค่าสำรองกรณี JS ยังไม่ทำงาน: ไม่เกินความกว้างและความสูงของจอ
+     (ตอนเกมรัน main.js จะคำนวณขนาดจากพื้นที่ว่างจริงทับค่านี้) */
+  width: min(100%, 720px, calc(100vh - 200px));
+  aspect-ratio: 1 / 1; /* สนามเป็นสี่เหลี่ยมจัตุรัสเสมอ */
   height: auto;
   border-radius: 12px;
   border: 2px solid #232844;

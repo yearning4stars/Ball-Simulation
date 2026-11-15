@@ -249,7 +249,7 @@ function drawFighter(f, key) {
 
 function drawHud(b) {
   const barW = (W - 60) / 2; // หลอดสองฝั่งพอดีความกว้างสนาม เว้นขอบ 20 และช่องกลาง 20
-  const barH = 30;
+  const barH = 38;
   b.fighters.forEach((f, i) => {
     const x = i === 0 ? 20 : W - 20 - barW;
     const y = 20;
@@ -274,7 +274,7 @@ function drawHud(b) {
     ctx.fillRect(...rect(ratio));
 
     // ตัวเลขเลือดกลางหลอด: 73 / 100
-    ctx.font = "700 18px " + FONT;
+    ctx.font = "700 24px " + FONT;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const label = Math.ceil(f.hp) + " / " + f.maxHp;
@@ -285,9 +285,9 @@ function drawHud(b) {
     ctx.fillText(label, x + barW / 2, y + barH / 2 + 1);
     ctx.textBaseline = "alphabetic";
 
-    ctx.font = "700 15px " + FONT;
+    ctx.font = "700 20px " + FONT;
     ctx.textAlign = i === 0 ? "left" : "right";
-    ctx.fillText(f.def.name, i === 0 ? x : x + barW, y + barH + 22);
+    ctx.fillText(f.def.name, i === 0 ? x : x + barW, y + barH + 26);
   });
 }
 
@@ -355,7 +355,7 @@ function render() {
     }
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#fff";
-    ctx.font = "700 22px " + FONT;
+    ctx.font = "700 30px " + FONT;
     ctx.textAlign = "center";
     for (const f of floaters) {
       ctx.globalAlpha = Math.min(1, f.life / 0.4);
@@ -398,6 +398,45 @@ function loadFonts() {
   return Promise.race([jobs, new Promise((r) => setTimeout(r, 2000))]);
 }
 
+// ---------- ปรับขนาดสนามให้พอดีจอ (ยังเป็นสี่เหลี่ยมจัตุรัส) ----------
+function fitCanvas() {
+  if (typeof window === "undefined" || !window.innerHeight || !canvas.getBoundingClientRect) return;
+  const parent = canvas.parentElement;
+  const availW = (parent && parent.clientWidth ? parent.clientWidth : window.innerWidth) - 32;
+  // พื้นที่แนวตั้งที่เหลือใต้แถบปุ่ม เผื่อบรรทัดเวอร์ชันด้านล่างไว้ด้วย
+  const top = canvas.getBoundingClientRect().top + (window.scrollY || 0);
+  const availH = window.innerHeight - top - 48;
+  const size = Math.floor(Math.max(240, Math.min(W, availW, availH)));
+  canvas.style.width = size + "px";
+  canvas.style.height = size + "px";
+}
+
+// ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
+const EXPECTED_VERSION = 5;
+function checkVersions() {
+  const el = document.getElementById("ver");
+  if (!el || typeof window === "undefined" || !window.BB_FILES) return;
+  const stale = ["characters", "battle", "audio"].filter((k) => window.BB_FILES[k] !== EXPECTED_VERSION);
+  if (stale.length) {
+    el.className = "ver warn";
+    el.textContent =
+      "ไฟล์เหล่านี้ยังเป็นเวอร์ชันเก่าหรือไม่ได้อัปโหลด: " +
+      stale.map((k) => "js/" + k + ".js").join(", ") +
+      " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
+  } else {
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION;
+  }
+}
+
 fillSelects();
 updateMuteLabel();
-Promise.all([loadAllImages(), loadFonts()]).then(() => requestAnimationFrame(loop));
+checkVersions();
+fitCanvas();
+if (typeof window !== "undefined" && window.addEventListener) {
+  window.addEventListener("resize", fitCanvas);
+  window.addEventListener("orientationchange", () => setTimeout(fitCanvas, 100));
+}
+Promise.all([loadAllImages(), loadFonts()]).then(() => {
+  fitCanvas(); // ฟอนต์โหลดเสร็จอาจทำให้แถบปุ่มสูงขึ้น คำนวณใหม่อีกรอบ
+  requestAnimationFrame(loop);
+});
