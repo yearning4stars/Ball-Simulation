@@ -10,6 +10,9 @@ const selA = document.getElementById("charA");
 const selB = document.getElementById("charB");
 const btnFight = document.getElementById("fight");
 const btnSpeed = document.getElementById("speed");
+const btnMute = document.getElementById("mute");
+
+const sfx = new SoundFX();
 
 let battle = null;
 let particles = [];
@@ -56,17 +59,35 @@ function fillSelects() {
 }
 
 function startBattle() {
+  sfx.unlock();
+  sfx.start();
   battle = new Battle(W, H, CHARACTERS[selA.value], CHARACTERS[selB.value]);
+  battle.fighters.forEach((f) => { f.trailHp = f.hp; }); // แถบเลือดที่ค่อยๆ ลดตามหลัง
   particles = [];
   floaters = [];
   shake = 0;
 }
 
+function updateMuteLabel() {
+  btnMute.textContent = sfx.muted ? "🔇 เสียง: ปิด" : "🔊 เสียง: เปิด";
+}
+
 btnFight.addEventListener("click", startBattle);
 btnSpeed.addEventListener("click", () => {
+  sfx.unlock();
+  sfx.click();
   speedMult = speedMult === 1 ? 2 : speedMult === 2 ? 0.5 : 1;
   btnSpeed.textContent = "ความเร็ว x" + speedMult;
 });
+btnMute.addEventListener("click", () => {
+  sfx.unlock();
+  sfx.toggleMute();
+  sfx.click();
+  updateMuteLabel();
+});
+for (const sel of [selA, selB]) {
+  sel.addEventListener("change", () => { sfx.unlock(); sfx.click(); });
+}
 
 // ---------- เอฟเฟกต์ ----------
 function spawnParticles(x, y, color, n, power) {
@@ -83,13 +104,19 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, "#ffd54a", 10, 260);
       floaters.push({ x: e.x, y: e.y - 10, text: "-" + Math.round(e.amount), life: 0.8 });
       shake = Math.max(shake, 6);
+      sfx.hit();
     } else if (e.type === "muzzle") {
       spawnParticles(e.x, e.y, "#fff3b0", 6, 200);
+      sfx.shoot();
     } else if (e.type === "dash") {
       spawnParticles(e.x, e.y, "#ffffff", 12, 220);
+      sfx.dash();
     } else if (e.type === "ko") {
       shake = 16;
       for (const f of battle.fighters) if (f.hp <= 0) spawnParticles(f.x, f.y, f.def.color, 40, 420);
+      sfx.ko();
+      if (battle.winner === "draw") sfx.draw();
+      else sfx.win();
     }
   }
 }
@@ -109,6 +136,14 @@ function updateEffects(dt) {
   }
   floaters = floaters.filter((f) => f.life > 0);
   shake = Math.max(0, shake - 40 * dt);
+
+  // แถบเลือดสีขาวที่ค่อยๆ ไหลตามหลังเลือดจริง
+  if (battle) {
+    for (const f of battle.fighters) {
+      if (f.trailHp === undefined) f.trailHp = f.hp;
+      if (f.trailHp > f.hp) f.trailHp = Math.max(f.hp, f.trailHp - f.maxHp * 0.35 * dt);
+    }
+  }
 }
 
 // ---------- วาด ----------
@@ -160,23 +195,46 @@ function drawFighter(f, key) {
 }
 
 function drawHud(b) {
-  const barW = 280;
-  const barH = 22;
+  const barW = 330;
+  const barH = 30;
   b.fighters.forEach((f, i) => {
     const x = i === 0 ? 20 : W - 20 - barW;
     const y = 20;
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    // เลือดฝั่งผู้เล่น 2 ลดจากซ้ายไปขวา (หลอดกลับด้านกัน)
+    const rect = (ratio) => {
+      const w = barW * ratio;
+      return [i === 0 ? x : x + barW - w, y, w, barH];
+    };
+
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(x - 3, y - 3, barW + 6, barH + 6);
     ctx.fillStyle = "#2a2f3f";
     ctx.fillRect(x, y, barW, barH);
+
+    // แถบตามหลัง (สีขาวโปร่ง) แล้วค่อยทับด้วยเลือดจริง
+    const trail = f.trailHp === undefined ? f.hp : f.trailHp;
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.fillRect(...rect(trail / f.maxHp));
+
     const ratio = f.hp / f.maxHp;
     ctx.fillStyle = ratio > 0.5 ? "#4cd964" : ratio > 0.25 ? "#ffcc00" : "#ff453a";
-    const w = barW * ratio;
-    ctx.fillRect(i === 0 ? x : x + barW - w, y, w, barH);
+    ctx.fillRect(...rect(ratio));
+
+    // ตัวเลขเลือดกลางหลอด: 73 / 100
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const label = Math.ceil(f.hp) + " / " + f.maxHp;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(0,0,0,0.75)";
+    ctx.strokeText(label, x + barW / 2, y + barH / 2 + 1);
     ctx.fillStyle = "#fff";
+    ctx.fillText(label, x + barW / 2, y + barH / 2 + 1);
+    ctx.textBaseline = "alphabetic";
+
     ctx.font = "bold 15px sans-serif";
     ctx.textAlign = i === 0 ? "left" : "right";
-    ctx.fillText(f.def.name, i === 0 ? x : x + barW, y + barH + 20);
+    ctx.fillText(f.def.name, i === 0 ? x : x + barW, y + barH + 22);
   });
 }
 
@@ -253,4 +311,5 @@ function loop(ts) {
 }
 
 fillSelects();
+updateMuteLabel();
 loadAllImages().then(() => requestAnimationFrame(loop));
