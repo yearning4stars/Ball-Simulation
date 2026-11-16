@@ -118,6 +118,21 @@ class SoundFX {
     this._tone(180, 520, 0.28, "triangle", 0.07);
   }
 
+  note() { // โน้ตดนตรีตอนร้องเพลง (สุ่มโน้ตในบันไดเสียงเพนทาโทนิก)
+    if (!this._throttle("note", 70)) return;
+    const scale = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+    const f = scale[Math.floor(Math.random() * scale.length)];
+    this._tone(f, f, 0.28, "sine", 0.16);
+    this._tone(f * 2, f * 2, 0.16, "triangle", 0.05);
+  }
+
+  wave() { // คลื่นเสียงกระแทก
+    if (!this._throttle("wave", 150)) return;
+    this._tone(140, 40, 0.5, "sawtooth", 0.2);
+    this._tone(900, 200, 0.35, "square", 0.06);
+    this._noise(0.45, 0.22, "lowpass", 1800, 150);
+  }
+
   ko() { // น็อก
     this._tone(260, 35, 0.7, "sawtooth", 0.22);
     this._noise(0.5, 0.3, "lowpass", 2200, 120);
@@ -135,6 +150,6 @@ class SoundFX {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 6;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 7;
 
 if (typeof module !== "undefined") module.exports = { SoundFX };

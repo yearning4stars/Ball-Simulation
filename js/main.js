@@ -149,8 +149,13 @@ function handleEvents(events) {
       shake = Math.max(shake, 6);
       sfx.hit();
     } else if (e.type === "muzzle") {
-      spawnParticles(e.x, e.y, "#fff3b0", 6, 200);
-      sfx.shoot();
+      spawnParticles(e.x, e.y, e.sound === "note" ? "#e6b3ff" : "#fff3b0", e.sound === "note" ? 4 : 6, 200);
+      if (e.sound === "note") sfx.note();
+      else sfx.shoot();
+    } else if (e.type === "wave") {
+      spawnParticles(e.x, e.y, "#ffffff", 14, 260);
+      shake = Math.max(shake, 5);
+      sfx.wave();
     } else if (e.type === "dash") {
       spawnParticles(e.x, e.y, "#ffffff", 12, 220);
       sfx.dash();
@@ -216,6 +221,10 @@ function drawArena() {
   for (let y = 0; y <= H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 }
 
+// canvas เล็กๆ สำหรับทำเอฟเฟกต์วาบขาว (ใช้ซ้ำทุกเฟรม)
+const flashCv = document.createElement("canvas");
+const flashCtx = flashCv.getContext("2d");
+
 function drawFighter(f, key) {
   const size = f.r * 2.6;
   const img = images[key] && (images[key][f.frame] || images[key].idle);
@@ -234,12 +243,17 @@ function drawFighter(f, key) {
   ctx.scale(f.facing, 1);
 
   if (img) {
-    ctx.drawImage(img, -size / 2, -size / 2, size, size);
     if (f.hitFlash > 0) {
-      ctx.globalCompositeOperation = "source-atop";
-      ctx.globalAlpha = Math.min(1, f.hitFlash / 0.15) * 0.7;
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(-size / 2, -size / 2, size, size);
+      // วาบขาวตอนโดนตี: ทาสีขาวบนสำเนาของภาพ (canvas แยก) เพื่อให้ทาเฉพาะส่วนตัวละคร ไม่ทาทั้งกล่อง
+      flashCv.width = flashCv.height = Math.ceil(size);
+      flashCtx.drawImage(img, 0, 0, flashCv.width, flashCv.height);
+      flashCtx.globalCompositeOperation = "source-atop";
+      flashCtx.globalAlpha = Math.min(1, f.hitFlash / 0.15) * 0.7;
+      flashCtx.fillStyle = "#fff";
+      flashCtx.fillRect(0, 0, flashCv.width, flashCv.height);
+      ctx.drawImage(flashCv, -size / 2, -size / 2, size, size);
+    } else {
+      ctx.drawImage(img, -size / 2, -size / 2, size, size);
     }
   } else {
     // ไม่มีภาพ -> วาดเป็นบอลสีแทน
@@ -251,6 +265,68 @@ function drawFighter(f, key) {
   ctx.restore();
 }
 
+// ---------- โน้ตดนตรี (กระสุนของ Singer) วาดด้วยโค้ด ไม่ต้องมีรูป ----------
+function drawNote(p) {
+  const s = p.r;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(Math.sin(p.t * 6 + p.phase) * 0.3);
+  ctx.shadowColor = p.color;
+  ctx.shadowBlur = 12;
+  ctx.lineCap = "round";
+  const head = (x, y) => {
+    ctx.beginPath();
+    ctx.ellipse(x, y, s * 0.8, s * 0.55, -0.4, 0, Math.PI * 2);
+  };
+  const kind = p.noteKind;
+  for (let pass = 0; pass < 2; pass++) {
+    // pass 0 = ขอบสีตัวละคร (หนา), pass 1 = เนื้อโน้ตสีอ่อน
+    const col = pass === 0 ? p.color : "#f6e3ff";
+    ctx.strokeStyle = col;
+    ctx.fillStyle = col;
+    ctx.lineWidth = pass === 0 ? 7 : 3.5;
+    if (kind === 2) {
+      // โน้ตคู่ มีคานเชื่อม
+      head(-s * 0.9, s * 0.9); ctx.fill();
+      head(s * 0.9, s * 0.5); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.3, s * 0.75); ctx.lineTo(-s * 0.3, -s * 1.5);
+      ctx.moveTo(s * 1.5, s * 0.35); ctx.lineTo(s * 1.5, -s * 1.9);
+      ctx.moveTo(-s * 0.3, -s * 1.5); ctx.lineTo(s * 1.5, -s * 1.9);
+      ctx.stroke();
+    } else {
+      head(-s * 0.4, s * 0.9); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(s * 0.3, s * 0.75); ctx.lineTo(s * 0.3, -s * 1.6);
+      if (kind === 0) ctx.quadraticCurveTo(s * 1.6, -s * 1.1, s * 1.1, s * 0.1); // หางโน้ตเขบ็ต
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// ---------- คลื่นเสียง: ส่วนโค้งหลายชั้นแผ่ออกไปทางศัตรู ----------
+function drawWaves(b) {
+  for (const w of b.waves) {
+    const fade = Math.max(0, 1 - w.r / w.maxR);
+    for (let k = 0; k < 4; k++) {
+      const rr = w.r - k * 24;
+      if (rr < 8) continue;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, fade * 1.3) * (1 - k * 0.22);
+      ctx.shadowColor = w.color;
+      ctx.shadowBlur = 16;
+      ctx.strokeStyle = k === 0 ? "#ffffff" : w.color;
+      ctx.lineWidth = 12 - k * 2.5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(w.x, w.y, rr, w.ang - w.halfArc, w.ang + w.halfArc);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
 // ---------- แผงข้อมูลผู้เล่น (HTML อยู่นอกสนาม) ----------
 const hud = [0, 1].map((i) => ({
   panel: document.getElementById("p" + i),
@@ -258,26 +334,58 @@ const hud = [0, 1].map((i) => ({
   trail: document.getElementById("p" + i + "-trail"),
   fill: document.getElementById("p" + i + "-hp"),
   hpVal: document.getElementById("p" + i + "-hpval"),
-  skName: document.getElementById("p" + i + "-skname"),
-  cdBar: document.getElementById("p" + i + "-cd"),
-  cdFill: document.getElementById("p" + i + "-cdfill"),
-  cdVal: document.getElementById("p" + i + "-cdval"),
+  skillBox: document.getElementById("p" + i + "-skills"),
+  rows: [], // แถวสกิล: {bar, fill, val, name}
+  builtFor: null, // ตัวละครที่แถวสกิลถูกสร้างไว้ให้
 }));
 
 function hpColor(ratio) {
   return ratio > 0.5 ? "#4cd964" : ratio > 0.25 ? "#ffcc00" : "#ff453a";
 }
 
-function skillLabel(def) {
-  return def.skill ? def.skill.name || def.skill.type : "ไม่มีสกิล";
+// สร้างแถวสกิล (ชื่อ + แถบคูลดาวน์) ให้ตรงกับจำนวนสกิลของตัวละคร
+function buildSkillRows(h, def) {
+  if (h.builtFor === def) return false;
+  h.builtFor = def;
+  h.rows = [];
+  h.skillBox.innerHTML = "";
+  const skills = skillsOf(def);
+  for (const sk of skills) {
+    const wrap = document.createElement("div");
+    wrap.className = "skill";
+    const name = document.createElement("span");
+    name.className = "skname";
+    name.textContent = "สกิล: " + (sk.name || sk.type);
+    const bar = document.createElement("div");
+    bar.className = "bar cd";
+    const fill = document.createElement("div");
+    fill.className = "fill";
+    const val = document.createElement("span");
+    val.className = "val";
+    bar.appendChild(fill);
+    bar.appendChild(val);
+    wrap.appendChild(name);
+    wrap.appendChild(bar);
+    h.skillBox.appendChild(wrap);
+    h.rows.push({ bar, fill, val });
+  }
+  if (!skills.length) {
+    const none = document.createElement("span");
+    none.className = "skname";
+    none.textContent = "ไม่มีสกิล";
+    h.skillBox.appendChild(none);
+  }
+  return true;
 }
 
 // ก่อนเริ่มสู้: โชว์ข้อมูลของตัวละครที่เลือกไว้ในช่อง
 function setIdleHud() {
+  let rebuilt = false;
   [selA, selB].forEach((sel, i) => {
     const def = CHARACTERS[sel.value];
     const h = hud[i];
     if (!def || !h.panel) return;
+    if (buildSkillRows(h, def)) rebuilt = true;
     h.panel.className = "panel " + (i === 0 ? "left" : "right");
     h.name.textContent = def.name;
     h.name.style.color = def.color;
@@ -285,19 +393,23 @@ function setIdleHud() {
     h.fill.style.width = "100%";
     h.fill.style.background = hpColor(1);
     h.hpVal.textContent = def.hp + " / " + def.hp;
-    h.skName.textContent = "สกิล: " + skillLabel(def);
-    h.cdBar.className = "bar cd";
-    h.cdFill.style.width = "0%";
-    h.cdVal.textContent = def.skill ? "คูลดาวน์ " + def.skill.cooldown + " วิ" : "-";
+    skillsOf(def).forEach((sk, j) => {
+      const row = h.rows[j];
+      row.bar.className = "bar cd";
+      row.fill.style.width = "0%";
+      row.val.textContent = "คูลดาวน์ " + sk.cooldown + " วิ";
+    });
   });
+  if (rebuilt) fitCanvas(); // ความสูงแผงเปลี่ยนตามจำนวนสกิล คำนวณขนาดสนามใหม่
 }
 
 // ระหว่างสู้: อัปเดตเลือดและคูลดาวน์ทุกเฟรม
 function updateHud(b) {
+  let rebuilt = false;
   b.fighters.forEach((f, i) => {
     const h = hud[i];
     if (!h.panel) return;
-    const sk = f.def.skill;
+    if (buildSkillRows(h, f.def)) rebuilt = true;
     const alive = f.hp > 0;
     h.panel.className =
       "panel " + (i === 0 ? "left" : "right") + (alive ? "" : " dead") + (b.winner === i ? " winner" : "");
@@ -310,32 +422,36 @@ function updateHud(b) {
     h.fill.style.background = hpColor(ratio);
     h.trail.style.width = trail * 100 + "%";
     h.hpVal.textContent = Math.ceil(f.hp) + " / " + f.maxHp;
-    h.skName.textContent = "สกิล: " + skillLabel(f.def);
 
-    let cls = "bar cd";
-    let pct = 0;
-    let txt = "-";
-    if (sk && alive && b.winner === null) {
-      if (f.cast) {
-        cls += " casting";
-        pct = 100;
-        txt = "กำลังใช้สกิล!";
-      } else {
-        const remain = Math.max(0, f.cooldown);
-        if (remain <= 0.05) {
-          cls += " ready";
+    f.skills.forEach((sk, j) => {
+      const row = h.rows[j];
+      if (!row) return;
+      let cls = "bar cd";
+      let pct = 0;
+      let txt = "-";
+      if (alive && b.winner === null) {
+        if (f.cast && f.cast.i === j) {
+          cls += " casting";
           pct = 100;
-          txt = "พร้อมใช้!";
+          txt = "กำลังใช้สกิล!";
         } else {
-          pct = Math.max(0, Math.min(1, 1 - remain / sk.cooldown)) * 100;
-          txt = remain.toFixed(1) + " วิ";
+          const remain = Math.max(0, f.cds[j]);
+          if (remain <= 0.05) {
+            cls += " ready";
+            pct = 100;
+            txt = "พร้อมใช้!";
+          } else {
+            pct = Math.max(0, Math.min(1, 1 - remain / sk.cooldown)) * 100;
+            txt = remain.toFixed(1) + " วิ";
+          }
         }
       }
-    }
-    h.cdBar.className = cls;
-    h.cdFill.style.width = pct + "%";
-    h.cdVal.textContent = txt;
+      row.bar.className = cls;
+      row.fill.style.width = pct + "%";
+      row.val.textContent = txt;
+    });
   });
+  if (rebuilt) fitCanvas();
 }
 
 // ป้ายผู้ชนะ วาดไว้ "หลัง" ตัวละคร เพื่อให้คนชนะที่ยังเด้งอยู่วิ่งผ่านหน้าป้ายได้
@@ -383,10 +499,12 @@ function render() {
     // หา key ของตัวละครจาก def (กันกรณีเปลี่ยน select กลางเกม)
     const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def) || keys[0];
     if (battle.winner !== null) drawWinnerBanner(battle);
+    drawWaves(battle);
     battle.fighters.forEach((f) => { if (f.hp > 0) drawFighter(f, keyOf(f.def)); });
     drawShards();
 
     for (const p of battle.projectiles) {
+      if (p.shape === "note") { drawNote(p); continue; }
       ctx.fillStyle = "#fff6c2";
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -470,7 +588,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 6;
+const EXPECTED_VERSION = 7;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
