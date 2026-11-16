@@ -281,20 +281,35 @@ class Battle {
   // ---------- อาวุธหมุน (ดาบคาตานะ) ----------
   _updateWeapon(f, enemy, dt) {
     const wp = f.weapon;
-    f.weaponAng += f.weaponDir * wp.spinSpeed * dt;
-    f.weaponCd = Math.max(0, f.weaponCd - dt);
-    if (f.weaponCd > 0 || enemy.hp <= 0) return;
-
-    const ca = Math.cos(f.weaponAng);
-    const sa = Math.sin(f.weaponAng);
     const s0 = f.r * (wp.startRatio || 0.5);
     const s1 = f.r + wp.length;
     const px = enemy.x - f.x;
     const py = enemy.y - f.y;
+
+    // เล็งแม่นขึ้น: ศัตรูเข้ามาในระยะดาบ -> ใบดาบหมุนเร็วขึ้นเพื่อกวาดเข้าหา (ยังหมุนทิศเดิมจนกว่าจะฟันโดน)
+    const near = Math.hypot(px, py) <= s1 + enemy.r + (wp.aimRange || 40);
+    f.weaponAng += f.weaponDir * wp.spinSpeed * (near ? wp.aimBoost || 1.8 : 1) * dt;
+    f.weaponCd = Math.max(0, f.weaponCd - dt);
+
+    const ca = Math.cos(f.weaponAng);
+    const sa = Math.sin(f.weaponAng);
+
+    // ปัดกระสุนของศัตรูทิ้ง (ทำได้ตลอด ไม่เกี่ยวกับคูลดาวน์การฟัน)
+    for (const p of this.projectiles) {
+      if (p.owner === f || p.dead) continue;
+      const qx = p.x - f.x;
+      const qy = p.y - f.y;
+      const tt = Math.max(s0, Math.min(s1, qx * ca + qy * sa));
+      if (Math.hypot(qx - ca * tt, qy - sa * tt) <= p.r + (wp.width || 8) / 2 + 3) {
+        p.dead = true;
+        this.events.push({ type: "deflect", x: p.x, y: p.y, effect: "parry" });
+      }
+    }
+    if (f.weaponCd > 0 || enemy.hp <= 0) return;
     const t = Math.max(s0, Math.min(s1, px * ca + py * sa)); // จุดบนใบดาบที่ใกล้ศัตรูที่สุด
     const dx = px - ca * t;
     const dy = py - sa * t;
-    if (Math.hypot(dx, dy) > enemy.r * 0.85 + (wp.width || 8) / 2) return;
+    if (Math.hypot(dx, dy) > enemy.r + (wp.width || 8) / 2) return;
 
     const hx = f.x + ca * t;
     const hy = f.y + sa * t;
@@ -498,6 +513,21 @@ class Battle {
         p.dead = true;
       } else if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) {
         p.dead = true;
+      }
+    }
+    // กระสุนของคนละฝ่ายชนกัน -> แตกทั้งคู่
+    const ps = this.projectiles;
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      if (p.dead) continue;
+      for (let j = i + 1; j < ps.length; j++) {
+        const q = ps[j];
+        if (q.dead || q.owner === p.owner) continue;
+        if (Math.hypot(p.x - q.x, p.y - q.y) < p.r + q.r) {
+          p.dead = q.dead = true;
+          this.events.push({ type: "deflect", x: (p.x + q.x) / 2, y: (p.y + q.y) / 2, effect: "clash" });
+          break;
+        }
       }
     }
     this.projectiles = this.projectiles.filter((p) => !p.dead);
