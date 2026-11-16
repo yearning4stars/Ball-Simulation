@@ -183,17 +183,6 @@ function handleEvents(events) {
     } else if (e.type === "pickWeapon") {
       floaters.push({ x: e.x, y: e.y - 62, text: "ตั้งสติได้!", life: 1.0, color: "#9be8ff", size: 26 });
       sfx.click();
-    } else if (e.type === "copy") {
-      spawnParticles(e.x, e.y, "#ffd36a", 24, 320);
-      floaters.push({ x: e.x, y: e.y - 62, text: "Copy: " + e.name, life: 1.4, color: "#ffe28a", size: 28 });
-      sfx.accel();
-    } else if (e.type === "summon") {
-      spawnParticles(e.x, e.y, e.kind === "guard" ? "#ffe28a" : "#ff8fa8", 18, 280);
-      floaters.push({ x: e.x, y: e.y - 50, text: e.kind === "guard" ? "การ์ด!" : e.kind === "gunner" ? "ร่างยิง!" : "ร่างพุ่ง!", life: 1.0, color: "#ffd1dc", size: 26 });
-      sfx.dash();
-    } else if (e.type === "summonBreak") {
-      spawnParticles(e.x, e.y, e.fade ? "#cccccc" : "#ff6b8a", e.fade ? 8 : 16, 260);
-      if (!e.fade) shake = Math.max(shake, 3);
     } else if (e.type === "backstab") {
       screenFlash = 0.3;
       spawnParticles(e.x, e.y, "#ff2a55", 26, 360);
@@ -333,76 +322,6 @@ function drawArena() {
 // canvas เล็กๆ สำหรับทำเอฟเฟกต์วาบขาว (ใช้ซ้ำทุกเฟรม)
 const flashCv = document.createElement("canvas");
 const flashCtx = flashCv.getContext("2d");
-
-// ร่างแยก/การ์ด (D4C ของ FuNx): ร่างยิง/ร่างพุ่งวาดด้วยภาพของ Gunner/Dasher ตัวเล็กกว่าและโปร่งแสง ส่วนการ์ดวาดเป็นไพ่
-function drawSummon(s) {
-  const blink = s.life < 1.5 ? 0.55 + 0.45 * Math.sin(performance.now() / 60) : 1;
-  ctx.save();
-  ctx.translate(s.x, s.y);
-  ctx.globalAlpha = 0.92 * blink;
-  if (s.kind === "guard") {
-    ctx.rotate(s.ang);
-    const w = 18;
-    const h = s.r * 2;
-    ctx.shadowColor = "#ffd36a";
-    ctx.shadowBlur = 16;
-    ctx.fillStyle = s.hitFlash > 0 ? "#ffffff" : "#fdf6dc";
-    ctx.strokeStyle = "#c9962a";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.rect(-w / 2, -h / 2, w, h);
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.rotate(Math.PI / 2);
-    ctx.fillStyle = "#c9962a";
-    ctx.font = "700 18px " + FONT;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("♠", 0, 0);
-  } else {
-    const key = s.look;
-    const set = key && images[key];
-    const img = set && ((s.dashT > 0 && set.dash) || set.idle);
-    const size = s.r * 2.6;
-    ctx.shadowColor = "#ff8fa8";
-    ctx.shadowBlur = 14;
-    ctx.scale(s.facing, 1);
-    if (img) {
-      ctx.drawImage(img, -size / 2, -size / 2, size, size);
-    } else {
-      ctx.fillStyle = (CHARACTERS[key] && CHARACTERS[key].color) || "#ff8fa8";
-      ctx.beginPath();
-      ctx.arc(0, 0, s.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (s.hitFlash > 0) {
-      ctx.globalAlpha = 0.6;
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(0, 0, s.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  ctx.restore();
-  // เลือดของร่างแยก: การ์ดเป็นแถบเล็กใต้ตัว ร่างอื่นเป็นจุดเหนือหัว
-  ctx.save();
-  if (s.kind === "guard") {
-    const bw = 44;
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fillRect(s.x - bw / 2, s.y + s.r + 8, bw, 6);
-    ctx.fillStyle = "#ffd36a";
-    ctx.fillRect(s.x - bw / 2, s.y + s.r + 8, bw * Math.max(0, s.hp / s.maxHp), 6);
-  } else {
-    for (let i = 0; i < s.maxHp; i++) {
-      ctx.fillStyle = i < s.hp ? "#ff8fa8" : "rgba(0,0,0,0.5)";
-      ctx.beginPath();
-      ctx.arc(s.x + (i - (s.maxHp - 1) / 2) * 9, s.y - s.r - 10, 3.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  ctx.restore();
-}
 
 function drawFighter(f, key) {
   const size = f.r * 2.6;
@@ -867,7 +786,7 @@ function buildSkillRows(h, def) {
     wrap.appendChild(name);
     wrap.appendChild(bar);
     h.skillBox.appendChild(wrap);
-    h.rows.push({ bar, fill, val, name });
+    h.rows.push({ bar, fill, val });
   }
   if (!skills.length) {
     const none = document.createElement("span");
@@ -898,7 +817,7 @@ function setIdleHud() {
       const row = h.rows[j];
       row.bar.className = "bar cd";
       row.fill.style.width = "0%";
-      row.val.textContent = sk.type === "copied" ? "ตามสกิลที่ Copy" : "คูลดาวน์ " + sk.cooldown + " วิ";
+      row.val.textContent = "คูลดาวน์ " + sk.cooldown + " วิ";
     });
   });
   if (rebuilt) fitCanvas(); // ความสูงแผงเปลี่ยนตามจำนวนสกิล คำนวณขนาดสนามใหม่
@@ -928,15 +847,11 @@ function updateHud(b) {
     f.skills.forEach((sk, j) => {
       const row = h.rows[j];
       if (!row) return;
-      const label = sk.type === "copied" ? "สกิลที่ Copy: (ว่าง)" : "สกิล: " + (sk.name || sk.type);
-      if (row.name.textContent !== label) row.name.textContent = label; // ช่อง Copy เปลี่ยนชื่อตามสกิลที่ก๊อปมา
       let cls = "bar cd";
       let pct = 0;
       let txt = "-";
       if (alive && b.winner === null) {
-        if (sk.type === "copied") {
-          txt = "ยังไม่ได้ Copy";
-        } else if (f.cast && f.cast.i === j) {
+        if (f.cast && f.cast.i === j) {
           cls += " casting";
           pct = 100;
           txt = "กำลังใช้สกิล!";
@@ -1163,7 +1078,6 @@ function render() {
       ctx.fillText(txt, f.x, f.y - f.r - 36);
       ctx.restore();
     }
-    for (const s of battle.summons) drawSummon(s);
     drawShards();
 
     for (const p of battle.projectiles) {
@@ -1267,7 +1181,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 19;
+const EXPECTED_VERSION = 18;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

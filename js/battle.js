@@ -28,7 +28,6 @@ class Battle {
     this.time = 0;
     this.projectiles = [];
     this.waves = []; // คลื่นเสียงที่กำลังแผ่ออก
-    this.summons = []; // ร่างแยก/การ์ดที่ผู้เล่นเสกออกมา (D4C ของ Johan)
     this.events = []; // เอฟเฟกต์ให้ตัววาดเอาไปใช้ แล้วเคลียร์ทุกเฟรม
     this.winner = null; // 0, 1 หรือ "draw"
     this.wt = 0; // เวลาของ "โลก" (ย้อนเวลาแล้วถอยกลับตามจริง) ใช้กับประวัติสำหรับสกิลย้อนเวลา
@@ -49,7 +48,7 @@ class Battle {
   _makeFighter(def, x, y, angle) {
     const jitter = (this.rng() - 0.5) * 1.2;
     const a = angle + jitter;
-    const skills = skillsOf(def).slice(); // สำเนาของตัวเอง: สกิลที่ copy มาจะเปลี่ยนช่องในรายการนี้โดยไม่แตะข้อมูลตัวละคร
+    const skills = skillsOf(def);
     return {
       def,
       skills,
@@ -75,7 +74,6 @@ class Battle {
       hitFlash: 0,
       mind: 0, // ระดับสติ/ความมั่นใจที่ถูกบั่นทอน 0-100 (โดนคำพูดของ Luka)
       mindHold: 0, // เวลาที่ mind ยังค้างอยู่ก่อนจะเริ่มฟื้น
-      lastSkill: null, // สกิลที่ใช้ล่าสุด (ศัตรู Copy จะเลือกสกิลนี้ก่อน)
       silence: 0, // ถูกใบ้สกิล: ใช้สกิลไม่ได้ (ยังเดินได้) เวลาที่เหลือเป็นวินาที
       stun: 0, // เวลาที่เหลือของอาการสติแตก
       // อาวุธที่หมุนรอบตัวตลอดเวลา (เช่นดาบคาตานะ): หมุนไปเรื่อยๆ จนฟันโดนแล้วกลับทิศ
@@ -167,7 +165,6 @@ class Battle {
     for (const f of this.fighters) {
       if (f.weapon && !f.disarmed) this._updateWeapon(f, f === a ? b : a, f.tdt);
     }
-    this._updateSummons(dt);
     this._updateProjectiles(dt);
     this._updateWaves(dt);
     // ตัดเวลาอาจจบกลางก้าวนี้ (cast ถูกเคลียร์) ให้สถานะที่ตัววาดอ่านตรงกับความจริงเสมอ
@@ -222,10 +219,6 @@ class Battle {
           c.fired = true;
           this._fireWave(f, enemy, sk);
         }
-      } else if (sk.type === "copy") {
-        if (!c.fired && c.t >= (sk.fireDelay || 0)) { c.fired = true; this._doCopy(f, sk); }
-      } else if (sk.type === "summon") {
-        if (!c.fired && c.t >= (sk.fireDelay || 0)) { c.fired = true; this._spawnSummon(f, sk); }
       } else if (sk.type === "dash" && sk.homing) {
         this._steer(f, enemy, sk.homing * dt); // เลี้ยวเข้าหาศัตรูเล็กน้อยระหว่างพุ่ง
       } else if (sk.type === "timeerase") {
@@ -260,8 +253,6 @@ class Battle {
       const s2 = f.skills[i];
       if (f.cds[i] > 0) continue;
       if (timeBusy && TIME_SKILLS.includes(s2.type)) continue; // เวลาถูกแตะอยู่แล้ว
-      if (s2.type === "copied") continue; // ช่องว่างสำหรับสกิลที่ copy มา: ใช้ไม่ได้จนกว่าจะ Copy
-      if (s2.type === "copy" && !this._canCopy(f)) continue; // ศัตรูไม่มีสกิลให้ Copy
       // ย้อนเวลาจะใช้ก็ต่อเมื่อเสียเลือดไปพอสมควรในช่วงที่ย้อนกลับได้ (ไม่งั้นย้อนไปก็เปล่าประโยชน์)
       if (s2.type === "rewind" && !this._rewindWorthIt(f, s2)) continue;
       if (pick === -1 || f.cds[i] < f.cds[pick]) pick = i;
@@ -270,7 +261,6 @@ class Battle {
 
     const sk = f.skills[pick];
     f.cds[pick] = sk.cooldown;
-    f.lastSkill = sk;
     f.cast = { i: pick, sk, t: 0, shots: 0, fired: false, hit: false };
     f.frame = sk.frame || "idle";
 
@@ -381,39 +371,6 @@ class Battle {
     this._knock(a, -dx, -dy, 130);
     this._knock(b, dx, dy, 130);
     this.events.push({ type: "clash", x: (hit.ax + hit.bx) / 2, y: (hit.ay + hit.by) / 2 });
-  }
-
-  // ---------- Copy สกิลศัตรู (Johan) ----------
-  _copyable(s) {
-    return !!s && !["copy", "summon", "copied"].includes(s.type);
-  }
-
-  _canCopy(f) {
-    const enemy = this.fighters.find((g) => g !== f);
-    return enemy.skills.some((s) => this._copyable(s));
-  }
-
-  // ก๊อปสกิลล่าสุดที่ศัตรูใช้ (ถ้ายังไม่เคยใช้ สุ่มจากสกิลที่ก๊อปได้) ไปใส่ช่อง "สกิลที่ copy"
-  // คูลดาวน์ของสกิลที่ได้มา = คูลดาวน์ของต้นฉบับ (เริ่มนับเต็มตั้งแต่ก๊อปเสร็จ) ดาเมจคูณ damageMult
-  _doCopy(f, sk) {
-    const enemy = this.fighters.find((g) => g !== f);
-    const slot = f.skills.findIndex((s) => s.type === "copied" || s.copied);
-    if (slot < 0 || enemy.hp <= 0) return;
-    let src = this._copyable(enemy.lastSkill) ? enemy.lastSkill : null;
-    if (!src) {
-      const list = enemy.skills.filter((s) => this._copyable(s));
-      if (list.length) src = list[Math.floor(this.rng() * list.length)];
-    }
-    if (!src) return;
-    const mult = sk.damageMult !== undefined ? sk.damageMult : 0.75;
-    const baseName = src.baseName || src.name || src.type;
-    const cp = { ...src, copied: true, baseName, name: "Copy: " + baseName };
-    delete cp.initialCooldown;
-    if (cp.damage !== undefined) cp.damage = Math.max(1, Math.round(cp.damage * mult));
-    if (cp.damageFar !== undefined) cp.damageFar = Math.max(1, Math.round(cp.damageFar * mult));
-    f.skills[slot] = cp;
-    f.cds[slot] = cp.cooldown;
-    this.events.push({ type: "copy", x: f.x, y: f.y, name: baseName });
   }
 
   // สติแตกหนักจนทิ้งอาวุธ / หยิบกลับมา
@@ -650,21 +607,6 @@ class Battle {
       }
     }
     if (f.weaponCd > 0 || enemy.hp <= 0 || enemy === this.eraser) return; // ฟันคนที่อยู่นอกความจริงไม่โดน
-    // ฟันโดนร่างแยก/การ์ดของศัตรูก่อน (การ์ดกั้นอยู่หน้าตัวจริง จึงโดนก่อน)
-    if (this.summons.length) {
-      const shapes = this._weaponShapes(f);
-      for (const s of this.summons) {
-        if (s.owner !== enemy) continue;
-        const dot = { x1: s.x, y1: s.y, x2: s.x, y2: s.y, r: 0 };
-        if (!shapes.some((sh) => this._segClosest(sh, dot).d <= sh.r + s.r)) continue;
-        this._hurtSummon(s, this._out(f, wp.damage), s.x, s.y);
-        f.weaponDir *= -1;
-        f.weaponCd = wp.hitCooldown || 0.4;
-        if (f.cast && f.cast.hr) f.cast.hr.struck = true;
-        this.events.push({ type: "slash", x: s.x, y: s.y, ang: f.weaponAng });
-        return;
-      }
-    }
     const t = Math.max(s0, Math.min(s1, px * ca + py * sa)); // จุดบนใบดาบที่ใกล้ศัตรูที่สุด
     const dx = px - ca * t;
     const dy = py - sa * t;
@@ -713,16 +655,15 @@ class Battle {
     this._rotate(f, Math.max(-maxTurn, Math.min(maxTurn, diff)));
   }
 
-  // src = จุดที่ยิงออกมา (ไม่ใส่ = ตัวผู้ใช้เอง) ร่างแยกของ Johan ยิงโดยมี src เป็นร่างแยก แต่ owner ยังเป็น Johan
-  _fireProjectile(f, enemy, sk, src = f) {
+  _fireProjectile(f, enemy, sk) {
     const spread = (sk.spread || 0) + 0.9 * (f.mind / 100); // สติเสีย -> เล็งเพี้ยน
-    const base = Math.atan2(enemy.y - src.y, enemy.x - src.x);
+    const base = Math.atan2(enemy.y - f.y, enemy.x - f.x);
     const ang = base + (this.rng() - 0.5) * spread;
     const dx = Math.cos(ang);
     const dy = Math.sin(ang);
-    const muzzle = src.r + 6;
-    const x = src.x + dx * muzzle;
-    const y = src.y + dy * muzzle;
+    const muzzle = f.r + 6;
+    const x = f.x + dx * muzzle;
+    const y = f.y + dy * muzzle;
     this.projectiles.push({
       x,
       y,
@@ -884,11 +825,6 @@ class Battle {
       if (target === this.eraser) {
         // เป้าหมายอยู่นอกความจริง: กระสุนบินทะลุผ่านความว่างเปล่าไป
         if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) p.dead = true;
-      } else if (target.hp > 0 && this.summons.some((s) => s.owner === target && Math.hypot(s.x - p.x, s.y - p.y) < s.r + p.r)) {
-        // โดนร่างแยก/การ์ดของเป้าหมายก่อน: ร่างแยกรับดาเมจแทนตัวจริง
-        const s = this.summons.find((q) => q.owner === target && Math.hypot(q.x - p.x, q.y - p.y) < q.r + p.r);
-        this._hurtSummon(s, p.damage, p.x, p.y);
-        p.dead = true;
       } else if (target.hp > 0 && Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
         this._damage(target, p.damage, p.x, p.y);
         if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
@@ -928,7 +864,6 @@ class Battle {
       // ดูที่แนวหน้าคลื่น: ถ้าคลื่นของศัตรูเข้าไปในวงชะลอเวลา คลื่นจะแผ่ช้าลง
       const ws = this._timeScale(w.x + Math.cos(w.ang) * w.r, w.y + Math.sin(w.ang) * w.r, w.owner);
       w.r += w.speed * dt * ws;
-      this._waveVsSummons(w);
       if (!w.hit) {
         const t = this.fighters.find((f) => f !== w.owner);
         if (t.hp > 0 && t !== this.eraser) { // คนที่ตัดเวลาอยู่ คลื่นทะลุผ่านตัวไป
@@ -1027,7 +962,6 @@ class Battle {
       this.events.push({ type: "ko" });
       this.projectiles = []; // กระสุนและคลื่นที่ค้างอยู่หายไปพร้อมจบแมตช์
       this.waves = [];
-      this.summons = [];
       this.rewind = null;
       this.eraser = null;
       this.dazed = null;
@@ -1043,6 +977,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 19;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 18;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

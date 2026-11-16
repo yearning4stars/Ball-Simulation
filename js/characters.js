@@ -50,8 +50,6 @@
 //        hitAndRun (ไม่บังคับ) วิ่งวนรอบศัตรู -> พุ่งเข้าโจมตี -> หลบออก วนซ้ำตลอดช่วงเร่งเวลา (ถ้าใส่ จะใช้แทน homing)
 //        hpRush (ใส่ได้ทุกสกิล) ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: 1 เท่าตอนเลือดเต็ม -> hpRush เท่าตอนเลือดหมด
 //        stunNear, stunRange (shockwave) ถ้าโดนคลื่นตอนคลื่นเดินทางไม่เกิน stunRange (0-1 ของระยะทั้งหมด) จะติดสตั้น stunNear วินาที
-//        type "copy" (Johan) ก๊อปสกิลล่าสุดของศัตรูไปไว้ในช่อง type "copied" ใช้ต่อด้วยคูลดาวน์ของต้นฉบับ (damageMult = ดาเมจที่เหลือกี่เท่า)
-//        type "summon" (FuNx D4C) สุ่มเสกร่างแยกจาก pool: kind gunner / dasher (มี hp เล็กน้อย) หรือ guard (การ์ดกั้นรับดาเมจแทน) ดูตัวอย่างที่ funx
 //        restAfter (ใส่ได้ทุกสกิล) ใช้สกิลเสร็จแล้วพักกี่วินาทีก่อนใช้สกิลถัดไป ไม่ใส่ = 0.25
 //        backstab (ใส่ในสกิล timeerase) วนไปด้านหลังศัตรูแล้วแทง สำเร็จ = ดาเมจ damageMult เท่า + ใบ้สกิลศัตรู silence วินาที
 //        weapon ชนกับ weapon ของอีกฝ่าย (เช่น ดาบ FuNx กับเข็มทิศ Johan) จะปัดกันและเด้งออกทั้งคู่ ไม่ต้องตั้งค่าอะไร
@@ -123,7 +121,7 @@ const CHARACTERS = {
   singer: {
     name: "Luka",
     color: "#f6e27a", // เหลืองอ่อน (ใช้กับชื่อ โน้ต คลื่นเสียง และเอฟเฟกต์ของ Luka)
-    hp: 70,
+    hp: 100,
     speed: 175,
     radius: 38,
     frames: {
@@ -167,10 +165,10 @@ const CHARACTERS = {
         projectileSpeed: 300,
         projectileRadius: 18,
         shape: "text",
-        texts: ["Oh, in a blink, gone", "Blink, gone", "I'm tellin' you blink, gone", "Tick-tock, tick-tock, tick-tock", "Blink, gone"],
+        texts: ["เธอมันไม่พอ", "ไม่มีใครรอเธออยู่", "ยอมแพ้เถอะ", "ทุกคนผิดหวังในตัวเธอ", "ทำได้แค่นี้เหรอ"],
         sound: "word",
         indestructible: true, // คำพูดของ Luka ปัดไม่ได้ (เหมือนโน้ต) ทุกการโจมตีของ Luka ปัดป้องไม่ได้
-        hpRush: 3, // ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: เลือดเต็ม 1 เท่า -> เลือดหมด 3 เท่า
+        hpRush: 2.5, // ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: เลือดเต็ม 1 เท่า -> เลือดหมด 2.5 เท่า
       },
       {
         type: "shockwave",
@@ -179,8 +177,8 @@ const CHARACTERS = {
         frame: "wave",
         duration: 0.6,
         fireDelay: 0.2,
-        damage: 22, // ดาเมจเมื่อโดนที่ระยะใกล้ตัว (เดิม 12)
-        damageFar: 11, // ดาเมจเมื่อโดนที่ปลายระยะ (ระหว่างทางลดลงเป็นเส้นตรง) เดิม 5
+        damage: 18, // ดาเมจเมื่อโดนที่ระยะใกล้ตัว (เดิม 12)
+        damageFar: 8, // ดาเมจเมื่อโดนที่ปลายระยะ (ระหว่างทางลดลงเป็นเส้นตรง) เดิม 5
         stunNear: 1.0, // โดนคลื่นในระยะใกล้ ติดสตั้นกี่วินาที
         stunRange: 0.35, // "ใกล้" = คลื่นเดินทางไม่เกิน 35% ของ waveRange
         projectileEffect: "push", // คลื่นปะทะกระสุนศัตรู: "push" = ผลักออก, "stop" = ทำลายทิ้ง
@@ -198,14 +196,13 @@ const CHARACTERS = {
   funx: {
     name: "FuNx",
     color: "#d6315a",
-    hp: 100,
+    hp: 110,
     speed: 180,
     radius: 38,
     frames: {
       idle: "assets/characters/funx/idle.png",
       erase: "assets/characters/funx/erase.png",
       rewind: "assets/characters/funx/rewind.png",
-      clone: "assets/characters/funx/clone.png", // (ไม่บังคับ) ท่าแยกร่าง D4C ถ้าไม่มีไฟล์จะใช้ idle แทน
     },
     weapon: {
       type: "katana",
@@ -213,7 +210,7 @@ const CHARACTERS = {
       length: 66,
       width: 9,
       startRatio: 0.45,
-      damage: 5,
+      damage: 6,
       spinSpeed: 8,
       hitCooldown: 0.35,
       aimBoost: 1.8, // ศัตรูอยู่ในระยะดาบ -> หมุนเร็วขึ้นกี่เท่าเพื่อกวาดเข้าหา
@@ -224,7 +221,7 @@ const CHARACTERS = {
       {
         type: "timeerase",
         name: "ตัดเวลา",
-        cooldown: 15, // นับตั้งแต่เริ่มใช้ (รวมช่วง 5 วินาทีที่ตัดเวลาด้วย)
+        cooldown: 16, // นับตั้งแต่เริ่มใช้ (รวมช่วง 5 วินาทีที่ตัดเวลาด้วย)
         initialCooldown: 4,
         frame: "erase",
         duration: 5, // ตัดเวลา 5 วินาที
@@ -235,7 +232,7 @@ const CHARACTERS = {
         // ระหว่างตัดเวลา: วนไปด้านหลังศัตรู (ฝั่งตรงข้ามกับที่ศัตรูหันหน้า) แล้วพุ่งแทง ถ้าแทงสำเร็จจากด้านหลัง
         backstab: {
           damageMult: 2, // ดาเมจเป็น 2 เท่า
-          silence: 5, // ใบ้สกิลศัตรู (ใช้สกิลไม่ได้ ยังเดินได้) กี่วินาที
+          silence: 2.5, // ใบ้สกิลศัตรู (ใช้สกิลไม่ได้ ยังเดินได้) กี่วินาที
           orbitRadius: 150, // รัศมีที่วนรอบศัตรู (px)
           orbitSpeed: 1.8, // ตัวคูณความเร็วตอนวน
           strikeSpeed: 2.4, // ตัวคูณความเร็วตอนพุ่งแทง
@@ -247,14 +244,12 @@ const CHARACTERS = {
       {
         type: "rewind",
         name: "ย้อนเวลา",
-        cooldown: 17,
+        cooldown: 14,
         initialCooldown: 6,
         frame: "rewind",
         duration: 1.0, // เล่นภาพย้อนกลับ 1 วินาที (ย้อนโลกกลับไป 5 วินาที)
         rewindSeconds: 5,
         minGain: 10, // ใช้เมื่อเลือดหายไปอย่างน้อย 10 ในช่วง 5 วินาทีที่ผ่านมา
-          },
-        ],
       },
     ],
   },
@@ -271,7 +266,6 @@ const CHARACTERS = {
       idle: "assets/characters/johan/idle.png",
       accel: "assets/characters/johan/accel.png",
       slow: "assets/characters/johan/slow.png",
-      copy: "assets/characters/johan/copy.png", // (ไม่บังคับ) ท่า Copy สกิล ถ้าไม่มีไฟล์จะใช้ idle แทน
     },
     weapon: {
       type: "compass",
@@ -293,7 +287,7 @@ const CHARACTERS = {
       {
         type: "timeaccel",
         name: "เร่งเวลา",
-        cooldown: 15, // เดิม 12
+        cooldown: 18, // เดิม 12
         initialCooldown: 5, // เดิม 3
         restAfter: 2.5, // ใช้เสร็จแล้วพักก่อนใช้สกิลถัดไปกี่วินาที (ไม่ใส่ = 0.25)
         frame: "accel",
@@ -313,7 +307,7 @@ const CHARACTERS = {
       {
         type: "timeslow",
         name: "ชะลอเวลา",
-        cooldown: 15, // เดิม 14
+        cooldown: 20, // เดิม 14
         initialCooldown: 10, // เดิม 7
         restAfter: 2.5,
         frame: "slow",
@@ -322,29 +316,11 @@ const CHARACTERS = {
         factor: 0.35, // เดินช้าเหลือ 35% ของปกติ
         homing: 2, // ระหว่างชะลอเวลา วิ่งเข้าหาศัตรูที่ช้าลง
       },
-      {
-        // Copy: ก๊อปสกิลล่าสุดที่ศัตรูใช้ (ยังไม่เคยใช้ = สุ่มจากสกิลของศัตรู) ไปใส่ช่อง "สกิลที่ Copy" ด้านล่าง
-        // สกิลที่ได้มามีคูลดาวน์เท่าต้นฉบับ (เริ่มนับเต็มตั้งแต่ก๊อปเสร็จ) และ Copy ซ้ำจะทับของเดิม
-        type: "copy",
-        name: "Copy สกิล",
-        cooldown: 20,
-        initialCooldown: 8,
-        restAfter: 1.5,
-        frame: "copy",
-        duration: 0.9,
-        fireDelay: 0.3, // ก๊อปสำเร็จหลังเริ่มท่านี้กี่วินาที
-        damageMult: 0.75, // ดาเมจของสกิลที่ก๊อปมาเหลือกี่เท่าของต้นฉบับ
-      },
-      {
-        type: "copied", // ช่องเก็บสกิลที่ Copy มา (ว่างจนกว่าจะ Copy) ห้ามลบ
-        name: "สกิลที่ Copy",
-        cooldown: 0,
-      },
     ],
   },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 19;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 18;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };
