@@ -43,11 +43,19 @@
 //        duration, radius (รัศมีที่ศัตรูจะเหม่อลอย px), afterStun, speedMult (ผู้ใช้เร็วขึ้นกี่เท่า), homing (วิ่งเข้าหาศัตรู)
 //   "rewind"      ย้อนเวลา (Mandom): ทุกอย่างในสนามย้อนกลับไป rewindSeconds วินาที เลือดคนใช้สกิลก็ย้อนด้วย
 //        duration (= กี่วินาทีที่เล่นภาพย้อน), rewindSeconds, minGain (ใช้เมื่อเสียเลือดมากกว่านี้ในช่วงที่ย้อนได้)
+//   "timeaccel"   เร่งเวลา (เฉพาะตัวเอง) นาน duration วินาที: ผู้ใช้เคลื่อนที่ เล็ง หมุนอาวุธ และคูลดาวน์เดินเร็วขึ้น rate เท่า
+//        ส่วนคนอื่นและกระสุนเดินตามเวลาปกติ ผู้ใช้ยังโดนตีได้ตามปกติ
+//        duration (วินาทีจริง), rate (เร็วขึ้นกี่เท่า), homing (วิ่งเข้าหาศัตรูระหว่างเร่ง เรเดียน/วินาที ไม่ใส่ = ไม่วิ่งเข้าหา)
+//   "timeslow"    ชะลอเวลาคนรอบข้าง นาน duration วินาที: ศัตรู กระสุน และคลื่นของศัตรูที่อยู่ในรัศมี radius รอบตัวผู้ใช้ เดินช้าลงเหลือ factor เท่า
+//        (ขยับ ยิงสกิล คูลดาวน์ ฟันดาบ ช้าลงหมด) ผู้ใช้ไม่ถูกชะลอ วงชะลอเคลื่อนที่ตามผู้ใช้ ขอบวงค่อยๆ จาง
+//        duration (วินาทีจริง), radius (px), factor (0-1 ยิ่งน้อยยิ่งช้า), homing (วิ่งเข้าหาศัตรูระหว่างชะลอ ไม่ใส่ = ไม่วิ่งเข้าหา)
 //
 //  weapon (ไม่บังคับ) อาวุธที่หมุนรอบตัวตลอดเวลา หมุนไปเรื่อยๆ จนฟันโดนศัตรูแล้วกลับทิศ
 //        length (ความยาวใบดาบ), width, startRatio (จุดจับ เทียบรัศมีตัว), damage, spinSpeed (เรเดียน/วินาที),
 //        hitCooldown (พักก่อนฟันซ้ำได้), knockback, aimBoost/aimRange (เร่งหมุนเมื่อศัตรูอยู่ในระยะ ให้ฟันแม่นขึ้น)
 //        ใบดาบปัดกระสุนศัตรูที่โดนทิ้งเอง และกระสุนคนละฝ่ายที่ชนกันจะแตกทั้งคู่
+//        type: "katana" (ค่าเริ่มต้น) = ดาบ | "compass" = ไม้เท้าหัวเข็มทิศ (เข็มชี้ไปที่ศัตรูเสมอ)
+//        headRadius (เฉพาะ compass) = รัศมีหัวเข็มทิศ หัวก็ฟันโดนและปัดกระสุนได้ด้วย ไม่ใช่แค่ก้าน
 // ============================================================
 const CHARACTERS = {
   gunner: {
@@ -222,9 +230,61 @@ const CHARACTERS = {
       },
     ],
   },
+
+  // Johan: ไม้เท้าหัวเข็มทิศหมุนรอบตัว (เข็มชี้ไปที่ศัตรูเสมอ) + เร่งเวลาตัวเอง + ชะลอเวลาคนรอบข้าง
+  // ภาพ: assets/characters/johan/idle.png, accel.png (ท่าเร่งเวลา), slow.png (ท่าชะลอเวลา)  ส่วนเข็มทิศ เกมวาดให้เองด้วยโค้ด
+  johan: {
+    name: "Johan",
+    color: "#e8a31f",
+    hp: 110,
+    speed: 175,
+    radius: 38,
+    frames: {
+      idle: "assets/characters/johan/idle.png",
+      accel: "assets/characters/johan/accel.png",
+      slow: "assets/characters/johan/slow.png",
+    },
+    weapon: {
+      type: "compass",
+      name: "เข็มทิศ",
+      length: 62, // ความยาวจากตัวถึงปลายหัวเข็มทิศ (รวมหัว)
+      width: 7, // ความหนาก้าน
+      headRadius: 17, // รัศมีหัวเข็มทิศ
+      startRatio: 0.45,
+      damage: 6,
+      spinSpeed: 7.5,
+      hitCooldown: 0.35,
+      aimBoost: 1.8,
+      aimRange: 40,
+      knockback: 120,
+    },
+    skills: [
+      {
+        type: "timeaccel",
+        name: "เร่งเวลา",
+        cooldown: 12,
+        initialCooldown: 3,
+        frame: "accel",
+        duration: 4, // เร่งเวลาตัวเอง 4 วินาที (วินาทีจริง)
+        rate: 2, // ตัวเองเร็วขึ้น 2 เท่า (เดิน หมุนอาวุธ คูลดาวน์)
+        homing: 3, // ระหว่างเร่งเวลา วิ่งเข้าหาศัตรู (เรเดียน/วินาที)
+      },
+      {
+        type: "timeslow",
+        name: "ชะลอเวลา",
+        cooldown: 14,
+        initialCooldown: 7,
+        frame: "slow",
+        duration: 5, // วงชะลอเวลาอยู่ 5 วินาที (วินาทีจริง)
+        radius: 300, // ใครอยู่ในรัศมีนี้ (px) รอบตัว Johan จะช้าลง
+        factor: 0.35, // เดินช้าเหลือ 35% ของปกติ
+        homing: 2, // ระหว่างชะลอเวลา วิ่งเข้าหาศัตรูที่ช้าลง
+      },
+    ],
+  },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 12;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 13;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

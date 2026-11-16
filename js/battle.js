@@ -10,6 +10,9 @@ function skillsOf(def) {
   return def.skills || (def.skill ? [def.skill] : []);
 }
 
+// สกิลที่แตะเวลา: ใช้พร้อมกันไม่ได้ (ถ้ามีใครกำลังใช้อยู่ คนอื่นต้องรอ)
+const TIME_SKILLS = ["timeerase", "rewind", "timeaccel", "timeslow"];
+
 class Battle {
   constructor(width, height, defA, defB, rng = Math.random) {
     this.w = width;
@@ -26,6 +29,7 @@ class Battle {
     this.rewind = null; // กำลังย้อนเวลาอยู่หรือไม่ {owner, t, dur, back, t0}
     this.eraser = null; // ตัวที่กำลังใช้ "ตัดเวลา"
     this.dazed = null; // ตัวที่ตกอยู่ในเวลาที่ถูกตัด: เหม่อลอย ทำตามโชคชะตาที่บันทึกไว้ (ไม่รู้ว่า FuNx อยู่ตรงไหนจริงๆ)
+    this.slower = null; // ตัวที่กำลังใช้ "ชะลอเวลา" (Johan) วงชะลอเวลาอยู่รอบตัวนี้
     this.phantom = null; // ตำแหน่งที่ FuNx เคยยืนก่อนตัดเวลา: สิ่งเดียวที่ตัวเหม่อลอย "จำได้" และใช้เล็ง
 
     this.fighters = [
@@ -99,33 +103,42 @@ class Battle {
     // ส่วนศัตรูในรัศมีจะเหม่อลอยทำตามโชคชะตาเดิม โดยเล็งไปที่ตำแหน่งเก่าของผู้ใช้เท่านั้น
     this.eraser = this.fighters.find((f) => f.cast && f.cast.sk.type === "timeerase") || null;
     this.dazed = this.eraser && this.eraser.cast.dazed ? (this.eraser === a ? b : a) : null;
+    // ชะลอเวลา (Johan): คนอื่นที่อยู่ในวงจะเดินช้าลง / เร่งเวลา: ผู้ใช้เองเดินเร็วขึ้น
+    this.slower = this.fighters.find((f) => f.cast && f.cast.sk.type === "timeslow") || null;
     for (const f of this.fighters) {
       let enemy = f === a ? b : a;
       if (f === this.dazed) enemy = this.phantom;
       f.facing = enemy.x >= f.x ? 1 : -1;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
+      // เวลาที่ตัวนี้ "รู้สึก": ถูกชะลอ (ts) และ/หรือเร่งเอง (rate)
+      // cdt = นาฬิกาของสกิลที่กำลังร่าย (ไม่คูณ rate เพราะ duration ของเร่งเวลาเป็นวินาทีจริง)
+      const ts = this._timeScale(f.x, f.y, f);
+      const rate = f.cast && f.cast.sk.type === "timeaccel" ? f.cast.sk.rate || 2 : 1;
+      const fdt = dt * ts * rate;
+      const cdt = dt * ts;
+      f.tdt = fdt;
       // สติ/ความมั่นใจ (mind 0-100): ยิ่งสูงยิ่งสับสน คูลดาวน์เดินช้าลง ทิศเดินเพี้ยน
       const m = f.mind / 100;
-      f.mind = Math.max(0, f.mind - 7 * dt);
-      if (m > 0) this._rotate(f, (this.rng() - 0.5) * 8 * m * dt);
+      f.mind = Math.max(0, f.mind - 7 * fdt);
+      if (m > 0) this._rotate(f, (this.rng() - 0.5) * 8 * m * fdt);
       const slow = 1 - 0.4 * m;
-      f.gcd = Math.max(0, f.gcd - dt * slow);
-      for (let i = 0; i < f.cds.length; i++) f.cds[i] -= dt * slow;
+      f.gcd = Math.max(0, f.gcd - fdt * slow);
+      for (let i = 0; i < f.cds.length; i++) f.cds[i] -= fdt * slow;
       if (f.stun > 0) {
-        f.stun -= dt; // สติแตก: ใช้สกิลไม่ได้ ขยับได้ช้า
+        f.stun -= fdt; // สติแตก: ใช้สกิลไม่ได้ ขยับได้ช้า
         f.cast = null;
         f.frame = "idle";
         f.dashTimer = 0;
       } else {
-        this._updateSkill(f, enemy, dt);
+        this._updateSkill(f, enemy, cdt);
       }
-      this._move(f, dt);
+      this._move(f, fdt);
     }
 
     if (this.rewind) { this._checkWinner(); return; } // เพิ่งเริ่มย้อนเวลาในก้าวนี้
     this._fighterCollision(a, b);
     for (const f of this.fighters) {
-      if (f.weapon) this._updateWeapon(f, f === a ? b : a, dt);
+      if (f.weapon) this._updateWeapon(f, f === a ? b : a, f.tdt);
     }
     this._updateProjectiles(dt);
     this._updateWaves(dt);
@@ -135,7 +148,28 @@ class Battle {
       this.dazed = null;
       this.phantom = null;
     }
+    // ชะลอเวลาอาจจบกลางก้าวนี้ ให้ตัววาดเห็นสถานะตรงกับความจริง
+    if (this.slower && !(this.slower.cast && this.slower.cast.sk.type === "timeslow")) this.slower = null;
     this._checkWinner();
+  }
+
+  // ตัวคูณเวลาที่จุด (x,y) สำหรับของที่เป็นของ owner: 1 = ปกติ, น้อยกว่า 1 = อยู่ในวงชะลอเวลาของ Johan
+  // ผู้ใช้สกิลไม่ถูกชะลอ ขอบวง 20% นอกสุดค่อยๆ จางกลับเป็นปกติ (กันกระตุกตรงขอบ)
+  _timeScale(x, y, owner) {
+    const s = this.slower;
+    if (!s || !s.cast || owner === s) return 1;
+    const sk = s.cast.sk;
+    const R = sk.radius || 300;
+    const d = Math.hypot(x - s.x, y - s.y);
+    if (d >= R) return 1;
+    const edge = Math.max(0, Math.min(1, (d - R * 0.8) / (R * 0.2)));
+    const factor = sk.factor !== undefined ? sk.factor : 0.35;
+    return factor + (1 - factor) * edge;
+  }
+
+  // ให้ตัววาดถามว่าตัวนี้ช้าลงเท่าไร (1 = ปกติ)
+  timeScaleOf(f) {
+    return this._timeScale(f.x, f.y, f);
   }
 
   // ---------- สกิล ----------
@@ -164,6 +198,9 @@ class Battle {
         this._steer(f, enemy, sk.homing * dt); // เลี้ยวเข้าหาศัตรูเล็กน้อยระหว่างพุ่ง
       } else if (sk.type === "timeerase") {
         this._steer(f, enemy, (sk.homing || 3) * dt); // ระหว่างเวลาถูกตัด วิ่งเข้าหาศัตรูเพื่อฟันสวน
+      } else if ((sk.type === "timeaccel" || sk.type === "timeslow") && sk.homing) {
+        // เร่ง/ชะลอเวลา: วิ่งเข้าหาศัตรูเพื่อใช้เวลาที่ได้เปรียบให้คุ้ม (เร่งเวลา เลี้ยวไวขึ้นตามเวลาที่เร็วขึ้น)
+        this._steer(f, enemy, sk.homing * dt * (sk.type === "timeaccel" ? sk.rate || 2 : 1));
       }
 
       if (c.t >= sk.duration) {
@@ -184,11 +221,11 @@ class Battle {
 
     // เลือกสกิลที่พร้อมใช้ โดยให้สกิลที่รอมานานที่สุดไปก่อน (กันสกิลแรกแย่งใช้ตลอด)
     let pick = -1;
-    const timeBusy = this.rewind || this.fighters.some((g) => g.cast && g.cast.sk.type === "timeerase");
+    const timeBusy = this.rewind || this.fighters.some((g) => g.cast && TIME_SKILLS.includes(g.cast.sk.type));
     for (let i = 0; i < f.skills.length; i++) {
       const s2 = f.skills[i];
       if (f.cds[i] > 0) continue;
-      if (timeBusy && (s2.type === "timeerase" || s2.type === "rewind")) continue; // เวลาถูกแตะอยู่แล้ว
+      if (timeBusy && TIME_SKILLS.includes(s2.type)) continue; // เวลาถูกแตะอยู่แล้ว
       // ย้อนเวลาจะใช้ก็ต่อเมื่อเสียเลือดไปพอสมควรในช่วงที่ย้อนกลับได้ (ไม่งั้นย้อนไปก็เปล่าประโยชน์)
       if (s2.type === "rewind" && !this._rewindWorthIt(f, s2)) continue;
       if (pick === -1 || f.cds[i] < f.cds[pick]) pick = i;
@@ -226,6 +263,11 @@ class Battle {
       this.events.push({ type: "erase", x: f.x, y: f.y, dazed: inRange });
     } else if (sk.type === "rewind") {
       this._startRewind(f, sk);
+    } else if (sk.type === "timeaccel") {
+      // เร่งเวลาตัวเอง: ความเร็วเดินจริงถูกคูณ rate ในลูปหลัก (ดู fdt) ที่นี่แค่ประกาศเริ่ม
+      this.events.push({ type: "accel", x: f.x, y: f.y, rate: sk.rate || 2 });
+    } else if (sk.type === "timeslow") {
+      this.events.push({ type: "slow", x: f.x, y: f.y, radius: sk.radius || 300 });
     }
   }
 
@@ -320,13 +362,21 @@ class Battle {
     const ca = Math.cos(f.weaponAng);
     const sa = Math.sin(f.weaponAng);
 
+    // หัวเข็มทิศ (ถ้ามี): วงกลมที่ปลายก้าน นับเป็นส่วนที่ฟัน/ปัดได้ด้วย
+    const head = wp.headRadius || 0;
+    const hcx = ca * (s1 - head); // จุดกึ่งกลางหัว (ในพิกัดสัมพัทธ์กับตัว)
+    const hcy = sa * (s1 - head);
+    const reachW = (wp.width || 8) / 2;
+
     // ปัดกระสุนของศัตรูทิ้ง (ทำได้ตลอด ไม่เกี่ยวกับคูลดาวน์การฟัน)
     for (const p of this.projectiles) {
       if (p.owner === f || p.dead || p.indestructible) continue;
       const qx = p.x - f.x;
       const qy = p.y - f.y;
       const tt = Math.max(s0, Math.min(s1, qx * ca + qy * sa));
-      if (Math.hypot(qx - ca * tt, qy - sa * tt) <= p.r + (wp.width || 8) / 2 + 3) {
+      const hitRod = Math.hypot(qx - ca * tt, qy - sa * tt) <= p.r + reachW + 3;
+      const hitHead = head > 0 && Math.hypot(qx - hcx, qy - hcy) <= p.r + head + 2;
+      if (hitRod || hitHead) {
         p.dead = true;
         this.events.push({ type: "deflect", x: p.x, y: p.y, effect: "parry" });
       }
@@ -335,10 +385,13 @@ class Battle {
     const t = Math.max(s0, Math.min(s1, px * ca + py * sa)); // จุดบนใบดาบที่ใกล้ศัตรูที่สุด
     const dx = px - ca * t;
     const dy = py - sa * t;
-    if (Math.hypot(dx, dy) > enemy.r + (wp.width || 8) / 2) return;
+    let hx = f.x + ca * t;
+    let hy = f.y + sa * t;
+    const rodHit = Math.hypot(dx, dy) <= enemy.r + reachW;
+    const headHit = head > 0 && Math.hypot(px - hcx, py - hcy) <= enemy.r + head;
+    if (!rodHit && !headHit) return;
+    if (!rodHit && headHit) { hx = f.x + hcx; hy = f.y + hcy; } // โดนที่หัวเข็มทิศ
 
-    const hx = f.x + ca * t;
-    const hy = f.y + sa * t;
     this._damage(enemy, this._out(f, wp.damage), hx, hy);
     this._knock(enemy, px, py, wp.knockback || 0);
     f.weaponDir *= -1; // ฟันโดนแล้วหมุนกลับอีกทิศ
@@ -506,9 +559,10 @@ class Battle {
   // ---------- กระสุน / โน้ต ----------
   _updateProjectiles(dt) {
     for (const p of this.projectiles) {
-      p.t += dt;
-      p.bx += p.dx * p.speed * dt;
-      p.by += p.dy * p.speed * dt;
+      const ps = this._timeScale(p.x, p.y, p.owner); // อยู่ในวงชะลอเวลาของ Johan -> ช้าลง
+      p.t += dt * ps;
+      p.bx += p.dx * p.speed * dt * ps;
+      p.by += p.dy * p.speed * dt * ps;
       // ส่ายตั้งฉากกับทิศที่เคลื่อนที่ (โน้ตลอยเป็นลอน)
       const off = p.wobble ? Math.sin(p.t * p.wobbleFreq + p.phase) * p.wobble : 0;
       p.x = p.bx - p.dy * off;
@@ -554,7 +608,9 @@ class Battle {
   // ---------- คลื่นเสียง ----------
   _updateWaves(dt) {
     for (const w of this.waves) {
-      w.r += w.speed * dt;
+      // ดูที่แนวหน้าคลื่น: ถ้าคลื่นของศัตรูเข้าไปในวงชะลอเวลา คลื่นจะแผ่ช้าลง
+      const ws = this._timeScale(w.x + Math.cos(w.ang) * w.r, w.y + Math.sin(w.ang) * w.r, w.owner);
+      w.r += w.speed * dt * ws;
       if (!w.hit) {
         const t = this.fighters.find((f) => f !== w.owner);
         if (t.hp > 0 && t !== this.eraser) { // คนที่ตัดเวลาอยู่ คลื่นทะลุผ่านตัวไป
@@ -650,6 +706,7 @@ class Battle {
       this.rewind = null;
       this.eraser = null;
       this.dazed = null;
+      this.slower = null;
       this.phantom = null;
       for (const f of this.fighters) {
         f.cast = null;
@@ -661,6 +718,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 12;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 13;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

@@ -156,6 +156,17 @@ class SoundFX {
     this._noise(0.9, 0.12, "bandpass", 4000, 400);
   }
 
+  accel() { // เร่งเวลา: เสียงติ๊กๆ ถี่ขึ้นเรื่อยๆ แล้วพุ่งขึ้น
+    for (let i = 0; i < 8; i++) this._tone(500 + i * 130, 650 + i * 190, 0.07, "square", 0.06, i * 0.05);
+    this._noise(0.5, 0.12, "bandpass", 800, 5000);
+  }
+
+  slow() { // ชะลอเวลา: เสียงต่ำลากยาวลงๆ เหมือนเทปช้าลง
+    this._tone(900, 110, 0.9, "sine", 0.14);
+    this._tone(110, 55, 0.7, "triangle", 0.18, 0.05);
+    this._noise(0.8, 0.1, "lowpass", 2500, 120);
+  }
+
   word() { // คำพูดบั่นทอนใจ: เสียงกระซิบแหลมต่ำ
     if (!this._throttle("word", 120)) return;
     this._noise(0.3, 0.12, "bandpass", 1200, 500);
@@ -185,6 +196,6 @@ class SoundFX {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 12;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 13;
 
 if (typeof module !== "undefined") module.exports = { SoundFX };

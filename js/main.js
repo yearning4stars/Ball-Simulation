@@ -23,6 +23,9 @@ let speedMult = 1;
 let lastTs = 0;
 let shake = 0;
 let screenFlash = 0; // วาบขาวทั้งจอ (ตอนเริ่มตัดเวลา)
+let ghosts = []; // ภาพติดตาของคนที่กำลังเร่งเวลา (Johan)
+let ghostAcc = 0;
+const charKey = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def);
 
 // ---------- โหลดภาพ ----------
 const images = {}; // images[charKey][frameName] = HTMLImageElement | null
@@ -69,6 +72,7 @@ function startBattle() {
   particles = [];
   shards = [];
   floaters = [];
+  ghosts = [];
   shake = 0;
 }
 
@@ -183,6 +187,16 @@ function handleEvents(events) {
     } else if (e.type === "confused") {
       floaters.push({ x: e.x, y: e.y - 56, text: "เกิดอะไรขึ้น?", life: 1.2, color: "#ffd1dc", size: 26 });
       spawnParticles(e.x, e.y, "#ff6b8a", 10, 180);
+    } else if (e.type === "accel") {
+      screenFlash = 0.25;
+      spawnParticles(e.x, e.y, "#ffb020", 24, 340);
+      floaters.push({ x: e.x, y: e.y - 62, text: "เร่งเวลา x" + e.rate + "!", life: 1.1, color: "#ffcf5a", size: 30 });
+      sfx.accel();
+    } else if (e.type === "slow") {
+      screenFlash = 0.25;
+      spawnParticles(e.x, e.y, "#45e0c0", 24, 300);
+      floaters.push({ x: e.x, y: e.y - 62, text: "ชะลอเวลา!", life: 1.1, color: "#7ff5dc", size: 30 });
+      sfx.slow();
     } else if (e.type === "rewind") {
       screenFlash = 0.35;
       sfx.rewind();
@@ -229,6 +243,26 @@ function updateEffects(dt) {
   // ภาพติดตาสีแดงตามคนที่กำลังตัดเวลา
   if (battle && battle.eraser && Math.random() < 0.8) {
     spawnParticles(battle.eraser.x, battle.eraser.y, "#ff2a55", 1, 60);
+  }
+
+  // เร่งเวลา: ทิ้งภาพติดตาสีเหลืองตามหลัง Johan
+  for (const g of ghosts) g.life -= dt;
+  ghosts = ghosts.filter((g) => g.life > 0);
+  if (battle) {
+    ghostAcc += dt;
+    for (const f of battle.fighters) {
+      if (f.hp > 0 && f.cast && f.cast.sk.type === "timeaccel") {
+        if (ghostAcc >= 0.035) {
+          ghosts.push({ key: charKey(f.def), x: f.x, y: f.y, r: f.r, vy: f.vy, facing: f.facing, frame: f.frame, life: 0.3 });
+        }
+        if (Math.random() < 0.6) spawnParticles(f.x, f.y, "#ffb020", 1, 90);
+      }
+      // ชะลอเวลา: ตัวที่ถูกชะลอมีฝุ่นสีเขียวน้ำเงินลอยช้าๆ
+      if (battle.slower && f !== battle.slower && f.hp > 0 && battle.timeScaleOf(f) < 0.95 && Math.random() < 0.3) {
+        spawnParticles(f.x, f.y, "#45e0c0", 1, 40);
+      }
+    }
+    if (ghostAcc >= 0.035) ghostAcc = 0;
   }
 
   // แถบเลือดสีขาวที่ค่อยๆ ไหลตามหลังเลือดจริง
@@ -363,6 +397,200 @@ function drawKatana(f) {
   ctx.moveTo(bx + 4, -1);
   ctx.quadraticCurveTo((bx + reach) / 2, -3 * dir - 1, reach, -2 * dir);
   ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- เข็มทิศที่หมุนรอบตัว (วาดด้วยโค้ด): ไม้เท้าหัวเข็มทิศ เข็มชี้ไปที่ศัตรูเสมอ ----------
+function drawCompass(f) {
+  const wp = f.weapon;
+  const s0 = f.r * (wp.startRatio || 0.5);
+  const reach = f.r + wp.length;
+  const head = wp.headRadius || 16;
+  const hc = reach - head; // จุดกึ่งกลางหัวเข็มทิศ
+  const dir = f.weaponDir;
+  const hot = f.weaponCd > (wp.hitCooldown || 0.4) - 0.12;
+  const enemy = battle && battle.fighters.find((g) => g !== f);
+  const now = performance.now() / 1000;
+  // มุมเข็ม (สัมพัทธ์กับก้านที่หมุนอยู่): ชี้ไปที่ศัตรู ถ้าไม่มีศัตรูให้หมุนเล่น
+  const toEnemy = enemy && enemy.hp > 0 ? Math.atan2(enemy.y - f.y, enemy.x - f.x) : now * 5;
+  const needle = toEnemy - f.weaponAng + Math.sin(now * 11) * 0.07;
+
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(f.weaponAng);
+
+  // รอยกวาดจางๆ ตามหลังหัวเข็มทิศ
+  for (let k = 0; k < 8; k++) {
+    const a0 = -dir * k * 0.09;
+    const a1 = -dir * (k + 1) * 0.09;
+    ctx.fillStyle = "rgba(255, 214, 120, " + (0.24 * (1 - k / 8)).toFixed(3) + ")";
+    ctx.beginPath();
+    ctx.arc(0, 0, reach - 2, Math.min(a0, a1), Math.max(a0, a1));
+    ctx.arc(0, 0, reach - head * 2, Math.max(a0, a1), Math.min(a0, a1), true);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ก้านไม้เท้า + ด้ามพันผ้า
+  const w = (wp.width || 7) / 2;
+  ctx.fillStyle = "#5a3b22";
+  ctx.fillRect(s0 - 6, -w, hc - head * 0.6 - s0 + 6, w * 2);
+  ctx.strokeStyle = "#c9a14a";
+  ctx.lineWidth = 1.5;
+  for (let x = s0; x < s0 + 24; x += 6) {
+    ctx.beginPath();
+    ctx.moveTo(x, -w);
+    ctx.lineTo(x + 4, w);
+    ctx.stroke();
+  }
+
+  // ตัวเรือนเข็มทิศ: วงแหวนทองเหลือง + หน้าปัดสีครีม
+  ctx.translate(hc, 0);
+  ctx.shadowColor = hot ? "#ffb020" : "rgba(255, 220, 140, 0.55)";
+  ctx.shadowBlur = hot ? 20 : 6;
+  ctx.fillStyle = "#c99a2e";
+  ctx.beginPath();
+  ctx.arc(0, 0, head, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#f6efd8";
+  ctx.beginPath();
+  ctx.arc(0, 0, head - 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#7a5a14";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // ขีดทิศ 4 ทิศ
+  ctx.strokeStyle = "#5a4a2a";
+  ctx.lineWidth = 1.6;
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * (head - 7), Math.sin(a) * (head - 7));
+    ctx.lineTo(Math.cos(a) * (head - 4), Math.sin(a) * (head - 4));
+    ctx.stroke();
+  }
+  // เข็ม: ปลายแดงชี้ศัตรู ปลายขาวอีกข้าง
+  ctx.save();
+  ctx.rotate(needle);
+  const nl = head - 5;
+  ctx.fillStyle = "#e0243c";
+  ctx.beginPath();
+  ctx.moveTo(nl, 0);
+  ctx.lineTo(0, -3.2);
+  ctx.lineTo(0, 3.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "#8a8a8a";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(-nl, 0);
+  ctx.lineTo(0, -3.2);
+  ctx.lineTo(0, 3.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = "#333";
+  ctx.beginPath();
+  ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// วงชะลอเวลารอบ Johan: วงสีเขียวน้ำเงิน มีวงแหวนหดเข้าหาตัว และขีดนาฬิกาหมุนช้าๆ ที่ขอบ
+function drawSlowField(b) {
+  const s = b.slower;
+  const R = s.cast.sk.radius || 300;
+  const t = performance.now() / 1000;
+  ctx.save();
+  const g = ctx.createRadialGradient(s.x, s.y, R * 0.2, s.x, s.y, R);
+  g.addColorStop(0, "rgba(69, 224, 192, 0.04)");
+  g.addColorStop(0.8, "rgba(69, 224, 192, 0.14)");
+  g.addColorStop(1, "rgba(69, 224, 192, 0.02)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, R, 0, Math.PI * 2);
+  ctx.fill();
+  // วงแหวนหดเข้าหาตัว = เวลาถูกดูดให้ช้าลง
+  for (let k = 0; k < 3; k++) {
+    const ph = (t * 0.45 + k / 3) % 1;
+    ctx.strokeStyle = "rgba(127, 245, 220, " + (0.35 * (1 - ph)).toFixed(3) + ")";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R * (1 - ph * 0.85), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // ขอบวงประ + ขีดนาฬิกา
+  ctx.strokeStyle = "rgba(127, 245, 220, 0.7)";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([10, 8]);
+  ctx.lineDashOffset = -t * 12;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, R, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  for (let k = 0; k < 24; k++) {
+    const a = (k / 24) * Math.PI * 2 + t * 0.25;
+    const len = k % 6 === 0 ? 14 : 7;
+    ctx.beginPath();
+    ctx.moveTo(s.x + Math.cos(a) * (R - len), s.y + Math.sin(a) * (R - len));
+    ctx.lineTo(s.x + Math.cos(a) * R, s.y + Math.sin(a) * R);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// วงหมุนรอบตัวคนที่กำลังเร่งเวลา: เข็มนาฬิกาหมุนเร็วสองเข็ม
+function drawAccelAura(f) {
+  const t = performance.now() / 1000;
+  const R = f.r * 1.3;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.strokeStyle = "rgba(255, 190, 60, 0.7)";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([6, 6]);
+  ctx.lineDashOffset = -t * 90;
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(255, 224, 140, 0.85)";
+  ctx.lineWidth = 3;
+  for (const [sp, len] of [[9, R * 0.95], [2.2, R * 0.65]]) {
+    const a = -Math.PI / 2 + t * sp;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ภาพติดตาของคนที่เร่งเวลา (ทาสีเหลืองทอง โปร่งใสลดลงเรื่อยๆ)
+function drawGhosts() {
+  for (const g of ghosts) {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, g.life / 0.3) * 0.35;
+    ctx.filter = "sepia(1) saturate(4) brightness(1.1)";
+    drawFighter({ x: g.x, y: g.y, r: g.r, vy: g.vy, facing: g.facing, frame: g.frame, hitFlash: 0, def: CHARACTERS[g.key] }, g.key);
+    ctx.restore();
+  }
+  ctx.filter = "none";
+}
+
+// ป้ายนับถอยหลังด้านบนสนาม (ใช้กับเร่ง/ชะลอเวลา)
+function drawTimeLabel(txt, color) {
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.font = "700 26px " + FONT;
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = "rgba(0,0,0,0.7)";
+  ctx.strokeText(txt, W / 2, 42);
+  ctx.fillStyle = color;
+  ctx.fillText(txt, W / 2, 42);
   ctx.restore();
 }
 
@@ -763,6 +991,8 @@ function render() {
     const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def) || keys[0];
     if (battle.winner !== null) drawWinnerBanner(battle);
     if (battle.eraser && battle.eraser.cast) drawEraseBackdrop(battle);
+    if (battle.slower && battle.slower.cast) drawSlowField(battle);
+    drawGhosts();
     // เหม่อลอย = สีจาง/ขาวดำบางส่วน, คนที่ตัดเวลา = ตัวโปร่งแสงเรืองแดง (อยู่นอกความจริง)
     const gray = (on) => { ctx.filter = on ? "grayscale(0.85) brightness(0.85)" : "none"; };
     if (battle.phantom) drawPhantom(battle);
@@ -777,10 +1007,29 @@ function render() {
       drawFighter(f, keyOf(f.def));
       ctx.globalAlpha = 1;
       if (f === battle.eraser) ctx.filter = "none";
-      if (f.weapon) drawKatana(f);
+      if (f.weapon) (f.weapon.type === "compass" ? drawCompass(f) : drawKatana(f));
+      if (f.cast && f.cast.sk.type === "timeaccel") drawAccelAura(f);
       if (f.mind > 4 || f.stun > 0 || f === battle.dazed) drawMindAura(f);
     });
     gray(false);
+    // ตัวที่ถูกชะลอเวลา: โชว์ป้ายความเร็วเหนือหัว
+    if (battle.slower) {
+      for (const f of battle.fighters) {
+        if (f === battle.slower || f.hp <= 0) continue;
+        const sc = battle.timeScaleOf(f);
+        if (sc >= 0.95) continue;
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.font = "700 20px " + FONT;
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "rgba(0,0,0,0.7)";
+        const txt = "⏳ ช้า x" + sc.toFixed(2);
+        ctx.strokeText(txt, f.x, f.y - f.r - 14);
+        ctx.fillStyle = "#7ff5dc";
+        ctx.fillText(txt, f.x, f.y - f.r - 14);
+        ctx.restore();
+      }
+    }
     drawShards();
 
     for (const p of battle.projectiles) {
@@ -812,6 +1061,13 @@ function render() {
     ctx.globalAlpha = 1;
     if (battle.rewind) drawRewindOverlay(battle);
     if (battle.eraser && battle.eraser.cast) drawEraseLabel(battle);
+    for (const f of battle.fighters) {
+      if (!f.cast || f.hp <= 0) continue;
+      const c = f.cast;
+      const left = Math.max(0, c.sk.duration - c.t).toFixed(1);
+      if (c.sk.type === "timeaccel") drawTimeLabel("⏩ เร่งเวลา x" + (c.sk.rate || 2) + "  " + left + " วิ", "#ffcf5a");
+      else if (c.sk.type === "timeslow") drawTimeLabel("⏳ ชะลอเวลา  " + left + " วิ", "#7ff5dc");
+    }
     if (screenFlash > 0) {
       ctx.fillStyle = "rgba(255,255,255," + Math.min(1, screenFlash).toFixed(3) + ")";
       ctx.fillRect(0, 0, W, H);
@@ -877,7 +1133,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 12;
+const EXPECTED_VERSION = 13;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
