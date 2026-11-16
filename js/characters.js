@@ -123,7 +123,7 @@ const CHARACTERS = {
   singer: {
     name: "Luka",
     color: "#f6e27a", // เหลืองอ่อน (ใช้กับชื่อ โน้ต คลื่นเสียง และเอฟเฟกต์ของ Luka)
-    hp: 100,
+    hp: 70,
     speed: 175,
     radius: 38,
     frames: {
@@ -167,10 +167,10 @@ const CHARACTERS = {
         projectileSpeed: 300,
         projectileRadius: 18,
         shape: "text",
-        texts: ["เธอมันไม่พอ", "ไม่มีใครรอเธออยู่", "ยอมแพ้เถอะ", "ทุกคนผิดหวังในตัวเธอ", "ทำได้แค่นี้เหรอ"],
+        texts: ["Oh, in a blink, gone", "Blink, gone", "I'm tellin' you blink, gone", "Tick-tock, tick-tock, tick-tock", "Blink, gone"],
         sound: "word",
         indestructible: true, // คำพูดของ Luka ปัดไม่ได้ (เหมือนโน้ต) ทุกการโจมตีของ Luka ปัดป้องไม่ได้
-        hpRush: 2.5, // ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: เลือดเต็ม 1 เท่า -> เลือดหมด 2.5 เท่า
+        hpRush: 3, // ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: เลือดเต็ม 1 เท่า -> เลือดหมด 3 เท่า
       },
       {
         type: "shockwave",
@@ -179,8 +179,8 @@ const CHARACTERS = {
         frame: "wave",
         duration: 0.6,
         fireDelay: 0.2,
-        damage: 18, // ดาเมจเมื่อโดนที่ระยะใกล้ตัว (เดิม 12)
-        damageFar: 8, // ดาเมจเมื่อโดนที่ปลายระยะ (ระหว่างทางลดลงเป็นเส้นตรง) เดิม 5
+        damage: 22, // ดาเมจเมื่อโดนที่ระยะใกล้ตัว (เดิม 12)
+        damageFar: 11, // ดาเมจเมื่อโดนที่ปลายระยะ (ระหว่างทางลดลงเป็นเส้นตรง) เดิม 5
         stunNear: 1.0, // โดนคลื่นในระยะใกล้ ติดสตั้นกี่วินาที
         stunRange: 0.35, // "ใกล้" = คลื่นเดินทางไม่เกิน 35% ของ waveRange
         projectileEffect: "push", // คลื่นปะทะกระสุนศัตรู: "push" = ผลักออก, "stop" = ทำลายทิ้ง
@@ -224,7 +224,7 @@ const CHARACTERS = {
       {
         type: "timeerase",
         name: "ตัดเวลา",
-        cooldown: 16, // นับตั้งแต่เริ่มใช้ (รวมช่วง 5 วินาทีที่ตัดเวลาด้วย)
+        cooldown: 15, // นับตั้งแต่เริ่มใช้ (รวมช่วง 5 วินาทีที่ตัดเวลาด้วย)
         initialCooldown: 4,
         frame: "erase",
         duration: 5, // ตัดเวลา 5 วินาที
@@ -235,7 +235,7 @@ const CHARACTERS = {
         // ระหว่างตัดเวลา: วนไปด้านหลังศัตรู (ฝั่งตรงข้ามกับที่ศัตรูหันหน้า) แล้วพุ่งแทง ถ้าแทงสำเร็จจากด้านหลัง
         backstab: {
           damageMult: 2, // ดาเมจเป็น 2 เท่า
-          silence: 2.5, // ใบ้สกิลศัตรู (ใช้สกิลไม่ได้ ยังเดินได้) กี่วินาที
+          silence: 5, // ใบ้สกิลศัตรู (ใช้สกิลไม่ได้ ยังเดินได้) กี่วินาที
           orbitRadius: 150, // รัศมีที่วนรอบศัตรู (px)
           orbitSpeed: 1.8, // ตัวคูณความเร็วตอนวน
           strikeSpeed: 2.4, // ตัวคูณความเร็วตอนพุ่งแทง
@@ -247,7 +247,7 @@ const CHARACTERS = {
       {
         type: "rewind",
         name: "ย้อนเวลา",
-        cooldown: 14,
+        cooldown: 17,
         initialCooldown: 6,
         frame: "rewind",
         duration: 1.0, // เล่นภาพย้อนกลับ 1 วินาที (ย้อนโลกกลับไป 5 วินาที)
@@ -257,8 +257,8 @@ const CHARACTERS = {
       {
         // แยกร่างแบบ D4C: แต่ละครั้งสุ่มเสก 1 ใน 3 (น้ำหนัก weight เท่ากัน ปรับให้ออกบ่อยไม่เท่ากันได้)
         type: "summon",
-        name: "แยกร่าง (D4C)",
-        cooldown: 15,
+        name: "แยกร่าง",
+        cooldown: 5,
         initialCooldown: 3,
         restAfter: 1.5,
         frame: "clone",
@@ -273,12 +273,12 @@ const CHARACTERS = {
           },
           {
             // 2. ร่างวิ่งพุ่งชน: พุ่งใส่ศัตรูเหมือน Dasher แต่เลือดแค่ 5
-            kind: "dasher", weight: 1, look: "dasher", hp: 5, radius: 26, speed: 150, life: 10,
+            kind: "dasher", weight: 1, look: "dasher", hp: 10, radius: 26, speed: 250, life: 10,
             dash: { cooldown: 2.1, duration: 0.55, speedMult: 3.2, homing: 2.2, damage: 16, knockback: 300 },
           },
           {
             // 3. การ์ดกั้น: ลอยอยู่ระหว่างตัวเรากับศัตรูเสมอ รับกระสุน คลื่น และการโจมตีแทน จนเลือดการ์ดหมดหรือหมดเวลา
-            kind: "guard", weight: 1, hp: 24, radius: 32, life: 8, distance: 55,
+            kind: "guard", weight: 1, hp: 50, radius: 32, life: 2, distance: 55,
           },
         ],
       },
@@ -319,7 +319,7 @@ const CHARACTERS = {
       {
         type: "timeaccel",
         name: "เร่งเวลา",
-        cooldown: 18, // เดิม 12
+        cooldown: 15, // เดิม 12
         initialCooldown: 5, // เดิม 3
         restAfter: 2.5, // ใช้เสร็จแล้วพักก่อนใช้สกิลถัดไปกี่วินาที (ไม่ใส่ = 0.25)
         frame: "accel",
@@ -339,7 +339,7 @@ const CHARACTERS = {
       {
         type: "timeslow",
         name: "ชะลอเวลา",
-        cooldown: 20, // เดิม 14
+        cooldown: 15, // เดิม 14
         initialCooldown: 10, // เดิม 7
         restAfter: 2.5,
         frame: "slow",
