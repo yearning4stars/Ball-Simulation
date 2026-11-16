@@ -50,6 +50,8 @@
 //        hitAndRun (ไม่บังคับ) วิ่งวนรอบศัตรู -> พุ่งเข้าโจมตี -> หลบออก วนซ้ำตลอดช่วงเร่งเวลา (ถ้าใส่ จะใช้แทน homing)
 //        hpRush (ใส่ได้ทุกสกิล) ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: 1 เท่าตอนเลือดเต็ม -> hpRush เท่าตอนเลือดหมด
 //        stunNear, stunRange (shockwave) ถ้าโดนคลื่นตอนคลื่นเดินทางไม่เกิน stunRange (0-1 ของระยะทั้งหมด) จะติดสตั้น stunNear วินาที
+//        type "copy" (Johan) ก๊อปสกิลล่าสุดของศัตรูไปไว้ในช่อง type "copied" ใช้ต่อด้วยคูลดาวน์ของต้นฉบับ (damageMult = ดาเมจที่เหลือกี่เท่า)
+//        type "summon" (FuNx D4C) สุ่มเสกร่างแยกจาก pool: kind gunner / dasher (มี hp เล็กน้อย) หรือ guard (การ์ดกั้นรับดาเมจแทน) ดูตัวอย่างที่ funx
 //        restAfter (ใส่ได้ทุกสกิล) ใช้สกิลเสร็จแล้วพักกี่วินาทีก่อนใช้สกิลถัดไป ไม่ใส่ = 0.25
 //        backstab (ใส่ในสกิล timeerase) วนไปด้านหลังศัตรูแล้วแทง สำเร็จ = ดาเมจ damageMult เท่า + ใบ้สกิลศัตรู silence วินาที
 //        weapon ชนกับ weapon ของอีกฝ่าย (เช่น ดาบ FuNx กับเข็มทิศ Johan) จะปัดกันและเด้งออกทั้งคู่ ไม่ต้องตั้งค่าอะไร
@@ -203,6 +205,7 @@ const CHARACTERS = {
       idle: "assets/characters/funx/idle.png",
       erase: "assets/characters/funx/erase.png",
       rewind: "assets/characters/funx/rewind.png",
+      clone: "assets/characters/funx/clone.png", // (ไม่บังคับ) ท่าแยกร่าง D4C ถ้าไม่มีไฟล์จะใช้ idle แทน
     },
     weapon: {
       type: "katana",
@@ -251,6 +254,34 @@ const CHARACTERS = {
         rewindSeconds: 5,
         minGain: 10, // ใช้เมื่อเลือดหายไปอย่างน้อย 10 ในช่วง 5 วินาทีที่ผ่านมา
       },
+      {
+        // แยกร่างแบบ D4C: แต่ละครั้งสุ่มเสก 1 ใน 3 (น้ำหนัก weight เท่ากัน ปรับให้ออกบ่อยไม่เท่ากันได้)
+        type: "summon",
+        name: "แยกร่าง (D4C)",
+        cooldown: 15,
+        initialCooldown: 3,
+        restAfter: 1.5,
+        frame: "clone",
+        duration: 0.8,
+        fireDelay: 0.3, // เสกออกมาหลังเริ่มท่านี้กี่วินาที
+        maxSummons: 3, // มีได้พร้อมกันสูงสุดกี่ตัว (เกินแล้วตัวเก่าสุดหายไป)
+        pool: [
+          {
+            // 1. ร่างยิงปืน: ยิงเหมือน Gunner แต่เลือดแค่ 5
+            kind: "gunner", weight: 1, look: "gunner", hp: 5, radius: 24, speed: 150, life: 10,
+            shoot: { cooldown: 1.4, damage: 11, projectileSpeed: 520, projectileRadius: 7 },
+          },
+          {
+            // 2. ร่างวิ่งพุ่งชน: พุ่งใส่ศัตรูเหมือน Dasher แต่เลือดแค่ 5
+            kind: "dasher", weight: 1, look: "dasher", hp: 5, radius: 26, speed: 150, life: 10,
+            dash: { cooldown: 2.1, duration: 0.55, speedMult: 3.2, homing: 2.2, damage: 16, knockback: 300 },
+          },
+          {
+            // 3. การ์ดกั้น: ลอยอยู่ระหว่างตัวเรากับศัตรูเสมอ รับกระสุน คลื่น และการโจมตีแทน จนเลือดการ์ดหมดหรือหมดเวลา
+            kind: "guard", weight: 1, hp: 24, radius: 32, life: 8, distance: 55,
+          },
+        ],
+      },
     ],
   },
 
@@ -266,6 +297,7 @@ const CHARACTERS = {
       idle: "assets/characters/johan/idle.png",
       accel: "assets/characters/johan/accel.png",
       slow: "assets/characters/johan/slow.png",
+      copy: "assets/characters/johan/copy.png", // (ไม่บังคับ) ท่า Copy สกิล ถ้าไม่มีไฟล์จะใช้ idle แทน
     },
     weapon: {
       type: "compass",
@@ -316,11 +348,29 @@ const CHARACTERS = {
         factor: 0.35, // เดินช้าเหลือ 35% ของปกติ
         homing: 2, // ระหว่างชะลอเวลา วิ่งเข้าหาศัตรูที่ช้าลง
       },
+      {
+        // Copy: ก๊อปสกิลล่าสุดที่ศัตรูใช้ (ยังไม่เคยใช้ = สุ่มจากสกิลของศัตรู) ไปใส่ช่อง "สกิลที่ Copy" ด้านล่าง
+        // สกิลที่ได้มามีคูลดาวน์เท่าต้นฉบับ (เริ่มนับเต็มตั้งแต่ก๊อปเสร็จ) และ Copy ซ้ำจะทับของเดิม
+        type: "copy",
+        name: "Copy สกิล",
+        cooldown: 20,
+        initialCooldown: 8,
+        restAfter: 1.5,
+        frame: "copy",
+        duration: 0.9,
+        fireDelay: 0.3, // ก๊อปสำเร็จหลังเริ่มท่านี้กี่วินาที
+        damageMult: 0.75, // ดาเมจของสกิลที่ก๊อปมาเหลือกี่เท่าของต้นฉบับ
+      },
+      {
+        type: "copied", // ช่องเก็บสกิลที่ Copy มา (ว่างจนกว่าจะ Copy) ห้ามลบ
+        name: "สกิลที่ Copy",
+        cooldown: 0,
+      },
     ],
   },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 18;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 19;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

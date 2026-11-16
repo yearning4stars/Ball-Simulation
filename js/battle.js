@@ -28,6 +28,7 @@ class Battle {
     this.time = 0;
     this.projectiles = [];
     this.waves = []; // คลื่นเสียงที่กำลังแผ่ออก
+    this.summons = []; // ร่างแยก/การ์ดที่ผู้เล่นเสกออกมา (D4C ของ Johan)
     this.events = []; // เอฟเฟกต์ให้ตัววาดเอาไปใช้ แล้วเคลียร์ทุกเฟรม
     this.winner = null; // 0, 1 หรือ "draw"
     this.wt = 0; // เวลาของ "โลก" (ย้อนเวลาแล้วถอยกลับตามจริง) ใช้กับประวัติสำหรับสกิลย้อนเวลา
@@ -48,7 +49,7 @@ class Battle {
   _makeFighter(def, x, y, angle) {
     const jitter = (this.rng() - 0.5) * 1.2;
     const a = angle + jitter;
-    const skills = skillsOf(def);
+    const skills = skillsOf(def).slice(); // สำเนาของตัวเอง: สกิลที่ copy มาจะเปลี่ยนช่องในรายการนี้โดยไม่แตะข้อมูลตัวละคร
     return {
       def,
       skills,
@@ -74,6 +75,7 @@ class Battle {
       hitFlash: 0,
       mind: 0, // ระดับสติ/ความมั่นใจที่ถูกบั่นทอน 0-100 (โดนคำพูดของ Luka)
       mindHold: 0, // เวลาที่ mind ยังค้างอยู่ก่อนจะเริ่มฟื้น
+      lastSkill: null, // สกิลที่ใช้ล่าสุด (ศัตรู Copy จะเลือกสกิลนี้ก่อน)
       silence: 0, // ถูกใบ้สกิล: ใช้สกิลไม่ได้ (ยังเดินได้) เวลาที่เหลือเป็นวินาที
       stun: 0, // เวลาที่เหลือของอาการสติแตก
       // อาวุธที่หมุนรอบตัวตลอดเวลา (เช่นดาบคาตานะ): หมุนไปเรื่อยๆ จนฟันโดนแล้วกลับทิศ
@@ -165,6 +167,7 @@ class Battle {
     for (const f of this.fighters) {
       if (f.weapon && !f.disarmed) this._updateWeapon(f, f === a ? b : a, f.tdt);
     }
+    this._updateSummons(dt);
     this._updateProjectiles(dt);
     this._updateWaves(dt);
     // ตัดเวลาอาจจบกลางก้าวนี้ (cast ถูกเคลียร์) ให้สถานะที่ตัววาดอ่านตรงกับความจริงเสมอ
@@ -219,6 +222,10 @@ class Battle {
           c.fired = true;
           this._fireWave(f, enemy, sk);
         }
+      } else if (sk.type === "copy") {
+        if (!c.fired && c.t >= (sk.fireDelay || 0)) { c.fired = true; this._doCopy(f, sk); }
+      } else if (sk.type === "summon") {
+        if (!c.fired && c.t >= (sk.fireDelay || 0)) { c.fired = true; this._spawnSummon(f, sk); }
       } else if (sk.type === "dash" && sk.homing) {
         this._steer(f, enemy, sk.homing * dt); // เลี้ยวเข้าหาศัตรูเล็กน้อยระหว่างพุ่ง
       } else if (sk.type === "timeerase") {
@@ -253,6 +260,8 @@ class Battle {
       const s2 = f.skills[i];
       if (f.cds[i] > 0) continue;
       if (timeBusy && TIME_SKILLS.includes(s2.type)) continue; // เวลาถูกแตะอยู่แล้ว
+      if (s2.type === "copied") continue; // ช่องว่างสำหรับสกิลที่ copy มา: ใช้ไม่ได้จนกว่าจะ Copy
+      if (s2.type === "copy" && !this._canCopy(f)) continue; // ศัตรูไม่มีสกิลให้ Copy
       // ย้อนเวลาจะใช้ก็ต่อเมื่อเสียเลือดไปพอสมควรในช่วงที่ย้อนกลับได้ (ไม่งั้นย้อนไปก็เปล่าประโยชน์)
       if (s2.type === "rewind" && !this._rewindWorthIt(f, s2)) continue;
       if (pick === -1 || f.cds[i] < f.cds[pick]) pick = i;
@@ -261,6 +270,7 @@ class Battle {
 
     const sk = f.skills[pick];
     f.cds[pick] = sk.cooldown;
+    f.lastSkill = sk;
     f.cast = { i: pick, sk, t: 0, shots: 0, fired: false, hit: false };
     f.frame = sk.frame || "idle";
 
@@ -371,6 +381,205 @@ class Battle {
     this._knock(a, -dx, -dy, 130);
     this._knock(b, dx, dy, 130);
     this.events.push({ type: "clash", x: (hit.ax + hit.bx) / 2, y: (hit.ay + hit.by) / 2 });
+  }
+
+  // ---------- Copy สกิลศัตรู (Johan) ----------
+  _copyable(s) {
+    return !!s && !["copy", "summon", "copied"].includes(s.type);
+  }
+
+  _canCopy(f) {
+    const enemy = this.fighters.find((g) => g !== f);
+    return enemy.skills.some((s) => this._copyable(s));
+  }
+
+  // ก๊อปสกิลล่าสุดที่ศัตรูใช้ (ถ้ายังไม่เคยใช้ สุ่มจากสกิลที่ก๊อปได้) ไปใส่ช่อง "สกิลที่ copy"
+  // คูลดาวน์ของสกิลที่ได้มา = คูลดาวน์ของต้นฉบับ (เริ่มนับเต็มตั้งแต่ก๊อปเสร็จ) ดาเมจคูณ damageMult
+  _doCopy(f, sk) {
+    const enemy = this.fighters.find((g) => g !== f);
+    const slot = f.skills.findIndex((s) => s.type === "copied" || s.copied);
+    if (slot < 0 || enemy.hp <= 0) return;
+    let src = this._copyable(enemy.lastSkill) ? enemy.lastSkill : null;
+    if (!src) {
+      const list = enemy.skills.filter((s) => this._copyable(s));
+      if (list.length) src = list[Math.floor(this.rng() * list.length)];
+    }
+    if (!src) return;
+    const mult = sk.damageMult !== undefined ? sk.damageMult : 0.75;
+    const baseName = src.baseName || src.name || src.type;
+    const cp = { ...src, copied: true, baseName, name: "Copy: " + baseName };
+    delete cp.initialCooldown;
+    if (cp.damage !== undefined) cp.damage = Math.max(1, Math.round(cp.damage * mult));
+    if (cp.damageFar !== undefined) cp.damageFar = Math.max(1, Math.round(cp.damageFar * mult));
+    f.skills[slot] = cp;
+    f.cds[slot] = cp.cooldown;
+    this.events.push({ type: "copy", x: f.x, y: f.y, name: baseName });
+  }
+
+  // ---------- แยกร่าง (D4C) ----------
+  // สุ่มเสก 1 ใน pool ตามน้ำหนัก: ร่างยิงปืน / ร่างพุ่งชน (เลือดน้อย) / การ์ดกั้นรับดาเมจแทน
+  _spawnSummon(f, sk) {
+    const enemy = this.fighters.find((g) => g !== f);
+    const pool = sk.pool || [];
+    if (!pool.length) return;
+    const wt = (p) => (p.weight === undefined ? 1 : p.weight);
+    let roll = this.rng() * pool.reduce((a, p) => a + wt(p), 0);
+    let cfg = pool[pool.length - 1];
+    for (const p of pool) { roll -= wt(p); if (roll <= 0) { cfg = p; break; } }
+    const mine = this.summons.filter((s) => s.owner === f);
+    if (mine.length >= (sk.maxSummons || 3)) this.summons.splice(this.summons.indexOf(mine[0]), 1); // เต็มแล้ว ตัวเก่าสุดหายไป
+    const a = Math.atan2(enemy.y - f.y, enemy.x - f.x);
+    const r = cfg.radius || 26;
+    let x, y, vx = 0, vy = 0;
+    if (cfg.kind === "guard") {
+      x = f.x + Math.cos(a) * (f.r + (cfg.distance || 55));
+      y = f.y + Math.sin(a) * (f.r + (cfg.distance || 55));
+    } else {
+      const off = a + (this.rng() < 0.5 ? 1 : -1) * (Math.PI / 2);
+      x = f.x + Math.cos(off) * (f.r + r + 12);
+      y = f.y + Math.sin(off) * (f.r + r + 12);
+      const va = a + (this.rng() - 0.5) * 1.2;
+      vx = Math.cos(va) * (cfg.speed || 150);
+      vy = Math.sin(va) * (cfg.speed || 150);
+    }
+    x = Math.max(r, Math.min(this.w - r, x));
+    y = Math.max(r, Math.min(this.h - r, y));
+    this.summons.push({
+      kind: cfg.kind, cfg, owner: f, look: cfg.look || null,
+      x, y, vx, vy, r, hp: cfg.hp, maxHp: cfg.hp, life: cfg.life || 10, maxLife: cfg.life || 10,
+      cd: cfg.shoot ? 0.5 : cfg.dash ? 1.0 : 0, dashT: 0, hit: false, hitFlash: 0, facing: 1, ang: a,
+    });
+    this.events.push({ type: "summon", x, y, kind: cfg.kind });
+  }
+
+  _hurtSummon(s, amount, x, y) {
+    const dmg = Math.max(1, Math.round(amount));
+    s.hp -= dmg;
+    s.hitFlash = 0.15;
+    this.events.push({ type: "hit", x, y, amount: dmg });
+  }
+
+  _updateSummons(dt) {
+    if (!this.summons.length) return;
+    const keep = [];
+    for (const s of this.summons) {
+      const f = s.owner;
+      const enemy = this.fighters.find((g) => g !== f);
+      const sdt = dt * this._timeScale(s.x, s.y, f); // อยู่ในวงชะลอเวลาของศัตรู -> ช้าลง
+      s.life -= sdt;
+      s.hitFlash = Math.max(0, s.hitFlash - dt);
+      if (s.hp <= 0) { this.events.push({ type: "summonBreak", x: s.x, y: s.y, kind: s.kind }); continue; }
+      if (s.life <= 0 || f.hp <= 0) { this.events.push({ type: "summonBreak", x: s.x, y: s.y, kind: s.kind, fade: true }); continue; }
+      s.facing = enemy.x >= s.x ? 1 : -1;
+      const cfg = s.cfg;
+      if (s.kind === "guard") {
+        // การ์ดลอยอยู่ระหว่างเจ้าของกับศัตรูเสมอ
+        const a = Math.atan2(enemy.y - f.y, enemy.x - f.x);
+        const dist = f.r + (cfg.distance || 55);
+        s.ang = a;
+        s.x = Math.max(s.r, Math.min(this.w - s.r, f.x + Math.cos(a) * dist));
+        s.y = Math.max(s.r, Math.min(this.h - s.r, f.y + Math.sin(a) * dist));
+      } else {
+        let speed = cfg.speed || 150;
+        const live = enemy.hp > 0 && enemy !== this.eraser;
+        if (cfg.dash) {
+          s.cd -= sdt;
+          if (s.dashT > 0) {
+            s.dashT -= sdt;
+            const want = Math.atan2(enemy.y - s.y, enemy.x - s.x);
+            let diff = want - Math.atan2(s.vy, s.vx);
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            const turn = Math.max(-(cfg.dash.homing || 2) * sdt, Math.min((cfg.dash.homing || 2) * sdt, diff));
+            const c = Math.cos(turn), sn = Math.sin(turn);
+            const nvx = s.vx * c - s.vy * sn;
+            s.vy = s.vx * sn + s.vy * c;
+            s.vx = nvx;
+            speed *= cfg.dash.speedMult || 3;
+            if (s.dashT <= 0) s.cd = cfg.dash.cooldown || 2;
+          } else if (s.cd <= 0 && live) {
+            s.dashT = cfg.dash.duration || 0.55;
+            s.hit = false;
+            const l = Math.hypot(enemy.x - s.x, enemy.y - s.y) || 1;
+            s.vx = ((enemy.x - s.x) / l) * speed;
+            s.vy = ((enemy.y - s.y) / l) * speed;
+            this.events.push({ type: "dash", x: s.x, y: s.y });
+          }
+        }
+        if (cfg.shoot) {
+          s.cd -= sdt;
+          if (s.cd <= 0 && live) { this._fireProjectile(f, enemy, cfg.shoot, s); s.cd = cfg.shoot.cooldown || 1.4; }
+        }
+        const cur = Math.hypot(s.vx, s.vy) || 1;
+        s.vx = (s.vx / cur) * speed;
+        s.vy = (s.vy / cur) * speed;
+        s.x += s.vx * sdt;
+        s.y += s.vy * sdt;
+        if (s.x < s.r) { s.x = s.r; s.vx = Math.abs(s.vx); }
+        if (s.x > this.w - s.r) { s.x = this.w - s.r; s.vx = -Math.abs(s.vx); }
+        if (s.y < s.r) { s.y = s.r; s.vy = Math.abs(s.vy); }
+        if (s.y > this.h - s.r) { s.y = this.h - s.r; s.vy = -Math.abs(s.vy); }
+      }
+      this._summonContact(s, enemy);
+      keep.push(s);
+    }
+    this.summons = keep;
+  }
+
+  // ร่างแยก/การ์ด ชนกับตัวศัตรู: พุ่งชนของร่างแยกทำดาเมจ / ศัตรูพุ่งหรือชนใส่ร่างแยกก็ทำดาเมจเหมือนกัน แล้วดันออกจากกัน
+  _summonContact(s, e) {
+    if (e === this.eraser || e.hp <= 0) return;
+    const dx = e.x - s.x;
+    const dy = e.y - s.y;
+    const dist = Math.hypot(dx, dy) || 0.0001;
+    const min = s.r + e.r;
+    if (dist >= min) return;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const hx = s.x + nx * s.r;
+    const hy = s.y + ny * s.r;
+    if (s.cfg.dash && s.dashT > 0 && !s.hit) {
+      s.hit = true;
+      this._damage(e, this._out(s.owner, s.cfg.dash.damage), hx, hy);
+      this._knock(e, nx, ny, s.cfg.dash.knockback || 0);
+    }
+    const c = e.cast;
+    if (c && c.sk.type === "dash" && !c.hit) {
+      c.hit = true; // พุ่งชนเจอร่างแยก/การ์ดก่อนตัวจริง: ดาเมจลงที่ร่างแยก
+      this._hurtSummon(s, this._out(e, c.sk.damage), hx, hy);
+    } else if (e.disarmed && e.ramCd <= 0 && e.weapon) {
+      e.ramCd = 0.6;
+      this._hurtSummon(s, this._out(e, e.weapon.ramDamage !== undefined ? e.weapon.ramDamage : e.weapon.damage), hx, hy);
+    }
+    const ov = min - dist;
+    if (s.kind === "guard") {
+      e.x += nx * ov; // การ์ดกั้นทาง ดันศัตรูออกไป
+      e.y += ny * ov;
+    } else {
+      s.x -= (nx * ov) / 2; s.y -= (ny * ov) / 2;
+      e.x += (nx * ov) / 2; e.y += (ny * ov) / 2;
+    }
+  }
+
+  // คลื่นเสียงโดนร่างแยกของเป้าหมาย: ร่างแยกโดนดาเมจ (ครั้งเดียวต่อคลื่น) ถ้าเป็นการ์ดที่อยู่ก่อนถึงตัวจริง การ์ดรับคลื่นไว้ทั้งลูก
+  _waveVsSummons(w) {
+    if (!this.summons.length) return;
+    const t = this.fighters.find((f) => f !== w.owner);
+    for (const s of this.summons) {
+      if (s.owner !== t || (w.sumHit && w.sumHit.has(s))) continue;
+      const dx = s.x - w.x;
+      const dy = s.y - w.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+      let da = Math.atan2(dy, dx) - w.ang;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      const slack = Math.asin(Math.min(1, s.r / dist));
+      if (Math.abs(da) > w.halfArc + slack || dist - s.r > w.r) continue;
+      (w.sumHit = w.sumHit || new Set()).add(s);
+      const travel = Math.max(0, Math.min(1, (w.r - w.r0) / (w.maxR - w.r0)));
+      this._hurtSummon(s, this._out(w.owner, w.damage + (w.damageFar - w.damage) * travel), s.x, s.y);
+      if (s.kind === "guard" && !w.hit && dist < Math.hypot(t.x - w.x, t.y - w.y)) w.hit = true; // การ์ดรับคลื่นแทนตัวจริง
+    }
   }
 
   // สติแตกหนักจนทิ้งอาวุธ / หยิบกลับมา
@@ -607,6 +816,21 @@ class Battle {
       }
     }
     if (f.weaponCd > 0 || enemy.hp <= 0 || enemy === this.eraser) return; // ฟันคนที่อยู่นอกความจริงไม่โดน
+    // ฟันโดนร่างแยก/การ์ดของศัตรูก่อน (การ์ดกั้นอยู่หน้าตัวจริง จึงโดนก่อน)
+    if (this.summons.length) {
+      const shapes = this._weaponShapes(f);
+      for (const s of this.summons) {
+        if (s.owner !== enemy) continue;
+        const dot = { x1: s.x, y1: s.y, x2: s.x, y2: s.y, r: 0 };
+        if (!shapes.some((sh) => this._segClosest(sh, dot).d <= sh.r + s.r)) continue;
+        this._hurtSummon(s, this._out(f, wp.damage), s.x, s.y);
+        f.weaponDir *= -1;
+        f.weaponCd = wp.hitCooldown || 0.4;
+        if (f.cast && f.cast.hr) f.cast.hr.struck = true;
+        this.events.push({ type: "slash", x: s.x, y: s.y, ang: f.weaponAng });
+        return;
+      }
+    }
     const t = Math.max(s0, Math.min(s1, px * ca + py * sa)); // จุดบนใบดาบที่ใกล้ศัตรูที่สุด
     const dx = px - ca * t;
     const dy = py - sa * t;
@@ -655,15 +879,16 @@ class Battle {
     this._rotate(f, Math.max(-maxTurn, Math.min(maxTurn, diff)));
   }
 
-  _fireProjectile(f, enemy, sk) {
+  // src = จุดที่ยิงออกมา (ไม่ใส่ = ตัวผู้ใช้เอง) ร่างแยกของ Johan ยิงโดยมี src เป็นร่างแยก แต่ owner ยังเป็น Johan
+  _fireProjectile(f, enemy, sk, src = f) {
     const spread = (sk.spread || 0) + 0.9 * (f.mind / 100); // สติเสีย -> เล็งเพี้ยน
-    const base = Math.atan2(enemy.y - f.y, enemy.x - f.x);
+    const base = Math.atan2(enemy.y - src.y, enemy.x - src.x);
     const ang = base + (this.rng() - 0.5) * spread;
     const dx = Math.cos(ang);
     const dy = Math.sin(ang);
-    const muzzle = f.r + 6;
-    const x = f.x + dx * muzzle;
-    const y = f.y + dy * muzzle;
+    const muzzle = src.r + 6;
+    const x = src.x + dx * muzzle;
+    const y = src.y + dy * muzzle;
     this.projectiles.push({
       x,
       y,
@@ -825,6 +1050,11 @@ class Battle {
       if (target === this.eraser) {
         // เป้าหมายอยู่นอกความจริง: กระสุนบินทะลุผ่านความว่างเปล่าไป
         if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) p.dead = true;
+      } else if (target.hp > 0 && this.summons.some((s) => s.owner === target && Math.hypot(s.x - p.x, s.y - p.y) < s.r + p.r)) {
+        // โดนร่างแยก/การ์ดของเป้าหมายก่อน: ร่างแยกรับดาเมจแทนตัวจริง
+        const s = this.summons.find((q) => q.owner === target && Math.hypot(q.x - p.x, q.y - p.y) < q.r + p.r);
+        this._hurtSummon(s, p.damage, p.x, p.y);
+        p.dead = true;
       } else if (target.hp > 0 && Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
         this._damage(target, p.damage, p.x, p.y);
         if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
@@ -864,6 +1094,7 @@ class Battle {
       // ดูที่แนวหน้าคลื่น: ถ้าคลื่นของศัตรูเข้าไปในวงชะลอเวลา คลื่นจะแผ่ช้าลง
       const ws = this._timeScale(w.x + Math.cos(w.ang) * w.r, w.y + Math.sin(w.ang) * w.r, w.owner);
       w.r += w.speed * dt * ws;
+      this._waveVsSummons(w);
       if (!w.hit) {
         const t = this.fighters.find((f) => f !== w.owner);
         if (t.hp > 0 && t !== this.eraser) { // คนที่ตัดเวลาอยู่ คลื่นทะลุผ่านตัวไป
@@ -962,6 +1193,7 @@ class Battle {
       this.events.push({ type: "ko" });
       this.projectiles = []; // กระสุนและคลื่นที่ค้างอยู่หายไปพร้อมจบแมตช์
       this.waves = [];
+      this.summons = [];
       this.rewind = null;
       this.eraser = null;
       this.dazed = null;
@@ -977,6 +1209,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 18;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 19;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
