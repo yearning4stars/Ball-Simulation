@@ -198,7 +198,7 @@ const CHARACTERS = {
   funx: {
     name: "FuNx",
     color: "#d6315a",
-    hp: 110,
+    hp: 100,
     speed: 180,
     radius: 38,
     frames: {
@@ -213,7 +213,7 @@ const CHARACTERS = {
       length: 66,
       width: 9,
       startRatio: 0.45,
-      damage: 6,
+      damage: 5,
       spinSpeed: 8,
       hitCooldown: 0.35,
       aimBoost: 1.8, // ศัตรูอยู่ในระยะดาบ -> หมุนเร็วขึ้นกี่เท่าเพื่อกวาดเข้าหา
@@ -253,32 +253,6 @@ const CHARACTERS = {
         duration: 1.0, // เล่นภาพย้อนกลับ 1 วินาที (ย้อนโลกกลับไป 5 วินาที)
         rewindSeconds: 5,
         minGain: 10, // ใช้เมื่อเลือดหายไปอย่างน้อย 10 ในช่วง 5 วินาทีที่ผ่านมา
-      },
-      {
-        // แยกร่างแบบ D4C: แต่ละครั้งสุ่มเสก 1 ใน 3 (น้ำหนัก weight เท่ากัน ปรับให้ออกบ่อยไม่เท่ากันได้)
-        type: "summon",
-        name: "แยกร่าง",
-        cooldown: 5,
-        initialCooldown: 3,
-        restAfter: 1.5,
-        frame: "clone",
-        duration: 0.8,
-        fireDelay: 0.3, // เสกออกมาหลังเริ่มท่านี้กี่วินาที
-        maxSummons: 3, // มีได้พร้อมกันสูงสุดกี่ตัว (เกินแล้วตัวเก่าสุดหายไป)
-        pool: [
-          {
-            // 1. ร่างยิงปืน: ยิงเหมือน Gunner แต่เลือดแค่ 5
-            kind: "gunner", weight: 1, look: "gunner", hp: 5, radius: 24, speed: 150, life: 10,
-            shoot: { cooldown: 1.4, damage: 11, projectileSpeed: 520, projectileRadius: 7 },
-          },
-          {
-            // 2. ร่างวิ่งพุ่งชน: พุ่งใส่ศัตรูเหมือน Dasher แต่เลือดแค่ 5
-            kind: "dasher", weight: 1, look: "dasher", hp: 10, radius: 26, speed: 250, life: 10,
-            dash: { cooldown: 2.1, duration: 0.55, speedMult: 3.2, homing: 2.2, damage: 16, knockback: 300 },
-          },
-          {
-            // 3. การ์ดกั้น: ลอยอยู่ระหว่างตัวเรากับศัตรูเสมอ รับกระสุน คลื่น และการโจมตีแทน จนเลือดการ์ดหมดหรือหมดเวลา
-            kind: "guard", weight: 1, hp: 50, radius: 32, life: 2, distance: 55,
           },
         ],
       },
