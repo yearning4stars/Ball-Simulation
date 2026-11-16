@@ -154,7 +154,7 @@ function handleEvents(events) {
       shake = Math.max(shake, 6);
       sfx.hit();
     } else if (e.type === "muzzle") {
-      spawnParticles(e.x, e.y, e.sound === "note" ? "#e6b3ff" : e.sound === "word" ? "#b38cff" : "#fff3b0", e.sound === "note" ? 4 : 6, 200);
+      spawnParticles(e.x, e.y, e.sound === "note" ? "#fff1a8" : e.sound === "word" ? "#ffe27a" : "#fff3b0", e.sound === "note" ? 4 : 6, 200);
       if (e.sound === "note") sfx.note();
       else if (e.sound === "word") sfx.word();
       else sfx.shoot();
@@ -183,6 +183,16 @@ function handleEvents(events) {
     } else if (e.type === "pickWeapon") {
       floaters.push({ x: e.x, y: e.y - 62, text: "ตั้งสติได้!", life: 1.0, color: "#9be8ff", size: 26 });
       sfx.click();
+    } else if (e.type === "clash") {
+      spawnParticles(e.x, e.y, "#fff3b0", 16, 340);
+      spawnParticles(e.x, e.y, "#ffffff", 8, 240);
+      shake = Math.max(shake, 7);
+      sfx.slash();
+      sfx.deflect();
+    } else if (e.type === "waveStun") {
+      spawnParticles(e.x, e.y, "#fff3b0", 18, 320);
+      floaters.push({ x: e.x, y: e.y - 62, text: "มึนงง!", life: 1.1, color: "#ffe98a", size: 30 });
+      shake = Math.max(shake, 8);
     } else if (e.type === "ram") {
       spawnParticles(e.x, e.y, "#ffffff", 10, 280);
       shake = Math.max(shake, 5);
@@ -618,8 +628,8 @@ function drawWord(p) {
   const h = 30;
   ctx.shadowColor = p.color;
   ctx.shadowBlur = 14;
-  ctx.fillStyle = "rgba(24, 12, 40, 0.92)";
-  ctx.strokeStyle = "#c9a8ff";
+  ctx.fillStyle = "rgba(44, 36, 10, 0.92)";
+  ctx.strokeStyle = "#ffe98a";
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.roundRect(-w / 2, -h / 2, w, h, 12);
@@ -636,7 +646,7 @@ function drawWord(p) {
   ctx.shadowBlur = 0;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#f1e6ff";
+  ctx.fillStyle = "#fff7d1";
   ctx.fillText(p.text || "...", 0, 1);
   ctx.restore();
 }
@@ -682,7 +692,7 @@ function drawNote(p) {
   const kind = p.noteKind;
   for (let pass = 0; pass < 2; pass++) {
     // pass 0 = ขอบสีตัวละคร (หนา), pass 1 = เนื้อโน้ตสีอ่อน
-    const col = pass === 0 ? p.color : "#f6e3ff";
+    const col = pass === 0 ? p.color : "#fffbe0";
     ctx.strokeStyle = col;
     ctx.fillStyle = col;
     ctx.lineWidth = pass === 0 ? 7 : 3.5;
@@ -1147,7 +1157,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 15;
+const EXPECTED_VERSION = 16;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

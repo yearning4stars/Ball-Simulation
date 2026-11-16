@@ -79,6 +79,7 @@ class Battle {
       weaponCd: 0,
       disarmed: false, // ทิ้งอาวุธเพราะสติแตกหนัก (ใช้การชนโจมตีแทน)
       ramCd: 0, // พักก่อนชนโจมตีซ้ำได้
+      clashCd: 0, // พักก่อนอาวุธชนกัน (clash) ซ้ำได้
     };
   }
 
@@ -137,6 +138,7 @@ class Battle {
         f.cds[i] -= fdt * slow * rush;
       }
       f.ramCd = Math.max(0, f.ramCd - fdt);
+      f.clashCd = Math.max(0, f.clashCd - fdt);
       this._updateDisarm(f);
       // ทิ้งอาวุธแล้ว: วิ่งเข้าหาศัตรูเพื่อชน (สกิลที่ควบคุมการเคลื่อนที่เองจะทับค่านี้ทีหลัง)
       if (f.disarmed && f.stun <= 0) this._steer(f, enemy, 1.8 * fdt);
@@ -153,6 +155,7 @@ class Battle {
 
     if (this.rewind) { this._checkWinner(); return; } // เพิ่งเริ่มย้อนเวลาในก้าวนี้
     this._fighterCollision(a, b);
+    this._weaponClash(a, b); // อาวุธชนอาวุธ: ปัดกันและเด้งออก (ก่อนคิดว่าอาวุธโดนตัว)
     for (const f of this.fighters) {
       if (f.weapon && !f.disarmed) this._updateWeapon(f, f === a ? b : a, f.tdt);
     }
@@ -286,6 +289,81 @@ class Battle {
     } else if (sk.type === "timeslow") {
       this.events.push({ type: "slow", x: f.x, y: f.y, radius: sk.radius || 300 });
     }
+  }
+
+  // ---------- อาวุธชนอาวุธ (clash) ----------
+  // รูปทรงของอาวุธเป็นแคปซูลหลายชิ้น: ก้าน (จากจุดจับถึงปลาย) และหัวเข็มทิศ (วงกลม ถ้ามี)
+  _weaponShapes(f) {
+    const wp = f.weapon;
+    const s0 = f.r * (wp.startRatio || 0.5);
+    const s1 = f.r + wp.length;
+    const head = wp.headRadius || 0;
+    const ca = Math.cos(f.weaponAng);
+    const sa = Math.sin(f.weaponAng);
+    const rodEnd = head ? s1 - head : s1;
+    const shapes = [{ x1: f.x + ca * s0, y1: f.y + sa * s0, x2: f.x + ca * rodEnd, y2: f.y + sa * rodEnd, r: (wp.width || 8) / 2 }];
+    if (head) {
+      const hx = f.x + ca * (s1 - head);
+      const hy = f.y + sa * (s1 - head);
+      shapes.push({ x1: hx, y1: hy, x2: hx, y2: hy, r: head });
+    }
+    return shapes;
+  }
+
+  // จุดที่ใกล้กันที่สุดระหว่างเส้นตรงสองเส้น (ถ้าตัดกัน ระยะ = 0)
+  _segClosest(s, t) {
+    const d1x = s.x2 - s.x1, d1y = s.y2 - s.y1;
+    const d2x = t.x2 - t.x1, d2y = t.y2 - t.y1;
+    const den = d1x * d2y - d1y * d2x;
+    if (Math.abs(den) > 1e-9) {
+      const u = ((t.x1 - s.x1) * d2y - (t.y1 - s.y1) * d2x) / den;
+      const v = ((t.x1 - s.x1) * d1y - (t.y1 - s.y1) * d1x) / den;
+      if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
+        const x = s.x1 + d1x * u, y = s.y1 + d1y * u;
+        return { d: 0, ax: x, ay: y, bx: x, by: y };
+      }
+    }
+    const onSeg = (px, py, g) => {
+      const gx = g.x2 - g.x1, gy = g.y2 - g.y1;
+      const l2 = gx * gx + gy * gy;
+      const k = l2 ? Math.max(0, Math.min(1, ((px - g.x1) * gx + (py - g.y1) * gy) / l2)) : 0;
+      return { x: g.x1 + gx * k, y: g.y1 + gy * k };
+    };
+    let best = null;
+    const tryPt = (px, py, g, swap) => {
+      const q = onSeg(px, py, g);
+      const d = Math.hypot(px - q.x, py - q.y);
+      if (!best || d < best.d) best = swap ? { d, ax: q.x, ay: q.y, bx: px, by: py } : { d, ax: px, ay: py, bx: q.x, by: q.y };
+    };
+    tryPt(s.x1, s.y1, t, false); tryPt(s.x2, s.y2, t, false);
+    tryPt(t.x1, t.y1, s, true); tryPt(t.x2, t.y2, s, true);
+    return best;
+  }
+
+  _weaponClash(a, b) {
+    if (!a.weapon || !b.weapon || a.disarmed || b.disarmed) return;
+    if (a === this.eraser || b === this.eraser) return; // คนที่อยู่นอกความจริง อาวุธทะลุผ่านหมด
+    if (a.clashCd > 0 || b.clashCd > 0 || a.hp <= 0 || b.hp <= 0) return;
+    let hit = null;
+    for (const sa of this._weaponShapes(a)) {
+      for (const sb of this._weaponShapes(b)) {
+        const c = this._segClosest(sa, sb);
+        if (c.d <= sa.r + sb.r && (!hit || c.d < hit.d)) hit = c;
+      }
+    }
+    if (!hit) return;
+    for (const f of [a, b]) {
+      f.weaponDir *= -1; // หมุนกลับทิศ แล้วดีดออกจากจุดชนเล็กน้อยกันติดกัน
+      f.weaponAng += f.weaponDir * 0.35;
+      f.weaponCd = Math.max(f.weaponCd, 0.15); // โดนปัดไว้ ยังฟันโดนตัวไม่ได้ครู่หนึ่ง
+      f.clashCd = 0.45;
+      if (f.cast && f.cast.hr) f.cast.hr.struck = true; // กำลังพุ่งโจมตีอยู่ -> ถูกปัด ต้องถอย
+    }
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    this._knock(a, -dx, -dy, 130);
+    this._knock(b, dx, dy, 130);
+    this.events.push({ type: "clash", x: (hit.ax + hit.bx) / 2, y: (hit.ay + hit.by) / 2 });
   }
 
   // สติแตกหนักจนทิ้งอาวุธ / หยิบกลับมา
@@ -562,6 +640,8 @@ class Battle {
       halfArc: ((sk.waveArcDeg || 80) * Math.PI) / 360, // ครึ่งหนึ่งของมุมกว้างของคลื่น
       damage: sk.damage, // ดาเมจเมื่อโดนที่ระยะใกล้
       damageFar: sk.damageFar !== undefined ? sk.damageFar : sk.damage, // ดาเมจเมื่อโดนที่ปลายระยะ
+      stunNear: sk.stunNear || 0, // ติดสตั้นกี่วินาที ถ้าโดนในระยะใกล้
+      stunRange: sk.stunRange !== undefined ? sk.stunRange : 0.35, // "ใกล้" = คลื่นเดินทางไม่เกินสัดส่วนนี้ของระยะทั้งหมด
       projectileEffect: sk.projectileEffect || "none", // "push" ผลักกระสุนศัตรู | "stop" ทำลายกระสุนศัตรู
       knockback: sk.knockback || 0,
       owner: f,
@@ -738,6 +818,11 @@ class Battle {
             const dmg = Math.max(1, Math.round(w.damage + (w.damageFar - w.damage) * travel));
             this._damage(t, this._out(w.owner, dmg), t.x - (dx / dist) * t.r, t.y - (dy / dist) * t.r);
             this._knock(t, dx, dy, w.knockback);
+            // โดนคลื่นในระยะใกล้ตัวผู้ปล่อย = ติดสตั้น (ขยับช้า ใช้สกิลไม่ได้)
+            if (w.stunNear && travel <= w.stunRange) {
+              t.stun = Math.max(t.stun, w.stunNear);
+              this.events.push({ type: "waveStun", x: t.x, y: t.y });
+            }
           }
         }
       }
@@ -827,6 +912,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 15;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 16;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
