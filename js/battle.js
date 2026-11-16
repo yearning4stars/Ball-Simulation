@@ -184,6 +184,7 @@ class Battle {
       noteKind: Math.floor(this.rng() * 3), // ให้ตัววาดเลือกหน้าตาโน้ตต่างๆ
       wobble: sk.wobble || 0, // ความกว้างการส่าย (px)
       wobbleFreq: sk.wobbleFreq || 10,
+      knockback: sk.knockback || 0, // แรงผลักศัตรูตอนโดน (เช่นโน้ตของ Luka)
       phase: this.rng() * Math.PI * 2,
       t: 0,
       spin: (this.rng() - 0.5) * 0.6,
@@ -198,10 +199,13 @@ class Battle {
       y: f.y,
       ang,
       r: f.r * 0.6,
+      r0: f.r * 0.6, // รัศมีเริ่มต้น ใช้คำนวณว่าคลื่นเดินทางมาไกลแค่ไหน
       speed: sk.waveSpeed,
       maxR: sk.waveRange,
       halfArc: ((sk.waveArcDeg || 80) * Math.PI) / 360, // ครึ่งหนึ่งของมุมกว้างของคลื่น
-      damage: sk.damage,
+      damage: sk.damage, // ดาเมจเมื่อโดนที่ระยะใกล้
+      damageFar: sk.damageFar !== undefined ? sk.damageFar : sk.damage, // ดาเมจเมื่อโดนที่ปลายระยะ
+      projectileEffect: sk.projectileEffect || "none", // "push" ผลักกระสุนศัตรู | "stop" ทำลายกระสุนศัตรู
       knockback: sk.knockback || 0,
       owner: f,
       color: f.def.color,
@@ -307,6 +311,10 @@ class Battle {
         // ถีบเบาๆ ตามทิศกระสุน
         target.x += p.dx * 6;
         target.y += p.dy * 6;
+        if (p.knockback) {
+          target.knockX += p.dx * p.knockback;
+          target.knockY += p.dy * p.knockback;
+        }
         p.dead = true;
       } else if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) {
         p.dead = true;
@@ -332,14 +340,54 @@ class Battle {
           const slack = Math.asin(Math.min(1, t.r / dist));
           if (Math.abs(da) <= w.halfArc + slack && dist - t.r <= w.r) {
             w.hit = true;
-            this._damage(t, w.damage, t.x - (dx / dist) * t.r, t.y - (dy / dist) * t.r);
+            // ยิ่งคลื่นเดินทางไกล ดาเมจยิ่งลดลงเป็นเส้นตรง จากค่า damage ไปจนถึง damageFar
+            const travel = Math.max(0, Math.min(1, (w.r - w.r0) / (w.maxR - w.r0)));
+            const dmg = Math.max(1, Math.round(w.damage + (w.damageFar - w.damage) * travel));
+            this._damage(t, dmg, t.x - (dx / dist) * t.r, t.y - (dy / dist) * t.r);
             t.knockX += (dx / dist) * w.knockback;
             t.knockY += (dy / dist) * w.knockback;
           }
         }
       }
     }
+    this._waveVsProjectiles(dt);
     this.waves = this.waves.filter((w) => w.r < w.maxR);
+  }
+
+  // คลื่นเสียงปะทะกระสุนของ "ศัตรู" ที่เข้ามาในส่วนโค้ง: ผลักออกไป หรือทำลายทิ้ง (ตาม projectileEffect)
+  _waveVsProjectiles(dt) {
+    let changed = false;
+    for (const w of this.waves) {
+      if (w.projectileEffect === "none") continue;
+      const band = w.speed * dt + 16; // ความหนาของแนวคลื่นที่ปะทะกระสุนได้
+      for (const p of this.projectiles) {
+        if (p.owner === w.owner || p.dead || p.hitByWave) continue;
+        const dx = p.x - w.x;
+        const dy = p.y - w.y;
+        const d = Math.hypot(dx, dy) || 0.0001;
+        if (Math.abs(d - w.r) > band + p.r) continue;
+        let da = Math.atan2(dy, dx) - w.ang;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        if (Math.abs(da) > w.halfArc + 0.1) continue;
+
+        p.hitByWave = true; // กระสุนลูกหนึ่งโดนคลื่นลูกเดียวกันได้ครั้งเดียว
+        if (w.projectileEffect === "stop") {
+          p.dead = true;
+          changed = true;
+        } else {
+          // ผลัก: เปลี่ยนทิศให้พุ่งออกจากตัวผู้ปล่อยคลื่น และช้าลง
+          p.bx = p.x;
+          p.by = p.y;
+          p.wobble = 0;
+          p.dx = dx / d;
+          p.dy = dy / d;
+          p.speed = Math.max(160, p.speed * 0.7);
+        }
+        this.events.push({ type: "deflect", x: p.x, y: p.y, effect: w.projectileEffect });
+      }
+    }
+    if (changed) this.projectiles = this.projectiles.filter((p) => !p.dead);
   }
 
   _damage(f, amount, x, y) {
@@ -367,6 +415,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 7;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 9;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

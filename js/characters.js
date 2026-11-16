@@ -25,10 +25,13 @@
 //        shape: "ball" | "note"   หน้าตากระสุน (note = โน้ตดนตรี)
 //        wobble, wobbleFreq       ให้ลอยส่ายเป็นลอน (px, ความถี่)
 //        sound: "shoot" | "note"  เสียงตอนยิง
+//        knockback                แรงผลักศัตรูตอนโดน (px/วินาที ตัวเลขน้อย = ผลักนิดเดียว)
 //   "dash"        พุ่งเข้าหาศัตรู ชนครั้งแรกในการพุ่งแต่ละครั้งทำดาเมจ
 //        speedMult, homing (เลี้ยวเข้าหาศัตรูระหว่างพุ่ง เรเดียน/วินาที), knockback
 //   "shockwave"   ปล่อยคลื่นเสียงเป็นส่วนโค้งแผ่ออกไปทางศัตรู โดนแล้วกระเด็น
 //        waveSpeed, waveRange, waveArcDeg (มุมกว้างของคลื่น องศา), knockback
+//        damageFar               ดาเมจที่ปลายระยะ (ยิ่งไกลยิ่งเบา ไม่ใส่ = ดาเมจเท่ากันตลอด)
+//        projectileEffect        "push" ผลักกระสุนศัตรูออก | "stop" ทำลายกระสุนศัตรู | ไม่ใส่ = ไม่มีผล
 // ============================================================
 const CHARACTERS = {
   gunner: {
@@ -81,11 +84,12 @@ const CHARACTERS = {
     ],
   },
 
-  // ภาพของ Singer ที่ให้ไว้เป็นภาพชั่วคราว: ใส่ PNG ของคุณทับชื่อไฟล์เดิมได้เลย (ดูวิธีใน README)
+  // Luka (Alien Stage) แฟนเกม: คีย์ "singer" และโฟลเดอร์ assets/characters/singer/ คงชื่อเดิมไว้ เพื่อไม่ให้ภาพที่ใส่แล้วหาย
+  // ใส่ PNG ของคุณทับชื่อไฟล์เดิมได้เลย (ดูวิธีใน README)
   singer: {
-    name: "Singer",
+    name: "Luka",
     color: "#a64bd6",
-    hp: 97,
+    hp: 100,
     speed: 175,
     radius: 38,
     frames: {
@@ -110,6 +114,7 @@ const CHARACTERS = {
         shape: "note",
         wobble: 14,
         wobbleFreq: 9,
+        knockback: 70, // โน้ตผลักศัตรูถอยหลังเล็กน้อยทุกครั้งที่โดน
         sound: "note",
       },
       {
@@ -119,7 +124,9 @@ const CHARACTERS = {
         frame: "wave",
         duration: 0.6,
         fireDelay: 0.2,
-        damage: 12,
+        damage: 12, // ดาเมจเมื่อโดนที่ระยะใกล้ตัว
+        damageFar: 5, // ดาเมจเมื่อโดนที่ปลายระยะ (ระหว่างทางลดลงเป็นเส้นตรง)
+        projectileEffect: "push", // คลื่นปะทะกระสุนศัตรู: "push" = ผลักออก, "stop" = ทำลายทิ้ง
         waveSpeed: 480,
         waveRange: 620,
         waveArcDeg: 80,
@@ -131,6 +138,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 7;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 9;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

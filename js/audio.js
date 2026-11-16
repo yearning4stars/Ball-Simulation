@@ -133,6 +133,12 @@ class SoundFX {
     this._noise(0.45, 0.22, "lowpass", 1800, 150);
   }
 
+  deflect() { // คลื่นเสียงผลัก/หยุดกระสุนศัตรู
+    if (!this._throttle("deflect", 80)) return;
+    this._tone(1400, 800, 0.1, "triangle", 0.1);
+    this._noise(0.08, 0.1, "highpass", 3000, 3000);
+  }
+
   ko() { // น็อก
     this._tone(260, 35, 0.7, "sawtooth", 0.22);
     this._noise(0.5, 0.3, "lowpass", 2200, 120);
@@ -150,6 +156,6 @@ class SoundFX {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 7;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 9;
 
 if (typeof module !== "undefined") module.exports = { SoundFX };

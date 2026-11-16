@@ -152,6 +152,9 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, e.sound === "note" ? "#e6b3ff" : "#fff3b0", e.sound === "note" ? 4 : 6, 200);
       if (e.sound === "note") sfx.note();
       else sfx.shoot();
+    } else if (e.type === "deflect") {
+      spawnParticles(e.x, e.y, "#ffffff", 8, 220);
+      sfx.deflect();
     } else if (e.type === "wave") {
       spawnParticles(e.x, e.y, "#ffffff", 14, 260);
       shake = Math.max(shake, 5);
@@ -588,7 +591,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 7;
+const EXPECTED_VERSION = 9;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
