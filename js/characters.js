@@ -121,8 +121,8 @@ const CHARACTERS = {
   singer: {
     name: "Luka",
     color: "#f6e27a", // เหลืองอ่อน (ใช้กับชื่อ โน้ต คลื่นเสียง และเอฟเฟกต์ของ Luka)
-    hp: 100,
-    speed: 175,
+    hp: 70,
+    speed: 200,
     radius: 38,
     frames: {
       idle: "assets/characters/singer/idle.png", // ท่ายืนปกติ
@@ -153,7 +153,7 @@ const CHARACTERS = {
       {
         type: "projectile",
         name: "คำพูดบั่นทอนใจ",
-        cooldown: 6.5,
+        cooldown: 5.5,
         frame: "sing", // อยากมีท่าพูดโดยเฉพาะ: เพิ่ม frame ใหม่ใน frames แล้วเปลี่ยนตรงนี้
         duration: 1.2,
         fireDelay: 0.2,
@@ -165,10 +165,10 @@ const CHARACTERS = {
         projectileSpeed: 300,
         projectileRadius: 18,
         shape: "text",
-        texts: ["เธอมันไม่พอ", "ไม่มีใครรอเธออยู่", "ยอมแพ้เถอะ", "ทุกคนผิดหวังในตัวเธอ", "ทำได้แค่นี้เหรอ"],
+        texts: ["Pururu🌟", "My savior✨", "I'm tellin' you blink, gone", "Blink, gone", "Tick-tock"],
         sound: "word",
         indestructible: true, // คำพูดของ Luka ปัดไม่ได้ (เหมือนโน้ต) ทุกการโจมตีของ Luka ปัดป้องไม่ได้
-        hpRush: 2.5, // ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: เลือดเต็ม 1 เท่า -> เลือดหมด 2.5 เท่า
+        hpRush: 4, // ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: เลือดเต็ม 1 เท่า -> เลือดหมด 4 เท่า
       },
       {
         type: "shockwave",
@@ -179,7 +179,7 @@ const CHARACTERS = {
         fireDelay: 0.2,
         damage: 18, // ดาเมจเมื่อโดนที่ระยะใกล้ตัว (เดิม 12)
         damageFar: 8, // ดาเมจเมื่อโดนที่ปลายระยะ (ระหว่างทางลดลงเป็นเส้นตรง) เดิม 5
-        stunNear: 1.0, // โดนคลื่นในระยะใกล้ ติดสตั้นกี่วินาที
+        stunNear: 1.75, // โดนคลื่นในระยะใกล้ ติดสตั้นกี่วินาที
         stunRange: 0.35, // "ใกล้" = คลื่นเดินทางไม่เกิน 35% ของ waveRange
         projectileEffect: "push", // คลื่นปะทะกระสุนศัตรู: "push" = ผลักออก, "stop" = ทำลายทิ้ง
         waveSpeed: 480,
@@ -196,7 +196,7 @@ const CHARACTERS = {
   funx: {
     name: "FuNx",
     color: "#d6315a",
-    hp: 110,
+    hp: 100,
     speed: 180,
     radius: 38,
     frames: {
@@ -210,7 +210,7 @@ const CHARACTERS = {
       length: 66,
       width: 9,
       startRatio: 0.45,
-      damage: 6,
+      damage: 5.5,
       spinSpeed: 8,
       hitCooldown: 0.35,
       aimBoost: 1.8, // ศัตรูอยู่ในระยะดาบ -> หมุนเร็วขึ้นกี่เท่าเพื่อกวาดเข้าหา
@@ -221,7 +221,7 @@ const CHARACTERS = {
       {
         type: "timeerase",
         name: "ตัดเวลา",
-        cooldown: 16, // นับตั้งแต่เริ่มใช้ (รวมช่วง 5 วินาทีที่ตัดเวลาด้วย)
+        cooldown: 15, // นับตั้งแต่เริ่มใช้ (รวมช่วง 5 วินาทีที่ตัดเวลาด้วย)
         initialCooldown: 4,
         frame: "erase",
         duration: 5, // ตัดเวลา 5 วินาที
@@ -231,8 +231,8 @@ const CHARACTERS = {
         homing: 3.2,
         // ระหว่างตัดเวลา: วนไปด้านหลังศัตรู (ฝั่งตรงข้ามกับที่ศัตรูหันหน้า) แล้วพุ่งแทง ถ้าแทงสำเร็จจากด้านหลัง
         backstab: {
-          damageMult: 2, // ดาเมจเป็น 2 เท่า
-          silence: 2.5, // ใบ้สกิลศัตรู (ใช้สกิลไม่ได้ ยังเดินได้) กี่วินาที
+          damageMult: 2.5, // ดาเมจเป็น 2 เท่า
+          silence: 5, // ใบ้สกิลศัตรู (ใช้สกิลไม่ได้ ยังเดินได้) กี่วินาที
           orbitRadius: 150, // รัศมีที่วนรอบศัตรู (px)
           orbitSpeed: 1.8, // ตัวคูณความเร็วตอนวน
           strikeSpeed: 2.4, // ตัวคูณความเร็วตอนพุ่งแทง
@@ -249,7 +249,7 @@ const CHARACTERS = {
         frame: "rewind",
         duration: 1.0, // เล่นภาพย้อนกลับ 1 วินาที (ย้อนโลกกลับไป 5 วินาที)
         rewindSeconds: 5,
-        minGain: 10, // ใช้เมื่อเลือดหายไปอย่างน้อย 10 ในช่วง 5 วินาทีที่ผ่านมา
+        minGain: 20, // ใช้เมื่อเลือดหายไปอย่างน้อย 20 ในช่วง 5 วินาทีที่ผ่านมา
       },
     ],
   },
@@ -313,7 +313,7 @@ const CHARACTERS = {
         frame: "slow",
         duration: 5, // วงชะลอเวลาอยู่ 5 วินาที (วินาทีจริง)
         radius: 300, // ใครอยู่ในรัศมีนี้ (px) รอบตัว Johan จะช้าลง
-        factor: 0.35, // เดินช้าเหลือ 35% ของปกติ
+        factor: 0.5, // เดินช้าเหลือ 50% ของปกติ
         homing: 2, // ระหว่างชะลอเวลา วิ่งเข้าหาศัตรูที่ช้าลง
       },
     ],
