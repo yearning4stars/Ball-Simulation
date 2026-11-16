@@ -32,6 +32,14 @@
 //        waveSpeed, waveRange, waveArcDeg (มุมกว้างของคลื่น องศา), knockback
 //        damageFar               ดาเมจที่ปลายระยะ (ยิ่งไกลยิ่งเบา ไม่ใส่ = ดาเมจเท่ากันตลอด)
 //        projectileEffect        "push" ผลักกระสุนศัตรูออก | "stop" ทำลายกระสุนศัตรู | ไม่ใส่ = ไม่มีผล
+//   "timeerase"   ตัดเวลา (King Crimson): ศัตรูถูกแช่แข็งทั้งตัว กระสุน คลื่น และคูลดาวน์ นาน duration วินาที
+//        duration (= ระยะเวลาตัดเวลา), speedMult (ตัวเองเร็วขึ้นกี่เท่า), homing (วิ่งตามศัตรู)
+//   "rewind"      ย้อนเวลา (Mandom): ทุกอย่างในสนามย้อนกลับไป rewindSeconds วินาที เลือดคนใช้สกิลก็ย้อนด้วย
+//        duration (= กี่วินาทีที่เล่นภาพย้อน), rewindSeconds, minGain (ใช้เมื่อเสียเลือดมากกว่านี้ในช่วงที่ย้อนได้)
+//
+//  weapon (ไม่บังคับ) อาวุธที่หมุนรอบตัวตลอดเวลา หมุนไปเรื่อยๆ จนฟันโดนศัตรูแล้วกลับทิศ
+//        length (ความยาวใบดาบ), width, startRatio (จุดจับ เทียบรัศมีตัว), damage, spinSpeed (เรเดียน/วินาที),
+//        hitCooldown (พักก่อนฟันซ้ำได้), knockback
 // ============================================================
 const CHARACTERS = {
   gunner: {
@@ -135,9 +143,57 @@ const CHARACTERS = {
       },
     ],
   },
+
+  // FuNx: ดาบคาตานะหมุนรอบตัวตลอดเวลา + ตัดเวลา (King Crimson) + ย้อนเวลา (Mandom) แบบ JoJo ภาค 5
+  // ภาพ: assets/characters/funx/idle.png, erase.png (ท่าตัดเวลา), rewind.png (ท่าย้อนเวลา)  ส่วนดาบเกมวาดให้เองด้วยโค้ด
+  funx: {
+    name: "FuNx",
+    color: "#d6315a",
+    hp: 110,
+    speed: 180,
+    radius: 38,
+    frames: {
+      idle: "assets/characters/funx/idle.png",
+      erase: "assets/characters/funx/erase.png",
+      rewind: "assets/characters/funx/rewind.png",
+    },
+    weapon: {
+      type: "katana",
+      name: "ดาบคาตานะ",
+      length: 66,
+      width: 9,
+      startRatio: 0.45,
+      damage: 6,
+      spinSpeed: 8,
+      hitCooldown: 0.35,
+      knockback: 140,
+    },
+    skills: [
+      {
+        type: "timeerase",
+        name: "ตัดเวลา",
+        cooldown: 16, // นับตั้งแต่เริ่มใช้ (รวมช่วง 5 วินาทีที่ตัดเวลาด้วย)
+        initialCooldown: 4,
+        frame: "erase",
+        duration: 5, // ศัตรูถูกแช่แข็ง 5 วินาที
+        speedMult: 1.5,
+        homing: 3.2,
+      },
+      {
+        type: "rewind",
+        name: "ย้อนเวลา",
+        cooldown: 14,
+        initialCooldown: 6,
+        frame: "rewind",
+        duration: 1.0, // เล่นภาพย้อนกลับ 1 วินาที (ย้อนโลกกลับไป 5 วินาที)
+        rewindSeconds: 5,
+        minGain: 10, // ใช้เมื่อเลือดหายไปอย่างน้อย 10 ในช่วง 5 วินาทีที่ผ่านมา
+      },
+    ],
+  },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 9;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 10;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

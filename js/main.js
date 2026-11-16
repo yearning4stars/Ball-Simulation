@@ -22,6 +22,7 @@ let floaters = [];
 let speedMult = 1;
 let lastTs = 0;
 let shake = 0;
+let screenFlash = 0; // วาบขาวทั้งจอ (ตอนเริ่มตัดเวลา)
 
 // ---------- โหลดภาพ ----------
 const images = {}; // images[charKey][frameName] = HTMLImageElement | null
@@ -162,6 +163,17 @@ function handleEvents(events) {
     } else if (e.type === "dash") {
       spawnParticles(e.x, e.y, "#ffffff", 12, 220);
       sfx.dash();
+    } else if (e.type === "slash") {
+      spawnParticles(e.x, e.y, "#ffb3c6", 10, 300);
+      shake = Math.max(shake, 4);
+      sfx.slash();
+    } else if (e.type === "erase") {
+      screenFlash = 0.6;
+      spawnParticles(e.x, e.y, "#ff2a55", 24, 320);
+      sfx.erase();
+    } else if (e.type === "rewind") {
+      screenFlash = 0.35;
+      sfx.rewind();
     } else if (e.type === "ko") {
       shake = 16;
       const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def);
@@ -201,11 +213,17 @@ function updateEffects(dt) {
   }
   floaters = floaters.filter((f) => f.life > 0);
   shake = Math.max(0, shake - 40 * dt);
+  screenFlash = Math.max(0, screenFlash - dt * 1.5);
+  // ภาพติดตาสีแดงตามคนที่กำลังตัดเวลา
+  if (battle && battle.eraser && Math.random() < 0.8) {
+    spawnParticles(battle.eraser.x, battle.eraser.y, "#ff2a55", 1, 60);
+  }
 
   // แถบเลือดสีขาวที่ค่อยๆ ไหลตามหลังเลือดจริง
   if (battle) {
     for (const f of battle.fighters) {
       if (f.trailHp === undefined) f.trailHp = f.hp;
+      if (f.trailHp < f.hp) f.trailHp = f.hp; // เลือดเพิ่ม (ย้อนเวลา) ให้แถบตามทัน
       if (f.trailHp > f.hp) f.trailHp = Math.max(f.hp, f.trailHp - f.maxHp * 0.35 * dt);
     }
   }
@@ -265,6 +283,74 @@ function drawFighter(f, key) {
     ctx.arc(0, 0, f.r, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+// ---------- ดาบคาตานะที่หมุนรอบตัว (วาดด้วยโค้ด) ----------
+function drawKatana(f) {
+  const wp = f.weapon;
+  const s0 = f.r * (wp.startRatio || 0.5);
+  const reach = f.r + wp.length;
+  const dir = f.weaponDir;
+  const hot = f.weaponCd > (wp.hitCooldown || 0.4) - 0.12; // เพิ่งฟันโดน: ใบดาบเรืองแสง
+
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(f.weaponAng);
+
+  // รอยฟันจางๆ ตามหลังใบดาบ
+  for (let k = 0; k < 8; k++) {
+    const a0 = -dir * k * 0.09;
+    const a1 = -dir * (k + 1) * 0.09;
+    ctx.fillStyle = "rgba(255, 200, 215, " + (0.26 * (1 - k / 8)).toFixed(3) + ")";
+    ctx.beginPath();
+    ctx.arc(0, 0, reach - 2, Math.min(a0, a1), Math.max(a0, a1));
+    ctx.arc(0, 0, f.r + 8, Math.max(a0, a1), Math.min(a0, a1), true);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ด้าม
+  const hiltEnd = s0 + 24;
+  ctx.fillStyle = "#2a1c24";
+  ctx.fillRect(s0 - 6, -4, hiltEnd - s0 + 6, 8);
+  ctx.strokeStyle = "#c9a14a";
+  ctx.lineWidth = 1.5;
+  for (let x = s0; x < hiltEnd; x += 6) {
+    ctx.beginPath();
+    ctx.moveTo(x, -4);
+    ctx.lineTo(x + 4, 4);
+    ctx.stroke();
+  }
+  // ที่กั้นมือ (tsuba)
+  ctx.fillStyle = "#d4af37";
+  ctx.beginPath();
+  ctx.ellipse(hiltEnd, 0, 3, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ใบดาบ: โค้งนิดๆ ปลายแหลม
+  const bx = hiltEnd + 1;
+  const w = (wp.width || 8) / 2;
+  const g = ctx.createLinearGradient(0, -w, 0, w);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(0.5, "#dfe7f3");
+  g.addColorStop(1, "#8c98ad");
+  ctx.shadowColor = hot ? "#ff3b6b" : "#bcd0ff";
+  ctx.shadowBlur = hot ? 18 : 6;
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(bx, -w);
+  ctx.quadraticCurveTo((bx + reach) / 2, -w - 3 * dir, reach + 6, -2 * dir);
+  ctx.quadraticCurveTo((bx + reach) / 2, w - 3 * dir, bx, w);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(bx + 4, -1);
+  ctx.quadraticCurveTo((bx + reach) / 2, -3 * dir - 1, reach, -2 * dir);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -475,6 +561,87 @@ function drawWinnerBanner(b) {
   ctx.fillText("กด \"เริ่มสู้\" เพื่อเล่นอีกครั้ง", W / 2, H / 2 + 50);
 }
 
+// ---------- เอฟเฟกต์เวลา ----------
+function drawEraseBackdrop() {
+  // โลกที่ถูกตัดเวลา: โทนแดงเข้ม ขอบมืด เส้นความเร็วพุ่งเฉียง
+  ctx.fillStyle = "rgba(110, 0, 30, 0.30)";
+  ctx.fillRect(0, 0, W, H);
+  const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.75);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(0,0,0,0.5)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawEraseLabel(b) {
+  const c = b.eraser.cast;
+  const left = Math.max(0, c.sk.duration - c.t);
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.font = "700 26px " + FONT;
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = "rgba(0,0,0,0.7)";
+  const txt = "⏱ เวลาถูกตัดทิ้ง  " + left.toFixed(1) + " วิ";
+  ctx.strokeText(txt, W / 2, 42);
+  ctx.fillStyle = "#ff6b8a";
+  ctx.fillText(txt, W / 2, 42);
+  ctx.restore();
+}
+
+function drawRewindOverlay(b) {
+  const r = b.rewind;
+  const prog = Math.min(1, r.t / r.dur);
+  ctx.save();
+  ctx.fillStyle = "rgba(40, 120, 255, 0.20)";
+  ctx.fillRect(0, 0, W, H);
+  // เส้นสแกนสไตล์วิดีโอเทปกรอกลับ
+  ctx.fillStyle = "rgba(160, 210, 255, 0.07)";
+  const off = (r.t * 400) % 8;
+  for (let y = -8 + off; y < H; y += 8) ctx.fillRect(0, y, W, 2);
+  for (let k = 0; k < 3; k++) {
+    ctx.fillStyle = "rgba(120, 200, 255, 0.12)";
+    ctx.fillRect(0, Math.random() * H, W, 4 + Math.random() * 10);
+  }
+  // นาฬิกาหมุนทวนเข็ม
+  ctx.translate(W / 2, H / 2);
+  ctx.globalAlpha = 0.4;
+  ctx.strokeStyle = "#d6ecff";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(0, 0, 110, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 94, Math.sin(a) * 94);
+    ctx.lineTo(Math.cos(a) * 106, Math.sin(a) * 106);
+    ctx.stroke();
+  }
+  ctx.lineCap = "round";
+  const hand = (ang, len, wd) => {
+    ctx.lineWidth = wd;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(ang) * len, Math.sin(ang) * len);
+    ctx.stroke();
+  };
+  hand(-Math.PI / 2 - prog * Math.PI * 12, 90, 4); // เข็มนาที
+  hand(-Math.PI / 2 - prog * Math.PI, 60, 7); // เข็มชั่วโมง
+  ctx.restore();
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.font = "700 26px " + FONT;
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = "rgba(0,0,0,0.7)";
+  const txt = "◀◀ ย้อนเวลา  -" + (r.back * prog).toFixed(1) + " วิ";
+  ctx.strokeText(txt, W / 2, 42);
+  ctx.fillStyle = "#9fd2ff";
+  ctx.fillText(txt, W / 2, 42);
+  ctx.restore();
+}
+
 function drawShards() {
   for (const s of shards) {
     ctx.save();
@@ -502,12 +669,21 @@ function render() {
     // หา key ของตัวละครจาก def (กันกรณีเปลี่ยน select กลางเกม)
     const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def) || keys[0];
     if (battle.winner !== null) drawWinnerBanner(battle);
+    if (battle.eraser) drawEraseBackdrop(battle);
+    const gray = (on) => { ctx.filter = on ? "grayscale(1) brightness(0.8)" : "none"; };
     drawWaves(battle);
-    battle.fighters.forEach((f) => { if (f.hp > 0) drawFighter(f, keyOf(f.def)); });
+    battle.fighters.forEach((f) => {
+      if (f.hp <= 0) return;
+      gray(f === battle.frozen); // คนที่ถูกตัดเวลาเป็นภาพขาวดำ
+      drawFighter(f, keyOf(f.def));
+      if (f.weapon) drawKatana(f);
+    });
+    gray(false);
     drawShards();
 
     for (const p of battle.projectiles) {
-      if (p.shape === "note") { drawNote(p); continue; }
+      gray(p.owner === battle.frozen);
+      if (p.shape === "note") { drawNote(p); gray(false); continue; }
       ctx.fillStyle = "#fff6c2";
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -515,6 +691,7 @@ function render() {
       ctx.strokeStyle = p.color;
       ctx.lineWidth = 3;
       ctx.stroke();
+      gray(false);
     }
     for (const p of particles) {
       ctx.globalAlpha = Math.max(0, p.life / 0.5);
@@ -530,6 +707,12 @@ function render() {
       ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1;
+    if (battle.rewind) drawRewindOverlay(battle);
+    if (battle.eraser) drawEraseLabel(battle);
+    if (screenFlash > 0) {
+      ctx.fillStyle = "rgba(255,255,255," + Math.min(1, screenFlash).toFixed(3) + ")";
+      ctx.fillRect(0, 0, W, H);
+    }
   } else {
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
@@ -591,7 +774,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 9;
+const EXPECTED_VERSION = 10;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

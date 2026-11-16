@@ -20,6 +20,12 @@ class Battle {
     this.waves = []; // คลื่นเสียงที่กำลังแผ่ออก
     this.events = []; // เอฟเฟกต์ให้ตัววาดเอาไปใช้ แล้วเคลียร์ทุกเฟรม
     this.winner = null; // 0, 1 หรือ "draw"
+    this.wt = 0; // เวลาของ "โลก" (ย้อนเวลาแล้วถอยกลับตามจริง) ใช้กับประวัติสำหรับสกิลย้อนเวลา
+    this.history = []; // ภาพถ่ายโลกทุก 0.05 วินาที เก็บย้อนหลังไม่กี่วินาที
+    this._histAcc = 0;
+    this.rewind = null; // กำลังย้อนเวลาอยู่หรือไม่ {owner, t, dur, back, t0}
+    this.eraser = null; // ตัวที่กำลังใช้ "ตัดเวลา"
+    this.frozen = null; // ตัวที่ถูกตัดเวลา (ขยับ/ใช้สกิลไม่ได้)
 
     this.fighters = [
       this._makeFighter(defA, width * 0.25, height * 0.5, 0),
@@ -54,6 +60,11 @@ class Battle {
       dashTimer: 0,
       dashMult: 1,
       hitFlash: 0,
+      // อาวุธที่หมุนรอบตัวตลอดเวลา (เช่นดาบคาตานะ): หมุนไปเรื่อยๆ จนฟันโดนแล้วกลับทิศ
+      weapon: def.weapon || null,
+      weaponAng: this.rng() * Math.PI * 2,
+      weaponDir: 1,
+      weaponCd: 0,
     };
   }
 
@@ -64,24 +75,42 @@ class Battle {
       for (const f of this.fighters) {
         if (f.hp <= 0) continue;
         f.hitFlash = Math.max(0, f.hitFlash - dt);
+        if (f.weapon) f.weaponAng += f.weaponDir * f.weapon.spinSpeed * dt;
         this._move(f, dt);
       }
       return;
     }
     this.time += dt;
 
+    // กำลังย้อนเวลา: โลกถูกควบคุมโดยการเล่นภาพย้อนหลัง ไม่คำนวณฟิสิกส์ปกติ
+    if (this.rewind) {
+      this._updateRewind(dt);
+      this._checkWinner();
+      return;
+    }
+    this.wt += dt;
+    this._recordHistory(dt);
+
     const [a, b] = this.fighters;
+    // ใครกำลังใช้ตัดเวลาอยู่ ศัตรูของเขาจะถูกแช่แข็งทั้งตัว กระสุน คลื่น และคูลดาวน์
+    this.eraser = this.fighters.find((f) => f.cast && f.cast.sk.type === "timeerase") || null;
+    this.frozen = this.eraser ? (this.eraser === a ? b : a) : null;
     for (const f of this.fighters) {
       const enemy = f === a ? b : a;
       f.facing = enemy.x >= f.x ? 1 : -1;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
+      if (f === this.frozen) continue;
       f.gcd = Math.max(0, f.gcd - dt);
       for (let i = 0; i < f.cds.length; i++) f.cds[i] -= dt;
       this._updateSkill(f, enemy, dt);
       this._move(f, dt);
     }
 
+    if (this.rewind) { this._checkWinner(); return; } // เพิ่งเริ่มย้อนเวลาในก้าวนี้
     this._fighterCollision(a, b);
+    for (const f of this.fighters) {
+      if (f !== this.frozen && f.weapon) this._updateWeapon(f, f === a ? b : a, dt);
+    }
     this._updateProjectiles(dt);
     this._updateWaves(dt);
     this._checkWinner();
@@ -111,6 +140,8 @@ class Battle {
         }
       } else if (sk.type === "dash" && sk.homing) {
         this._steer(f, enemy, sk.homing * dt); // เลี้ยวเข้าหาศัตรูเล็กน้อยระหว่างพุ่ง
+      } else if (sk.type === "timeerase") {
+        this._steer(f, enemy, (sk.homing || 3) * dt); // ระหว่างเวลาถูกตัด วิ่งตามศัตรูที่ขยับไม่ได้
       }
 
       if (c.t >= sk.duration) {
@@ -126,8 +157,14 @@ class Battle {
 
     // เลือกสกิลที่พร้อมใช้ โดยให้สกิลที่รอมานานที่สุดไปก่อน (กันสกิลแรกแย่งใช้ตลอด)
     let pick = -1;
+    const timeBusy = this.rewind || this.fighters.some((g) => g.cast && g.cast.sk.type === "timeerase");
     for (let i = 0; i < f.skills.length; i++) {
-      if (f.cds[i] <= 0 && (pick === -1 || f.cds[i] < f.cds[pick])) pick = i;
+      const s2 = f.skills[i];
+      if (f.cds[i] > 0) continue;
+      if (timeBusy && (s2.type === "timeerase" || s2.type === "rewind")) continue; // เวลาถูกแตะอยู่แล้ว
+      // ย้อนเวลาจะใช้ก็ต่อเมื่อเสียเลือดไปพอสมควรในช่วงที่ย้อนกลับได้ (ไม่งั้นย้อนไปก็เปล่าประโยชน์)
+      if (s2.type === "rewind" && !this._rewindWorthIt(f, s2)) continue;
+      if (pick === -1 || f.cds[i] < f.cds[pick]) pick = i;
     }
     if (pick === -1) return;
 
@@ -146,7 +183,129 @@ class Battle {
       f.vx = (dx / len) * sp;
       f.vy = (dy / len) * sp;
       this.events.push({ type: "dash", x: f.x, y: f.y });
+    } else if (sk.type === "timeerase") {
+      // ตัดเวลา: ตัวเองเร็วขึ้นและพุ่งหาศัตรู ศัตรูถูกแช่แข็งตลอด sk.duration วินาที
+      f.dashTimer = sk.duration;
+      f.dashMult = sk.speedMult || 1.5;
+      const dx = enemy.x - f.x;
+      const dy = enemy.y - f.y;
+      const len = Math.hypot(dx, dy) || 1;
+      f.vx = (dx / len) * f.def.speed;
+      f.vy = (dy / len) * f.def.speed;
+      this.events.push({ type: "erase", x: f.x, y: f.y });
+    } else if (sk.type === "rewind") {
+      this._startRewind(f, sk);
     }
+  }
+
+  // ---------- ย้อนเวลา ----------
+  _snapshot() {
+    return {
+      t: this.wt,
+      fighters: this.fighters.map((f) => ({
+        x: f.x, y: f.y, vx: f.vx, vy: f.vy, knockX: f.knockX, knockY: f.knockY, hp: f.hp,
+      })),
+      projectiles: this.projectiles.map((p) => ({ ...p })),
+      waves: this.waves.map((w) => ({ ...w })),
+    };
+  }
+
+  _recordHistory(dt) {
+    this._histAcc += dt;
+    if (this.history.length && this._histAcc < 0.05) return;
+    this._histAcc = 0;
+    this.history.push(this._snapshot());
+    const keep = 8; // เก็บย้อนหลังเผื่อไว้เกินที่สกิลย้อนได้
+    while (this.history.length > 2 && this.history[0].t < this.wt - keep) this.history.shift();
+  }
+
+  // เสียเลือดไปอย่างน้อย sk.minGain ในช่วง sk.rewindSeconds วินาทีที่ผ่านมาหรือยัง
+  _rewindWorthIt(f, sk) {
+    if (!this.history.length) return false;
+    const idx = this.fighters.indexOf(f);
+    const goal = this.wt - (sk.rewindSeconds || 5);
+    let old = this.history[0];
+    for (let i = this.history.length - 1; i >= 0; i--) {
+      if (this.history[i].t <= goal) { old = this.history[i]; break; }
+    }
+    return old.fighters[idx].hp - f.hp >= (sk.minGain !== undefined ? sk.minGain : 8);
+  }
+
+  _startRewind(f, sk) {
+    this.rewind = { owner: f, t: 0, dur: sk.duration, back: sk.rewindSeconds || 5, t0: this.wt };
+    for (const g of this.fighters) {
+      if (g === f) continue;
+      g.cast = null; // ศัตรูที่กำลังร่ายอยู่ถูกย้อนกลับไปด้วย
+      g.frame = "idle";
+      g.dashTimer = 0;
+    }
+    this.events.push({ type: "rewind", x: f.x, y: f.y });
+  }
+
+  _updateRewind(dt) {
+    const r = this.rewind;
+    r.t += dt;
+    const prog = Math.min(1, r.t / r.dur);
+    const target = Math.max(this.history[0].t, r.t0 - r.back * prog);
+    let snap = this.history[0];
+    for (let i = this.history.length - 1; i >= 0; i--) {
+      if (this.history[i].t <= target) { snap = this.history[i]; break; }
+    }
+    this.fighters.forEach((f, i) => {
+      const s = snap.fighters[i];
+      f.x = s.x; f.y = s.y; f.vx = s.vx; f.vy = s.vy; f.knockX = s.knockX; f.knockY = s.knockY;
+      f.hitFlash = Math.max(0, f.hitFlash - dt);
+      // เลือดของคนใช้สกิลย้อนกลับไปด้วย (เลือดศัตรูไม่ถูกย้อน ดาเมจที่ทำไปแล้วยังอยู่)
+      if (f === r.owner) f.hp = Math.min(f.maxHp, Math.max(f.hp, s.hp));
+    });
+    this.projectiles = snap.projectiles.map((p) => ({ ...p }));
+    this.waves = snap.waves.map((w) => ({ ...w }));
+
+    if (prog >= 1) {
+      this.wt = snap.t;
+      this.history = this.history.filter((h) => h.t <= snap.t);
+      this._histAcc = 0;
+      r.owner.cast = null;
+      r.owner.frame = "idle";
+      r.owner.gcd = 0.25;
+      this.rewind = null;
+      this.events.push({ type: "rewindEnd", x: r.owner.x, y: r.owner.y });
+    }
+  }
+
+  // ---------- อาวุธหมุน (ดาบคาตานะ) ----------
+  _updateWeapon(f, enemy, dt) {
+    const wp = f.weapon;
+    f.weaponAng += f.weaponDir * wp.spinSpeed * dt;
+    f.weaponCd = Math.max(0, f.weaponCd - dt);
+    if (f.weaponCd > 0 || enemy.hp <= 0) return;
+
+    const ca = Math.cos(f.weaponAng);
+    const sa = Math.sin(f.weaponAng);
+    const s0 = f.r * (wp.startRatio || 0.5);
+    const s1 = f.r + wp.length;
+    const px = enemy.x - f.x;
+    const py = enemy.y - f.y;
+    const t = Math.max(s0, Math.min(s1, px * ca + py * sa)); // จุดบนใบดาบที่ใกล้ศัตรูที่สุด
+    const dx = px - ca * t;
+    const dy = py - sa * t;
+    if (Math.hypot(dx, dy) > enemy.r * 0.85 + (wp.width || 8) / 2) return;
+
+    const hx = f.x + ca * t;
+    const hy = f.y + sa * t;
+    this._damage(enemy, wp.damage, hx, hy);
+    this._knock(enemy, px, py, wp.knockback || 0);
+    f.weaponDir *= -1; // ฟันโดนแล้วหมุนกลับอีกทิศ
+    f.weaponCd = wp.hitCooldown || 0.4;
+    this.events.push({ type: "slash", x: hx, y: hy, ang: f.weaponAng });
+  }
+
+  // ผลักตัวละครตามทิศ (dx,dy) ตัวที่ถูกแช่แข็งไม่ถูกผลัก (ไม่งั้นแรงจะสะสมแล้วกระเด็นตอนเวลากลับมา)
+  _knock(t, dx, dy, power) {
+    if (!power || t === this.frozen) return;
+    const len = Math.hypot(dx, dy) || 1;
+    t.knockX += (dx / len) * power;
+    t.knockY += (dy / len) * power;
   }
 
   // หมุนทิศความเร็วของ f เข้าหาศัตรู ไม่เกิน maxTurn เรเดียน
@@ -264,6 +423,25 @@ class Battle {
     const nx = dx / dist;
     const ny = dy / dist;
     const overlap = minDist - dist;
+
+    // ตัวที่ถูกแช่แข็งอยู่นิ่ง ไม่ถูกดัน ฝ่ายที่ยังขยับได้เด้งออกอย่างเดียว
+    if (a === this.frozen || b === this.frozen) {
+      if (b === this.frozen) {
+        a.x -= nx * overlap;
+        a.y -= ny * overlap;
+        const va = a.vx * nx + a.vy * ny;
+        if (va > 0) { a.vx -= 2 * va * nx; a.vy -= 2 * va * ny; }
+        this._rotate(a, (this.rng() - 0.5) * 0.3);
+      } else {
+        b.x += nx * overlap;
+        b.y += ny * overlap;
+        const vb = b.vx * nx + b.vy * ny;
+        if (vb < 0) { b.vx -= 2 * vb * nx; b.vy -= 2 * vb * ny; }
+        this._rotate(b, (this.rng() - 0.5) * 0.3);
+      }
+      return;
+    }
+
     a.x -= (nx * overlap) / 2;
     a.y -= (ny * overlap) / 2;
     b.x += (nx * overlap) / 2;
@@ -290,13 +468,13 @@ class Battle {
     c.hit = true;
     this._damage(target, c.sk.damage, attacker.x + nx * attacker.r, attacker.y + ny * attacker.r);
     const kb = c.sk.knockback || 0;
-    target.knockX += nx * kb;
-    target.knockY += ny * kb;
+    this._knock(target, nx, ny, kb);
   }
 
   // ---------- กระสุน / โน้ต ----------
   _updateProjectiles(dt) {
     for (const p of this.projectiles) {
+      if (p.owner === this.frozen) continue; // กระสุนของคนที่ถูกตัดเวลาค้างอยู่กลางอากาศ
       p.t += dt;
       p.bx += p.dx * p.speed * dt;
       p.by += p.dy * p.speed * dt;
@@ -311,10 +489,7 @@ class Battle {
         // ถีบเบาๆ ตามทิศกระสุน
         target.x += p.dx * 6;
         target.y += p.dy * 6;
-        if (p.knockback) {
-          target.knockX += p.dx * p.knockback;
-          target.knockY += p.dy * p.knockback;
-        }
+        this._knock(target, p.dx, p.dy, p.knockback);
         p.dead = true;
       } else if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) {
         p.dead = true;
@@ -326,6 +501,7 @@ class Battle {
   // ---------- คลื่นเสียง ----------
   _updateWaves(dt) {
     for (const w of this.waves) {
+      if (w.owner === this.frozen) continue;
       w.r += w.speed * dt;
       if (!w.hit) {
         const t = this.fighters.find((f) => f !== w.owner);
@@ -344,8 +520,7 @@ class Battle {
             const travel = Math.max(0, Math.min(1, (w.r - w.r0) / (w.maxR - w.r0)));
             const dmg = Math.max(1, Math.round(w.damage + (w.damageFar - w.damage) * travel));
             this._damage(t, dmg, t.x - (dx / dist) * t.r, t.y - (dy / dist) * t.r);
-            t.knockX += (dx / dist) * w.knockback;
-            t.knockY += (dy / dist) * w.knockback;
+            this._knock(t, dx, dy, w.knockback);
           }
         }
       }
@@ -358,7 +533,7 @@ class Battle {
   _waveVsProjectiles(dt) {
     let changed = false;
     for (const w of this.waves) {
-      if (w.projectileEffect === "none") continue;
+      if (w.projectileEffect === "none" || w.owner === this.frozen) continue;
       const band = w.speed * dt + 16; // ความหนาของแนวคลื่นที่ปะทะกระสุนได้
       for (const p of this.projectiles) {
         if (p.owner === w.owner || p.dead || p.hitByWave) continue;
@@ -405,6 +580,9 @@ class Battle {
       this.events.push({ type: "ko" });
       this.projectiles = []; // กระสุนและคลื่นที่ค้างอยู่หายไปพร้อมจบแมตช์
       this.waves = [];
+      this.rewind = null;
+      this.eraser = null;
+      this.frozen = null;
       for (const f of this.fighters) {
         f.cast = null;
         f.frame = "idle";
@@ -415,6 +593,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 9;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 10;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

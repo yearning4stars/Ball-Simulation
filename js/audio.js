@@ -139,6 +139,23 @@ class SoundFX {
     this._noise(0.08, 0.1, "highpass", 3000, 3000);
   }
 
+  slash() { // ฟันดาบ
+    if (!this._throttle("slash", 60)) return;
+    this._noise(0.14, 0.2, "highpass", 3500, 7000);
+    this._tone(1800, 700, 0.12, "triangle", 0.07);
+  }
+
+  erase() { // ตัดเวลา: ตึงๆ แล้วเงียบสนิท
+    this._tone(90, 30, 0.9, "sawtooth", 0.22);
+    this._noise(0.7, 0.2, "lowpass", 3000, 100);
+    this._tone(1200, 1200, 0.05, "square", 0.08, 0.02);
+  }
+
+  rewind() { // ย้อนเวลา: เสียงสไลด์ถอยหลังเร็วๆ
+    for (let i = 0; i < 6; i++) this._tone(1400 - i * 160, 300 - i * 20, 0.16, "triangle", 0.1, i * 0.15);
+    this._noise(0.9, 0.12, "bandpass", 4000, 400);
+  }
+
   ko() { // น็อก
     this._tone(260, 35, 0.7, "sawtooth", 0.22);
     this._noise(0.5, 0.3, "lowpass", 2200, 120);
@@ -156,6 +173,6 @@ class SoundFX {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 9;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 10;
 
 if (typeof module !== "undefined") module.exports = { SoundFX };
