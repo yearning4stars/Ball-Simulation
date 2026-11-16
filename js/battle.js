@@ -13,6 +13,11 @@ function skillsOf(def) {
 // สกิลที่แตะเวลา: ใช้พร้อมกันไม่ได้ (ถ้ามีใครกำลังใช้อยู่ คนอื่นต้องรอ)
 const TIME_SKILLS = ["timeerase", "rewind", "timeaccel", "timeslow"];
 
+// สติแตกหนัก: mind >= MIND_DROP แล้วตัวที่ถือ weapon จะทิ้งอาวุธ และหันไปใช้ "การชนโจมตี" แทน
+// จนกว่า mind จะลดลงต่ำกว่า MIND_PICKUP ค่อยหยิบอาวุธกลับมา (ห่างกันเพื่อไม่ให้สลับไปมารัวๆ)
+const MIND_DROP = 50;
+const MIND_PICKUP = 25;
+
 class Battle {
   constructor(width, height, defA, defB, rng = Math.random) {
     this.w = width;
@@ -72,6 +77,8 @@ class Battle {
       weaponAng: this.rng() * Math.PI * 2,
       weaponDir: 1,
       weaponCd: 0,
+      disarmed: false, // ทิ้งอาวุธเพราะสติแตกหนัก (ใช้การชนโจมตีแทน)
+      ramCd: 0, // พักก่อนชนโจมตีซ้ำได้
     };
   }
 
@@ -82,7 +89,7 @@ class Battle {
       for (const f of this.fighters) {
         if (f.hp <= 0) continue;
         f.hitFlash = Math.max(0, f.hitFlash - dt);
-        if (f.weapon) f.weaponAng += f.weaponDir * f.weapon.spinSpeed * dt;
+        if (f.weapon && !f.disarmed) f.weaponAng += f.weaponDir * f.weapon.spinSpeed * dt;
         this._move(f, dt);
       }
       return;
@@ -123,7 +130,16 @@ class Battle {
       if (m > 0) this._rotate(f, (this.rng() - 0.5) * 8 * m * fdt);
       const slow = 1 - 0.4 * m;
       f.gcd = Math.max(0, f.gcd - fdt * slow);
-      for (let i = 0; i < f.cds.length; i++) f.cds[i] -= fdt * slow;
+      // hpRush: ยิ่งเลือดน้อย คูลดาวน์ของสกิลนั้นยิ่งเดินเร็ว (1 เท่าตอนเลือดเต็ม -> hpRush เท่าตอนเลือดหมด)
+      const lost = 1 - Math.max(0, f.hp) / f.maxHp;
+      for (let i = 0; i < f.cds.length; i++) {
+        const rush = f.skills[i].hpRush ? 1 + (f.skills[i].hpRush - 1) * lost : 1;
+        f.cds[i] -= fdt * slow * rush;
+      }
+      f.ramCd = Math.max(0, f.ramCd - fdt);
+      this._updateDisarm(f);
+      // ทิ้งอาวุธแล้ว: วิ่งเข้าหาศัตรูเพื่อชน (สกิลที่ควบคุมการเคลื่อนที่เองจะทับค่านี้ทีหลัง)
+      if (f.disarmed && f.stun <= 0) this._steer(f, enemy, 1.8 * fdt);
       if (f.stun > 0) {
         f.stun -= fdt; // สติแตก: ใช้สกิลไม่ได้ ขยับได้ช้า
         f.cast = null;
@@ -138,7 +154,7 @@ class Battle {
     if (this.rewind) { this._checkWinner(); return; } // เพิ่งเริ่มย้อนเวลาในก้าวนี้
     this._fighterCollision(a, b);
     for (const f of this.fighters) {
-      if (f.weapon) this._updateWeapon(f, f === a ? b : a, f.tdt);
+      if (f.weapon && !f.disarmed) this._updateWeapon(f, f === a ? b : a, f.tdt);
     }
     this._updateProjectiles(dt);
     this._updateWaves(dt);
@@ -198,6 +214,8 @@ class Battle {
         this._steer(f, enemy, sk.homing * dt); // เลี้ยวเข้าหาศัตรูเล็กน้อยระหว่างพุ่ง
       } else if (sk.type === "timeerase") {
         this._steer(f, enemy, (sk.homing || 3) * dt); // ระหว่างเวลาถูกตัด วิ่งเข้าหาศัตรูเพื่อฟันสวน
+      } else if (sk.type === "timeaccel" && sk.hitAndRun) {
+        this._hitAndRun(f, enemy, sk, c, dt); // เร่งเวลา: วิ่งวนรอบศัตรู -> พุ่งเข้าโจมตี -> หลบออก วนซ้ำ
       } else if ((sk.type === "timeaccel" || sk.type === "timeslow") && sk.homing) {
         // เร่ง/ชะลอเวลา: วิ่งเข้าหาศัตรูเพื่อใช้เวลาที่ได้เปรียบให้คุ้ม (เร่งเวลา เลี้ยวไวขึ้นตามเวลาที่เร็วขึ้น)
         this._steer(f, enemy, sk.homing * dt * (sk.type === "timeaccel" ? sk.rate || 2 : 1));
@@ -268,6 +286,64 @@ class Battle {
     } else if (sk.type === "timeslow") {
       this.events.push({ type: "slow", x: f.x, y: f.y, radius: sk.radius || 300 });
     }
+  }
+
+  // สติแตกหนักจนทิ้งอาวุธ / หยิบกลับมา
+  _updateDisarm(f) {
+    if (!f.weapon) return;
+    if (!f.disarmed && f.mind >= MIND_DROP) {
+      f.disarmed = true;
+      this.events.push({ type: "dropWeapon", x: f.x, y: f.y, ang: f.weaponAng });
+    } else if (f.disarmed && f.mind <= MIND_PICKUP) {
+      f.disarmed = false;
+      this.events.push({ type: "pickWeapon", x: f.x, y: f.y });
+    }
+  }
+
+  // เร่งเวลาแบบ "วิ่งวน-โจมตี-หลบ": วนรอบศัตรูที่ระยะ orbitRadius แล้วพุ่งเข้าฟัน จากนั้นถอยออก แล้วเริ่มวนใหม่
+  // ใช้เวลาจริงนับ phase (dt คือนาฬิกาของสกิล) ส่วนความเร็วเดินจริงถูกคูณ rate อยู่แล้วในลูปหลัก
+  _hitAndRun(f, enemy, sk, c, dt) {
+    const hr = sk.hitAndRun;
+    if (!c.hr) c.hr = { phase: "orbit", t: 0, dir: this.rng() < 0.5 ? 1 : -1, struck: false, flip: 0 };
+    const s = c.hr;
+    s.t += dt;
+    s.flip = Math.max(0, s.flip - dt);
+    const ex = f.x - enemy.x;
+    const ey = f.y - enemy.y;
+    const d = Math.hypot(ex, ey) || 0.0001;
+    const ux = ex / d; // ทิศจากศัตรูมาหาเรา
+    const uy = ey / d;
+    const R = hr.orbitRadius || 170;
+    let dx, dy;
+
+    // ชนขอบสนาม: กลับทิศวน กันติดกำแพง
+    const atWall = f.x <= f.r + 2 || f.x >= this.w - f.r - 2 || f.y <= f.r + 2 || f.y >= this.h - f.r - 2;
+    if (atWall && s.flip <= 0) { s.dir *= -1; s.flip = 0.5; }
+
+    if (s.phase === "orbit") {
+      // เส้นสัมผัสวงกลม + ดึงเข้า/ผลักออกให้อยู่ที่รัศมี R
+      const corr = Math.max(-1, Math.min(1, (R - d) / R * 2.5));
+      dx = -uy * s.dir + ux * corr;
+      dy = ux * s.dir + uy * corr;
+      f.dashMult = hr.orbitSpeed || 1.1;
+      if (s.t >= (hr.orbitTime || 0.6)) { s.phase = "strike"; s.t = 0; s.struck = false; f.weaponCd = 0; }
+    } else if (s.phase === "strike") {
+      dx = -ux; dy = -uy; // พุ่งเข้าหาศัตรู
+      f.dashMult = hr.strikeSpeed || 1.7;
+      if (s.struck || s.t >= (hr.strikeMax || 0.45)) { s.phase = "retreat"; s.t = 0; s.dir *= -1; }
+    } else {
+      // หลบออก: ถอยหลังพร้อมเฉไปด้านข้างเล็กน้อย
+      dx = ux + -uy * s.dir * 0.6;
+      dy = uy + ux * s.dir * 0.6;
+      f.dashMult = hr.retreatSpeed || 1.8;
+      if (s.t >= (hr.retreatTime || 0.35) && d >= R * 0.85) { s.phase = "orbit"; s.t = 0; }
+      else if (s.t >= (hr.retreatTime || 0.35) * 2) { s.phase = "orbit"; s.t = 0; }
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    const sp = Math.hypot(f.vx, f.vy) || f.def.speed;
+    f.vx = (dx / len) * sp;
+    f.vy = (dy / len) * sp;
+    f.dashTimer = 1; // ให้ _move ใช้ dashMult ที่ตั้งไว้ (ถูกตั้งใหม่ทุกก้าว)
   }
 
   // จบการตัดเวลา: เวลากลับมา ศัตรูจำอะไรในช่วงที่ถูกตัดไม่ได้เลย ยืนงงไปครู่หนึ่ง
@@ -371,7 +447,9 @@ class Battle {
 
     // เล็งแม่นขึ้น: ศัตรูเข้ามาในระยะดาบ -> ใบดาบหมุนเร็วขึ้นเพื่อกวาดเข้าหา (ยังหมุนทิศเดิมจนกว่าจะฟันโดน)
     const near = Math.hypot(px, py) <= s1 + enemy.r + (wp.aimRange || 40);
-    f.weaponAng += f.weaponDir * wp.spinSpeed * (near ? wp.aimBoost || 1.8 : 1) * dt;
+    const striking = f.cast && f.cast.hr && f.cast.hr.phase === "strike";
+    if (striking) f.weaponAng = Math.atan2(py, px); // กำลังพุ่งโจมตี: ชี้อาวุธไปที่ศัตรูตรงๆ
+    else f.weaponAng += f.weaponDir * wp.spinSpeed * (near ? wp.aimBoost || 1.8 : 1) * dt;
     f.weaponCd = Math.max(0, f.weaponCd - dt);
 
     const ca = Math.cos(f.weaponAng);
@@ -411,6 +489,7 @@ class Battle {
     this._knock(enemy, px, py, wp.knockback || 0);
     f.weaponDir *= -1; // ฟันโดนแล้วหมุนกลับอีกทิศ
     f.weaponCd = wp.hitCooldown || 0.4;
+    if (f.cast && f.cast.hr) f.cast.hr.struck = true; // จบจังหวะพุ่งโจมตี -> ถอยออก
     this.events.push({ type: "slash", x: hx, y: hy, ang: f.weaponAng });
     // ตัดเวลาอยู่แล้วโจมตี = เวลากลับมาทันที (แบบ King Crimson) ดาเมจนี้ยังโดนเต็ม
     if (f.cast && f.cast.sk.type === "timeerase") this._endTimeErase(f, enemy, true);
@@ -561,6 +640,19 @@ class Battle {
 
     this._dashHit(a, b, nx, ny);
     this._dashHit(b, a, -nx, -ny);
+    this._ramHit(a, b, nx, ny);
+    this._ramHit(b, a, -nx, -ny);
+  }
+
+  // ทิ้งอาวุธแล้ว: ใช้การชนตัวโจมตีแทน (ดาเมจ = ramDamage ของอาวุธ ไม่ใส่ = เท่าดาเมจอาวุธ)
+  _ramHit(att, tgt, nx, ny) {
+    if (!att.disarmed || att.ramCd > 0 || tgt.hp <= 0) return;
+    const wp = att.weapon;
+    att.ramCd = 0.6;
+    this._damage(tgt, this._out(att, wp.ramDamage !== undefined ? wp.ramDamage : wp.damage), att.x + nx * att.r, att.y + ny * att.r);
+    this._knock(tgt, nx, ny, wp.ramKnockback !== undefined ? wp.ramKnockback : wp.knockback || 0);
+    if (att.cast && att.cast.hr) att.cast.hr.struck = true;
+    this.events.push({ type: "ram", x: att.x + nx * att.r, y: att.y + ny * att.r });
   }
 
   // สกิลพุ่ง: ชนศัตรูครั้งแรกในการพุ่งแต่ละครั้งเท่านั้นที่เป็นดาเมจ
@@ -735,6 +827,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 14;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 15;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

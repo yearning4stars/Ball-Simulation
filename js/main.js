@@ -176,6 +176,16 @@ function handleEvents(events) {
       floaters.push({ x: e.x, y: e.y - 60, text: "สติแตก!", life: 1.3, color: "#ff9bd8", size: 34 });
       shake = Math.max(shake, 10);
       sfx.breakdown();
+    } else if (e.type === "dropWeapon") {
+      spawnParticles(e.x, e.y, "#c9a8ff", 14, 260);
+      floaters.push({ x: e.x, y: e.y - 62, text: "ทิ้งอาวุธ!", life: 1.2, color: "#ff9bd8", size: 30 });
+      sfx.breakdown();
+    } else if (e.type === "pickWeapon") {
+      floaters.push({ x: e.x, y: e.y - 62, text: "ตั้งสติได้!", life: 1.0, color: "#9be8ff", size: 26 });
+      sfx.click();
+    } else if (e.type === "ram") {
+      spawnParticles(e.x, e.y, "#ffffff", 10, 280);
+      shake = Math.max(shake, 5);
     } else if (e.type === "slash") {
       spawnParticles(e.x, e.y, "#ffb3c6", 10, 300);
       shake = Math.max(shake, 4);
@@ -1011,7 +1021,7 @@ function render() {
       drawFighter(f, keyOf(f.def));
       ctx.globalAlpha = 1;
       if (f === battle.eraser) ctx.filter = "none";
-      if (f.weapon) (f.weapon.type === "compass" ? drawCompass(f) : drawKatana(f));
+      if (f.weapon && !f.disarmed) (f.weapon.type === "compass" ? drawCompass(f) : drawKatana(f));
       if (f.cast && f.cast.sk.type === "timeaccel") drawAccelAura(f);
       if (f.mind > 4 || f.stun > 0 || f === battle.dazed) drawMindAura(f);
     });
@@ -1137,7 +1147,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 14;
+const EXPECTED_VERSION = 15;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
