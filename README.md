@@ -40,7 +40,7 @@ python3 -m http.server 8000
 | `projectile` | ยิงกระสุนหรือโน้ตใส่ศัตรู ยิงเป็นชุดได้ | `damage`, `projectileSpeed`, `projectileRadius`, `fireDelay`, `count`, `interval`, `spread`, `shape` (`ball`/`note`/`text`), `texts`, `mindDamage`, `indestructible`, `wobble`, `knockback` (ผลักศัตรูเบาๆ ตอนโดน), `sound` |
 | `dash` | พุ่งเข้าหาศัตรู ชนครั้งแรกในการพุ่งแต่ละครั้งทำดาเมจและทำให้กระเด็น | `damage`, `speedMult`, `homing`, `knockback` |
 | `shockwave` | ปล่อยคลื่นเสียงเป็นส่วนโค้งแผ่ไปทางศัตรู โดนแล้วกระเด็น | `damage` (ใกล้) → `damageFar` (ไกลสุด) ยิ่งคลื่นเดินทางไกลยิ่งเบาลง, `waveSpeed`, `waveRange`, `waveArcDeg`, `knockback`, `projectileEffect` (`"push"` ผลักกระสุนศัตรูกลับ / `"stop"` ลบกระสุนทิ้ง / ไม่ใส่ = ไม่ทำอะไร) |
-| `timeerase` | ตัดเวลา (King Crimson): ศัตรูถูกแช่แข็งทั้งตัว กระสุน คลื่น และคูลดาวน์ ส่วนตัวเองเร็วขึ้นและวิ่งตามศัตรู | `duration` (วินาทีที่ตัดเวลา), `speedMult`, `homing` |
+| `timeerase` | ตัดเวลา (King Crimson): เวลาไม่ได้หยุด แต่ผู้ใช้อยู่นอกความจริง (โดนอะไรไม่ได้ ทะลุผ่านหมด เดินทะลุศัตรูได้) ศัตรูในรัศมีจะเหม่อลอยทำตามโชคชะตาเดิมโดยเล็งไปที่จุดเก่าของผู้ใช้ พอเวลากลับมาจะจำอะไรไม่ได้ ยืนงงครู่หนึ่ง | `duration`, `radius`, `afterStun`, `speedMult`, `homing` |
 | `rewind` | ย้อนเวลา (Mandom): ตำแหน่งตัวละคร กระสุน คลื่น และเลือดของคนใช้สกิลย้อนกลับไป `rewindSeconds` วินาที (เลือดศัตรูไม่ย้อน) ใช้เองเมื่อเสียเลือดมากพอ | `duration` (วินาทีที่เล่นภาพย้อน), `rewindSeconds`, `minGain` |
 
 **อาวุธหมุนรอบตัว (`weapon`)** ใส่ที่ตัวละครได้ ใบดาบหมุนไปเรื่อยๆ ฟันโดนศัตรูแล้วทำดาเมจและหมุนกลับทิศ ปรับได้ที่ `length`, `damage`, `spinSpeed`, `hitCooldown`, `knockback`

@@ -36,8 +36,11 @@
 //        waveSpeed, waveRange, waveArcDeg (มุมกว้างของคลื่น องศา), knockback
 //        damageFar               ดาเมจที่ปลายระยะ (ยิ่งไกลยิ่งเบา ไม่ใส่ = ดาเมจเท่ากันตลอด)
 //        projectileEffect        "push" ผลักกระสุนศัตรูออก | "stop" ทำลายกระสุนศัตรู | ไม่ใส่ = ไม่มีผล
-//   "timeerase"   ตัดเวลา (King Crimson): ศัตรูถูกแช่แข็งทั้งตัว กระสุน คลื่น และคูลดาวน์ นาน duration วินาที
-//        duration (= ระยะเวลาตัดเวลา), speedMult (ตัวเองเร็วขึ้นกี่เท่า), homing (วิ่งตามศัตรู)
+//   "timeerase"   ตัดเวลา (King Crimson) นาน duration วินาที: เวลา "ไม่ได้หยุด" แต่ถูกตัดข้าม
+//        ผู้ใช้: อยู่นอกความจริง กระสุน คลื่น ดาบ การพุ่งชน ทะลุผ่านตัวหมด เดินทะลุศัตรูได้ ขยับอิสระและฟันสวนได้
+//        ศัตรูในรัศมี: เหม่อลอย ทำตามโชคชะตาเดิมเอง (ยังขยับ/ยิงสกิลต่อ แต่เล็งไปที่ตำแหน่งเก่าของผู้ใช้ก่อนตัดเวลา)
+//                      พอเวลากลับมาจะจำอะไรไม่ได้ ยืนงง afterStun วินาที
+//        duration, radius (รัศมีที่ศัตรูจะเหม่อลอย px), afterStun, speedMult (ผู้ใช้เร็วขึ้นกี่เท่า), homing (วิ่งเข้าหาศัตรู)
 //   "rewind"      ย้อนเวลา (Mandom): ทุกอย่างในสนามย้อนกลับไป rewindSeconds วินาที เลือดคนใช้สกิลก็ย้อนด้วย
 //        duration (= กี่วินาทีที่เล่นภาพย้อน), rewindSeconds, minGain (ใช้เมื่อเสียเลือดมากกว่านี้ในช่วงที่ย้อนได้)
 //
@@ -201,7 +204,9 @@ const CHARACTERS = {
         cooldown: 16, // นับตั้งแต่เริ่มใช้ (รวมช่วง 5 วินาทีที่ตัดเวลาด้วย)
         initialCooldown: 4,
         frame: "erase",
-        duration: 5, // ศัตรูถูกแช่แข็ง 5 วินาที
+        duration: 5, // ตัดเวลา 5 วินาที
+        radius: 480, // ศัตรูในรัศมีนี้ (px) จะเหม่อลอย
+        afterStun: 0.6, // เวลากลับมา ศัตรูจำไม่ได้ว่าเกิดอะไรขึ้น ยืนงงกี่วินาที
         speedMult: 1.5,
         homing: 3.2,
       },
@@ -220,6 +225,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 11;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 12;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

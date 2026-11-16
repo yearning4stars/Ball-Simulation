@@ -25,7 +25,8 @@ class Battle {
     this._histAcc = 0;
     this.rewind = null; // กำลังย้อนเวลาอยู่หรือไม่ {owner, t, dur, back, t0}
     this.eraser = null; // ตัวที่กำลังใช้ "ตัดเวลา"
-    this.frozen = null; // ตัวที่ถูกตัดเวลา (ขยับ/ใช้สกิลไม่ได้)
+    this.dazed = null; // ตัวที่ตกอยู่ในเวลาที่ถูกตัด: เหม่อลอย ทำตามโชคชะตาที่บันทึกไว้ (ไม่รู้ว่า FuNx อยู่ตรงไหนจริงๆ)
+    this.phantom = null; // ตำแหน่งที่ FuNx เคยยืนก่อนตัดเวลา: สิ่งเดียวที่ตัวเหม่อลอย "จำได้" และใช้เล็ง
 
     this.fighters = [
       this._makeFighter(defA, width * 0.25, height * 0.5, 0),
@@ -94,14 +95,15 @@ class Battle {
     this._recordHistory(dt);
 
     const [a, b] = this.fighters;
-    // ใครกำลังใช้ตัดเวลาอยู่ ศัตรูของเขาจะถูกแช่แข็งทั้งตัว กระสุน คลื่น และคูลดาวน์
+    // ตัดเวลา (King Crimson): เวลายังเดินต่อ แต่ผู้ใช้ "ไม่อยู่ในความจริง" (โดนอะไรไม่ได้ ทะลุผ่านหมด)
+    // ส่วนศัตรูในรัศมีจะเหม่อลอยทำตามโชคชะตาเดิม โดยเล็งไปที่ตำแหน่งเก่าของผู้ใช้เท่านั้น
     this.eraser = this.fighters.find((f) => f.cast && f.cast.sk.type === "timeerase") || null;
-    this.frozen = this.eraser ? (this.eraser === a ? b : a) : null;
+    this.dazed = this.eraser && this.eraser.cast.dazed ? (this.eraser === a ? b : a) : null;
     for (const f of this.fighters) {
-      const enemy = f === a ? b : a;
+      let enemy = f === a ? b : a;
+      if (f === this.dazed) enemy = this.phantom;
       f.facing = enemy.x >= f.x ? 1 : -1;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
-      if (f === this.frozen) continue;
       // สติ/ความมั่นใจ (mind 0-100): ยิ่งสูงยิ่งสับสน คูลดาวน์เดินช้าลง ทิศเดินเพี้ยน
       const m = f.mind / 100;
       f.mind = Math.max(0, f.mind - 7 * dt);
@@ -123,14 +125,15 @@ class Battle {
     if (this.rewind) { this._checkWinner(); return; } // เพิ่งเริ่มย้อนเวลาในก้าวนี้
     this._fighterCollision(a, b);
     for (const f of this.fighters) {
-      if (f !== this.frozen && f.weapon) this._updateWeapon(f, f === a ? b : a, dt);
+      if (f.weapon) this._updateWeapon(f, f === a ? b : a, dt);
     }
     this._updateProjectiles(dt);
     this._updateWaves(dt);
     // ตัดเวลาอาจจบกลางก้าวนี้ (cast ถูกเคลียร์) ให้สถานะที่ตัววาดอ่านตรงกับความจริงเสมอ
     if (this.eraser && !(this.eraser.cast && this.eraser.cast.sk.type === "timeerase")) {
       this.eraser = null;
-      this.frozen = null;
+      this.dazed = null;
+      this.phantom = null;
     }
     this._checkWinner();
   }
@@ -160,10 +163,15 @@ class Battle {
       } else if (sk.type === "dash" && sk.homing) {
         this._steer(f, enemy, sk.homing * dt); // เลี้ยวเข้าหาศัตรูเล็กน้อยระหว่างพุ่ง
       } else if (sk.type === "timeerase") {
-        this._steer(f, enemy, (sk.homing || 3) * dt); // ระหว่างเวลาถูกตัด วิ่งตามศัตรูที่ขยับไม่ได้
+        this._steer(f, enemy, (sk.homing || 3) * dt); // ระหว่างเวลาถูกตัด วิ่งเข้าหาศัตรูเพื่อฟันสวน
       }
 
       if (c.t >= sk.duration) {
+        if (sk.type === "timeerase" && c.dazed && enemy.hp > 0) {
+          // เวลากลับมา: ศัตรูจำอะไรในช่วงที่ถูกตัดไม่ได้เลย ยืนงงไปครู่หนึ่ง
+          enemy.stun = Math.max(enemy.stun, sk.afterStun !== undefined ? sk.afterStun : 0.6);
+          this.events.push({ type: "confused", x: enemy.x, y: enemy.y });
+        }
         f.cast = null;
         f.frame = "idle";
         f.dashTimer = 0;
@@ -211,7 +219,11 @@ class Battle {
       const len = Math.hypot(dx, dy) || 1;
       f.vx = (dx / len) * f.def.speed;
       f.vy = (dy / len) * f.def.speed;
-      this.events.push({ type: "erase", x: f.x, y: f.y });
+      // ศัตรูที่อยู่ในรัศมีจะเหม่อลอย ทำตามโชคชะตาเดิมโดยเล็งไปที่ตำแหน่งเก่าของ FuNx
+      const inRange = Math.hypot(enemy.x - f.x, enemy.y - f.y) <= (sk.radius || 480);
+      f.cast.dazed = inRange;
+      this.phantom = inRange ? { x: f.x, y: f.y, r: f.r, vx: 0, vy: 0, hp: f.hp } : null;
+      this.events.push({ type: "erase", x: f.x, y: f.y, dazed: inRange });
     } else if (sk.type === "rewind") {
       this._startRewind(f, sk);
     }
@@ -319,7 +331,7 @@ class Battle {
         this.events.push({ type: "deflect", x: p.x, y: p.y, effect: "parry" });
       }
     }
-    if (f.weaponCd > 0 || enemy.hp <= 0) return;
+    if (f.weaponCd > 0 || enemy.hp <= 0 || enemy === this.eraser) return; // ฟันคนที่อยู่นอกความจริงไม่โดน
     const t = Math.max(s0, Math.min(s1, px * ca + py * sa)); // จุดบนใบดาบที่ใกล้ศัตรูที่สุด
     const dx = px - ca * t;
     const dy = py - sa * t;
@@ -336,7 +348,7 @@ class Battle {
 
   // ผลักตัวละครตามทิศ (dx,dy) ตัวที่ถูกแช่แข็งไม่ถูกผลัก (ไม่งั้นแรงจะสะสมแล้วกระเด็นตอนเวลากลับมา)
   _knock(t, dx, dy, power) {
-    if (!power || t === this.frozen) return;
+    if (!power) return;
     const len = Math.hypot(dx, dy) || 1;
     t.knockX += (dx / len) * power;
     t.knockY += (dy / len) * power;
@@ -451,6 +463,7 @@ class Battle {
 
   // ตัวละครชนกัน: เด้งออกจากกันเฉยๆ ไม่มีดาเมจ ยกเว้นสกิลพุ่งชนที่ทำดาเมจเมื่อชนศัตรู
   _fighterCollision(a, b) {
+    if (a === this.eraser || b === this.eraser) return; // คนที่ตัดเวลาอยู่นอกความจริง ตัวละครเดินทะลุกันได้
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.hypot(dx, dy) || 0.0001;
@@ -460,24 +473,6 @@ class Battle {
     const nx = dx / dist;
     const ny = dy / dist;
     const overlap = minDist - dist;
-
-    // ตัวที่ถูกแช่แข็งอยู่นิ่ง ไม่ถูกดัน ฝ่ายที่ยังขยับได้เด้งออกอย่างเดียว
-    if (a === this.frozen || b === this.frozen) {
-      if (b === this.frozen) {
-        a.x -= nx * overlap;
-        a.y -= ny * overlap;
-        const va = a.vx * nx + a.vy * ny;
-        if (va > 0) { a.vx -= 2 * va * nx; a.vy -= 2 * va * ny; }
-        this._rotate(a, (this.rng() - 0.5) * 0.3);
-      } else {
-        b.x += nx * overlap;
-        b.y += ny * overlap;
-        const vb = b.vx * nx + b.vy * ny;
-        if (vb < 0) { b.vx -= 2 * vb * nx; b.vy -= 2 * vb * ny; }
-        this._rotate(b, (this.rng() - 0.5) * 0.3);
-      }
-      return;
-    }
 
     a.x -= (nx * overlap) / 2;
     a.y -= (ny * overlap) / 2;
@@ -511,7 +506,6 @@ class Battle {
   // ---------- กระสุน / โน้ต ----------
   _updateProjectiles(dt) {
     for (const p of this.projectiles) {
-      if (p.owner === this.frozen) continue; // กระสุนของคนที่ถูกตัดเวลาค้างอยู่กลางอากาศ
       p.t += dt;
       p.bx += p.dx * p.speed * dt;
       p.by += p.dy * p.speed * dt;
@@ -521,7 +515,10 @@ class Battle {
       p.y = p.by + p.dx * off;
 
       const target = this.fighters.find((f) => f !== p.owner);
-      if (target.hp > 0 && Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
+      if (target === this.eraser) {
+        // เป้าหมายอยู่นอกความจริง: กระสุนบินทะลุผ่านความว่างเปล่าไป
+        if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) p.dead = true;
+      } else if (target.hp > 0 && Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
         this._damage(target, p.damage, p.x, p.y);
         if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
         // ถีบเบาๆ ตามทิศกระสุน
@@ -557,11 +554,10 @@ class Battle {
   // ---------- คลื่นเสียง ----------
   _updateWaves(dt) {
     for (const w of this.waves) {
-      if (w.owner === this.frozen) continue;
       w.r += w.speed * dt;
       if (!w.hit) {
         const t = this.fighters.find((f) => f !== w.owner);
-        if (t.hp > 0) {
+        if (t.hp > 0 && t !== this.eraser) { // คนที่ตัดเวลาอยู่ คลื่นทะลุผ่านตัวไป
           const dx = t.x - w.x;
           const dy = t.y - w.y;
           const dist = Math.hypot(dx, dy) || 0.0001;
@@ -589,7 +585,7 @@ class Battle {
   _waveVsProjectiles(dt) {
     let changed = false;
     for (const w of this.waves) {
-      if (w.projectileEffect === "none" || w.owner === this.frozen) continue;
+      if (w.projectileEffect === "none") continue;
       const band = w.speed * dt + 16; // ความหนาของแนวคลื่นที่ปะทะกระสุนได้
       for (const p of this.projectiles) {
         if (p.owner === w.owner || p.dead || p.hitByWave) continue;
@@ -653,7 +649,8 @@ class Battle {
       this.waves = [];
       this.rewind = null;
       this.eraser = null;
-      this.frozen = null;
+      this.dazed = null;
+      this.phantom = null;
       for (const f of this.fighters) {
         f.cast = null;
         f.frame = "idle";
@@ -664,6 +661,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 11;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 12;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

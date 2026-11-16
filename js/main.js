@@ -180,6 +180,9 @@ function handleEvents(events) {
       screenFlash = 0.6;
       spawnParticles(e.x, e.y, "#ff2a55", 24, 320);
       sfx.erase();
+    } else if (e.type === "confused") {
+      floaters.push({ x: e.x, y: e.y - 56, text: "เกิดอะไรขึ้น?", life: 1.2, color: "#ffd1dc", size: 26 });
+      spawnParticles(e.x, e.y, "#ff6b8a", 10, 180);
     } else if (e.type === "rewind") {
       screenFlash = 0.35;
       sfx.rewind();
@@ -398,7 +401,7 @@ function drawWord(p) {
 
 // ---------- ออร่าสติแตก: สัญลักษณ์วนรอบหัว + แสงม่วง ----------
 function drawMindAura(f) {
-  const lvl = Math.min(1, f.mind / 100);
+  const lvl = battle && f === battle.dazed ? Math.max(0.5, f.mind / 100) : Math.min(1, f.mind / 100);
   const t = performance.now() / 1000;
   ctx.save();
   ctx.translate(f.x, f.y);
@@ -412,7 +415,8 @@ function drawMindAura(f) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#e0ccff";
-  const glyphs = f.stun > 0 ? ["@", "?!", "@", "…"] : ["?", "…", "!"];
+  const dz = battle && f === battle.dazed;
+  const glyphs = f.stun > 0 ? ["@", "?!", "@", "…"] : dz ? ["…", "…", "?"] : ["?", "…", "!"];
   glyphs.forEach((g, i) => {
     const a = t * 2.4 + (i / glyphs.length) * Math.PI * 2;
     ctx.fillText(g, Math.cos(a) * f.r * 0.9, -f.r * 1.15 + Math.sin(a) * 9);
@@ -642,6 +646,26 @@ function drawEraseBackdrop() {
   ctx.fillRect(0, 0, W, H);
 }
 
+// จุดที่ FuNx "เคยอยู่" ก่อนตัดเวลา: ตัวเหม่อลอยเล็งมาที่นี่ตามโชคชะตาเดิม
+function drawPhantom(b) {
+  const p = b.phantom;
+  const t = performance.now() / 1000;
+  ctx.save();
+  ctx.globalAlpha = 0.35 + 0.15 * Math.sin(t * 6);
+  ctx.strokeStyle = "#ff4d73";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([8, 7]);
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r * 1.05, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(p.x - 12, p.y - 12); ctx.lineTo(p.x + 12, p.y + 12);
+  ctx.moveTo(p.x + 12, p.y - 12); ctx.lineTo(p.x - 12, p.y + 12);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawEraseLabel(b) {
   const c = b.eraser.cast;
   const left = Math.max(0, c.sk.duration - c.t);
@@ -739,20 +763,28 @@ function render() {
     const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def) || keys[0];
     if (battle.winner !== null) drawWinnerBanner(battle);
     if (battle.eraser && battle.eraser.cast) drawEraseBackdrop(battle);
-    const gray = (on) => { ctx.filter = on ? "grayscale(1) brightness(0.8)" : "none"; };
+    // เหม่อลอย = สีจาง/ขาวดำบางส่วน, คนที่ตัดเวลา = ตัวโปร่งแสงเรืองแดง (อยู่นอกความจริง)
+    const gray = (on) => { ctx.filter = on ? "grayscale(0.85) brightness(0.85)" : "none"; };
+    if (battle.phantom) drawPhantom(battle);
     drawWaves(battle);
     battle.fighters.forEach((f) => {
       if (f.hp <= 0) return;
-      gray(f === battle.frozen); // คนที่ถูกตัดเวลาเป็นภาพขาวดำ
+      gray(f === battle.dazed);
+      if (f === battle.eraser) {
+        ctx.filter = "drop-shadow(0 0 10px #ff2a55)";
+        ctx.globalAlpha = 0.72;
+      }
       drawFighter(f, keyOf(f.def));
+      ctx.globalAlpha = 1;
+      if (f === battle.eraser) ctx.filter = "none";
       if (f.weapon) drawKatana(f);
-      if (f.mind > 4 || f.stun > 0) drawMindAura(f);
+      if (f.mind > 4 || f.stun > 0 || f === battle.dazed) drawMindAura(f);
     });
     gray(false);
     drawShards();
 
     for (const p of battle.projectiles) {
-      gray(p.owner === battle.frozen);
+      gray(p.owner === battle.dazed);
       if (p.shape === "note") { drawNote(p); gray(false); continue; }
       if (p.shape === "text") { drawWord(p); gray(false); continue; }
       ctx.fillStyle = "#fff6c2";
@@ -845,7 +877,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 11;
+const EXPECTED_VERSION = 12;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
