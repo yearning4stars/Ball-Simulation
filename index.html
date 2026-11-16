@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=5" />
+  <link rel="stylesheet" href="style.css?v=6" />
 </head>
 <body>
   <main>
@@ -20,14 +20,53 @@
       <button id="speed" class="secondary">ความเร็ว x1</button>
       <button id="mute" class="secondary">🔊 เสียง: เปิด</button>
     </div>
-    <canvas id="arena" width="720" height="720"></canvas>
-    <p id="ver" class="ver">เวอร์ชัน 5</p>
+
+    <div id="stage">
+      <!-- แผงข้อมูลผู้เล่น: อยู่นอกสนาม (ชื่อ เลือด สกิล และคูลดาวน์) -->
+      <section id="hud" class="hud">
+        <div id="p0" class="panel left">
+          <div class="pname" id="p0-name">-</div>
+          <div class="bar hp">
+            <div class="trail" id="p0-trail"></div>
+            <div class="fill" id="p0-hp"></div>
+            <span class="val" id="p0-hpval">-</span>
+          </div>
+          <div class="skill">
+            <span class="skname" id="p0-skname">-</span>
+            <div class="bar cd" id="p0-cd">
+              <div class="fill" id="p0-cdfill"></div>
+              <span class="val" id="p0-cdval">-</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="p1" class="panel right">
+          <div class="pname" id="p1-name">-</div>
+          <div class="bar hp">
+            <div class="trail" id="p1-trail"></div>
+            <div class="fill" id="p1-hp"></div>
+            <span class="val" id="p1-hpval">-</span>
+          </div>
+          <div class="skill">
+            <span class="skname" id="p1-skname">-</span>
+            <div class="bar cd" id="p1-cd">
+              <div class="fill" id="p1-cdfill"></div>
+              <span class="val" id="p1-cdval">-</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <canvas id="arena" width="720" height="720"></canvas>
+    </div>
+
+    <p id="ver" class="ver">เวอร์ชัน 6</p>
   </main>
 
-  <!-- ?v=5 กันเบราว์เซอร์/GitHub Pages ใช้ไฟล์เก่าจากแคช: เวลาแก้โค้ด ให้เปลี่ยนเลขนี้ทุกที่พร้อมกัน -->
-  <script src="js/characters.js?v=5"></script>
-  <script src="js/battle.js?v=5"></script>
-  <script src="js/audio.js?v=5"></script>
-  <script src="js/main.js?v=5"></script>
+  <!-- ?v=6 กันเบราว์เซอร์/GitHub Pages ใช้ไฟล์เก่าจากแคช: เวลาแก้โค้ด ให้เปลี่ยนเลขนี้ทุกที่พร้อมกัน -->
+  <script src="js/characters.js?v=6"></script>
+  <script src="js/battle.js?v=6"></script>
+  <script src="js/audio.js?v=6"></script>
+  <script src="js/main.js?v=6"></script>
 </body>
 </html>

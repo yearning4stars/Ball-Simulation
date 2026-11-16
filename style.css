@@ -73,9 +73,7 @@ button.secondary {
 canvas {
   display: block;
   margin: 0 auto;
-  /* ค่าสำรองกรณี JS ยังไม่ทำงาน: ไม่เกินความกว้างและความสูงของจอ
-     (ตอนเกมรัน main.js จะคำนวณขนาดจากพื้นที่ว่างจริงทับค่านี้) */
-  width: min(100%, 720px, calc(100vh - 200px));
+  width: 100%; /* ความกว้างตามกล่อง #stage ซึ่ง main.js คำนวณให้พอดีจอ */
   aspect-ratio: 1 / 1; /* สนามเป็นสี่เหลี่ยมจัตุรัสเสมอ */
   height: auto;
   border-radius: 12px;
@@ -83,3 +81,91 @@ canvas {
   background: #10131d;
   touch-action: manipulation;
 }
+
+/* ---------- กล่องสนาม + แผงข้อมูลผู้เล่น ---------- */
+#stage {
+  margin: 0 auto;
+  /* ค่าสำรองกรณี JS ยังไม่ทำงาน (ตอนเกมรัน main.js จะคำนวณขนาดจากพื้นที่ว่างจริงทับค่านี้) */
+  width: min(100%, 720px, calc(100vh - 330px));
+}
+
+.hud {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.panel {
+  background: #141829;
+  border: 1px solid #232844;
+  border-radius: 10px;
+  padding: 8px 10px 10px;
+  text-align: left;
+  min-width: 0;
+  transition: opacity 0.3s, border-color 0.3s;
+}
+
+.panel.right { text-align: right; }
+.panel.dead { opacity: 0.45; }
+.panel.winner { border-color: #ffd54a; box-shadow: 0 0 0 1px rgba(255, 213, 74, 0.35); }
+
+.pname {
+  font-weight: 700;
+  font-size: clamp(0.95rem, 3.4vw, 1.15rem);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar {
+  position: relative;
+  height: 28px;
+  background: #2a2f3f;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bar .fill,
+.bar .trail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+}
+
+.panel.right .bar .fill,
+.panel.right .bar .trail { left: auto; right: 0; }
+
+.bar .trail { background: rgba(255, 255, 255, 0.55); } /* แถบเลือดที่ไหลลดตามหลัง */
+
+.bar .val {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  text-shadow: 0 0 3px #000, 0 1px 2px #000;
+  white-space: nowrap;
+}
+
+.skill { margin-top: 8px; }
+
+.skname {
+  display: block;
+  font-size: 0.8rem;
+  color: #aab2d0;
+  margin-bottom: 3px;
+}
+
+.bar.cd { height: 24px; }
+.bar.cd .fill { background: #4a8fe0; }
+.bar.cd.ready .fill { background: #3fbf5a; }
+.bar.cd.casting .fill { background: #f0a020; }
+.bar.cd .val { font-size: 0.82rem; }

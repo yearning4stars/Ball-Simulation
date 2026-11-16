@@ -89,7 +89,11 @@ btnMute.addEventListener("click", () => {
   updateMuteLabel();
 });
 for (const sel of [selA, selB]) {
-  sel.addEventListener("change", () => { sfx.unlock(); sfx.click(); });
+  sel.addEventListener("change", () => {
+    sfx.unlock();
+    sfx.click();
+    if (!battle || battle.winner !== null) setIdleHud();
+  });
 }
 
 // ---------- เอฟเฟกต์ ----------
@@ -247,47 +251,90 @@ function drawFighter(f, key) {
   ctx.restore();
 }
 
-function drawHud(b) {
-  const barW = (W - 60) / 2; // หลอดสองฝั่งพอดีความกว้างสนาม เว้นขอบ 20 และช่องกลาง 20
-  const barH = 38;
+// ---------- แผงข้อมูลผู้เล่น (HTML อยู่นอกสนาม) ----------
+const hud = [0, 1].map((i) => ({
+  panel: document.getElementById("p" + i),
+  name: document.getElementById("p" + i + "-name"),
+  trail: document.getElementById("p" + i + "-trail"),
+  fill: document.getElementById("p" + i + "-hp"),
+  hpVal: document.getElementById("p" + i + "-hpval"),
+  skName: document.getElementById("p" + i + "-skname"),
+  cdBar: document.getElementById("p" + i + "-cd"),
+  cdFill: document.getElementById("p" + i + "-cdfill"),
+  cdVal: document.getElementById("p" + i + "-cdval"),
+}));
+
+function hpColor(ratio) {
+  return ratio > 0.5 ? "#4cd964" : ratio > 0.25 ? "#ffcc00" : "#ff453a";
+}
+
+function skillLabel(def) {
+  return def.skill ? def.skill.name || def.skill.type : "ไม่มีสกิล";
+}
+
+// ก่อนเริ่มสู้: โชว์ข้อมูลของตัวละครที่เลือกไว้ในช่อง
+function setIdleHud() {
+  [selA, selB].forEach((sel, i) => {
+    const def = CHARACTERS[sel.value];
+    const h = hud[i];
+    if (!def || !h.panel) return;
+    h.panel.className = "panel " + (i === 0 ? "left" : "right");
+    h.name.textContent = def.name;
+    h.name.style.color = def.color;
+    h.trail.style.width = "100%";
+    h.fill.style.width = "100%";
+    h.fill.style.background = hpColor(1);
+    h.hpVal.textContent = def.hp + " / " + def.hp;
+    h.skName.textContent = "สกิล: " + skillLabel(def);
+    h.cdBar.className = "bar cd";
+    h.cdFill.style.width = "0%";
+    h.cdVal.textContent = def.skill ? "คูลดาวน์ " + def.skill.cooldown + " วิ" : "-";
+  });
+}
+
+// ระหว่างสู้: อัปเดตเลือดและคูลดาวน์ทุกเฟรม
+function updateHud(b) {
   b.fighters.forEach((f, i) => {
-    const x = i === 0 ? 20 : W - 20 - barW;
-    const y = 20;
-    // เลือดฝั่งผู้เล่น 2 ลดจากซ้ายไปขวา (หลอดกลับด้านกัน)
-    const rect = (ratio) => {
-      const w = barW * ratio;
-      return [i === 0 ? x : x + barW - w, y, w, barH];
-    };
-
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fillRect(x - 3, y - 3, barW + 6, barH + 6);
-    ctx.fillStyle = "#2a2f3f";
-    ctx.fillRect(x, y, barW, barH);
-
-    // แถบตามหลัง (สีขาวโปร่ง) แล้วค่อยทับด้วยเลือดจริง
-    const trail = f.trailHp === undefined ? f.hp : f.trailHp;
-    ctx.fillStyle = "rgba(255,255,255,0.55)";
-    ctx.fillRect(...rect(trail / f.maxHp));
+    const h = hud[i];
+    if (!h.panel) return;
+    const sk = f.def.skill;
+    const alive = f.hp > 0;
+    h.panel.className =
+      "panel " + (i === 0 ? "left" : "right") + (alive ? "" : " dead") + (b.winner === i ? " winner" : "");
+    h.name.textContent = f.def.name;
+    h.name.style.color = f.def.color;
 
     const ratio = f.hp / f.maxHp;
-    ctx.fillStyle = ratio > 0.5 ? "#4cd964" : ratio > 0.25 ? "#ffcc00" : "#ff453a";
-    ctx.fillRect(...rect(ratio));
+    const trail = (f.trailHp === undefined ? f.hp : f.trailHp) / f.maxHp;
+    h.fill.style.width = ratio * 100 + "%";
+    h.fill.style.background = hpColor(ratio);
+    h.trail.style.width = trail * 100 + "%";
+    h.hpVal.textContent = Math.ceil(f.hp) + " / " + f.maxHp;
+    h.skName.textContent = "สกิล: " + skillLabel(f.def);
 
-    // ตัวเลขเลือดกลางหลอด: 73 / 100
-    ctx.font = "700 24px " + FONT;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const label = Math.ceil(f.hp) + " / " + f.maxHp;
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(0,0,0,0.75)";
-    ctx.strokeText(label, x + barW / 2, y + barH / 2 + 1);
-    ctx.fillStyle = "#fff";
-    ctx.fillText(label, x + barW / 2, y + barH / 2 + 1);
-    ctx.textBaseline = "alphabetic";
-
-    ctx.font = "700 20px " + FONT;
-    ctx.textAlign = i === 0 ? "left" : "right";
-    ctx.fillText(f.def.name, i === 0 ? x : x + barW, y + barH + 26);
+    let cls = "bar cd";
+    let pct = 0;
+    let txt = "-";
+    if (sk && alive && b.winner === null) {
+      if (f.cast) {
+        cls += " casting";
+        pct = 100;
+        txt = "กำลังใช้สกิล!";
+      } else {
+        const remain = Math.max(0, f.cooldown);
+        if (remain <= 0.05) {
+          cls += " ready";
+          pct = 100;
+          txt = "พร้อมใช้!";
+        } else {
+          pct = Math.max(0, Math.min(1, 1 - remain / sk.cooldown)) * 100;
+          txt = remain.toFixed(1) + " วิ";
+        }
+      }
+    }
+    h.cdBar.className = cls;
+    h.cdFill.style.width = pct + "%";
+    h.cdVal.textContent = txt;
   });
 }
 
@@ -362,7 +409,6 @@ function render() {
       ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1;
-    drawHud(battle);
   } else {
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
@@ -385,6 +431,7 @@ function loop(ts) {
   }
   updateEffects(dt);
   render();
+  if (battle) updateHud(battle);
   requestAnimationFrame(loop);
 }
 
@@ -399,20 +446,31 @@ function loadFonts() {
 }
 
 // ---------- ปรับขนาดสนามให้พอดีจอ (ยังเป็นสี่เหลี่ยมจัตุรัส) ----------
+// ขนาดคำนวณจากพื้นที่ว่างจริง โดยหักความสูงของแผงข้อมูลผู้เล่นที่อยู่เหนือสนามออกไปด้วย
 function fitCanvas() {
-  if (typeof window === "undefined" || !window.innerHeight || !canvas.getBoundingClientRect) return;
-  const parent = canvas.parentElement;
+  if (typeof window === "undefined" || !window.innerHeight) return;
+  const stage = document.getElementById("stage");
+  if (!stage || !stage.getBoundingClientRect) return;
+  const hudBox = document.getElementById("hud");
+  const parent = stage.parentElement;
   const availW = (parent && parent.clientWidth ? parent.clientWidth : window.innerWidth) - 32;
-  // พื้นที่แนวตั้งที่เหลือใต้แถบปุ่ม เผื่อบรรทัดเวอร์ชันด้านล่างไว้ด้วย
-  const top = canvas.getBoundingClientRect().top + (window.scrollY || 0);
-  const availH = window.innerHeight - top - 48;
-  const size = Math.floor(Math.max(240, Math.min(W, availW, availH)));
-  canvas.style.width = size + "px";
-  canvas.style.height = size + "px";
+  const top = stage.getBoundingClientRect().top + (window.scrollY || 0);
+
+  let size = Math.floor(Math.max(240, Math.min(W, availW)));
+  for (let pass = 0; pass < 3; pass++) {
+    stage.style.width = size + "px";
+    // ความสูงแผงเปลี่ยนตามความกว้าง จึงวัดซ้ำจนนิ่ง
+    const hudH = hudBox && hudBox.offsetHeight ? hudBox.offsetHeight + 10 : 0;
+    const availH = window.innerHeight - top - hudH - 48; // 48 = เผื่อบรรทัดเวอร์ชันด้านล่าง
+    const next = Math.floor(Math.max(240, Math.min(W, availW, availH)));
+    if (next === size) break;
+    size = next;
+  }
+  stage.style.width = size + "px";
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 5;
+const EXPECTED_VERSION = 6;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
@@ -429,6 +487,7 @@ function checkVersions() {
 }
 
 fillSelects();
+setIdleHud();
 updateMuteLabel();
 checkVersions();
 fitCanvas();

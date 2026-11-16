@@ -7,6 +7,7 @@
 //  skill   = สกิลที่ใช้เองอัตโนมัติเมื่อคูลดาวน์หมด
 //     type "projectile": ยิงกระสุนใส่ศัตรู
 //     type "dash":       พุ่งเข้าใส่ศัตรู (ชนแล้วดาเมจแรงขึ้น)
+//     name       = ชื่อสกิลที่โชว์ในแผงข้อมูลผู้เล่น
 //     frame      = ท่าที่จะสลับไปใช้ตอนใช้สกิล
 //     duration   = ท่านั้นค้างกี่วินาที
 // ============================================================
@@ -24,6 +25,7 @@ const CHARACTERS = {
     },
     skill: {
       type: "projectile",
+      name: "ยิงปืน",
       cooldown: 1.6,
       frame: "shoot",
       duration: 0.35,
@@ -47,6 +49,7 @@ const CHARACTERS = {
     },
     skill: {
       type: "dash",
+      name: "พุ่งชน",
       cooldown: 2.2,
       frame: "dash",
       duration: 0.55,
@@ -57,6 +60,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 5;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 6;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };
