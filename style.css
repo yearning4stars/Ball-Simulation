@@ -93,14 +93,14 @@ canvas {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .panel {
   background: #141829;
   border: 1px solid #232844;
   border-radius: 10px;
-  padding: 8px 10px 10px;
+  padding: 5px 8px 6px;
   text-align: left;
   min-width: 0;
   transition: opacity 0.3s, border-color 0.3s;
@@ -112,8 +112,8 @@ canvas {
 
 .pname {
   font-weight: 700;
-  font-size: clamp(0.95rem, 3.4vw, 1.15rem);
-  margin-bottom: 4px;
+  font-size: clamp(0.85rem, 3vw, 1rem);
+  margin-bottom: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -121,7 +121,7 @@ canvas {
 
 .bar {
   position: relative;
-  height: 28px;
+  height: 20px;
   background: #2a2f3f;
   border-radius: 6px;
   overflow: hidden;
@@ -149,23 +149,29 @@ canvas {
   justify-content: center;
   height: 100%;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   color: #fff;
   text-shadow: 0 0 3px #000, 0 1px 2px #000;
   white-space: nowrap;
 }
 
-.skill { margin-top: 8px; }
+.skill { margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.panel.right .skill { flex-direction: row-reverse; }
 
 .skname {
-  display: block;
-  font-size: 0.8rem;
+  flex: 0 1 42%;
+  min-width: 0;
+  font-size: 0.7rem;
   color: #aab2d0;
-  margin-bottom: 3px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.bar.cd { height: 24px; }
+.skill .bar.cd { flex: 1; min-width: 0; }
+.bar.cd { height: 15px; border-radius: 4px; }
 .bar.cd .fill { background: #4a8fe0; }
 .bar.cd.ready .fill { background: #3fbf5a; }
 .bar.cd.casting .fill { background: #f0a020; }
-.bar.cd .val { font-size: 0.82rem; }
+.bar.cd .val { font-size: 0.68rem; }
