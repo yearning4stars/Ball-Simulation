@@ -113,6 +113,11 @@ class Battle {
     }
     this._updateProjectiles(dt);
     this._updateWaves(dt);
+    // ตัดเวลาอาจจบกลางก้าวนี้ (cast ถูกเคลียร์) ให้สถานะที่ตัววาดอ่านตรงกับความจริงเสมอ
+    if (this.eraser && !(this.eraser.cast && this.eraser.cast.sk.type === "timeerase")) {
+      this.eraser = null;
+      this.frozen = null;
+    }
     this._checkWinner();
   }
 
@@ -256,7 +261,7 @@ class Battle {
       f.x = s.x; f.y = s.y; f.vx = s.vx; f.vy = s.vy; f.knockX = s.knockX; f.knockY = s.knockY;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
       // เลือดของคนใช้สกิลย้อนกลับไปด้วย (เลือดศัตรูไม่ถูกย้อน ดาเมจที่ทำไปแล้วยังอยู่)
-      if (f === r.owner) f.hp = Math.min(f.maxHp, Math.max(f.hp, s.hp));
+      if (f === r.owner) f.hp = Math.min(f.maxHp, s.hp); // เลือดตัวเองย้อนกลับไปเท่ากับตอนนั้นเป๊ะๆ
     });
     this.projectiles = snap.projectiles.map((p) => ({ ...p }));
     this.waves = snap.waves.map((w) => ({ ...w }));

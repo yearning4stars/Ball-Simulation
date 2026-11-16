@@ -669,7 +669,7 @@ function render() {
     // หา key ของตัวละครจาก def (กันกรณีเปลี่ยน select กลางเกม)
     const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def) || keys[0];
     if (battle.winner !== null) drawWinnerBanner(battle);
-    if (battle.eraser) drawEraseBackdrop(battle);
+    if (battle.eraser && battle.eraser.cast) drawEraseBackdrop(battle);
     const gray = (on) => { ctx.filter = on ? "grayscale(1) brightness(0.8)" : "none"; };
     drawWaves(battle);
     battle.fighters.forEach((f) => {
@@ -708,7 +708,7 @@ function render() {
     }
     ctx.globalAlpha = 1;
     if (battle.rewind) drawRewindOverlay(battle);
-    if (battle.eraser) drawEraseLabel(battle);
+    if (battle.eraser && battle.eraser.cast) drawEraseLabel(battle);
     if (screenFlash > 0) {
       ctx.fillStyle = "rgba(255,255,255," + Math.min(1, screenFlash).toFixed(3) + ")";
       ctx.fillRect(0, 0, W, H);
