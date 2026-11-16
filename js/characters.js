@@ -41,6 +41,7 @@
 //        ศัตรูในรัศมี: เหม่อลอย ทำตามโชคชะตาเดิมเอง (ยังขยับ/ยิงสกิลต่อ แต่เล็งไปที่ตำแหน่งเก่าของผู้ใช้ก่อนตัดเวลา)
 //                      พอเวลากลับมาจะจำอะไรไม่ได้ ยืนงง afterStun วินาที
 //        duration, radius (รัศมีที่ศัตรูจะเหม่อลอย px), afterStun, speedMult (ผู้ใช้เร็วขึ้นกี่เท่า), homing (วิ่งเข้าหาศัตรู)
+//        ถ้าผู้ใช้ฟันโดนศัตรูระหว่างตัดเวลา ดาเมจโดนเต็มและเวลากลับมาทันที (แบบ King Crimson) ไม่ต้องรอครบ duration
 //   "rewind"      ย้อนเวลา (Mandom): ทุกอย่างในสนามย้อนกลับไป rewindSeconds วินาที เลือดคนใช้สกิลก็ย้อนด้วย
 //        duration (= กี่วินาทีที่เล่นภาพย้อน), rewindSeconds, minGain (ใช้เมื่อเสียเลือดมากกว่านี้ในช่วงที่ย้อนได้)
 //   "timeaccel"   เร่งเวลา (เฉพาะตัวเอง) นาน duration วินาที: ผู้ใช้เคลื่อนที่ เล็ง หมุนอาวุธ และคูลดาวน์เดินเร็วขึ้น rate เท่า
@@ -285,6 +286,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 13;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 14;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

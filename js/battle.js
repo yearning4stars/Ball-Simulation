@@ -204,15 +204,14 @@ class Battle {
       }
 
       if (c.t >= sk.duration) {
-        if (sk.type === "timeerase" && c.dazed && enemy.hp > 0) {
-          // เวลากลับมา: ศัตรูจำอะไรในช่วงที่ถูกตัดไม่ได้เลย ยืนงงไปครู่หนึ่ง
-          enemy.stun = Math.max(enemy.stun, sk.afterStun !== undefined ? sk.afterStun : 0.6);
-          this.events.push({ type: "confused", x: enemy.x, y: enemy.y });
+        if (sk.type === "timeerase") {
+          this._endTimeErase(f, enemy, false);
+        } else {
+          f.cast = null;
+          f.frame = "idle";
+          f.dashTimer = 0;
+          f.gcd = 0.25;
         }
-        f.cast = null;
-        f.frame = "idle";
-        f.dashTimer = 0;
-        f.gcd = 0.25;
       }
       return;
     }
@@ -269,6 +268,22 @@ class Battle {
     } else if (sk.type === "timeslow") {
       this.events.push({ type: "slow", x: f.x, y: f.y, radius: sk.radius || 300 });
     }
+  }
+
+  // จบการตัดเวลา: เวลากลับมา ศัตรูจำอะไรในช่วงที่ถูกตัดไม่ได้เลย ยืนงงไปครู่หนึ่ง
+  // broken = true เมื่อผู้ใช้โจมตีจนเวลากลับมาก่อนครบกำหนด (แบบ King Crimson)
+  _endTimeErase(f, enemy, broken) {
+    const c = f.cast;
+    if (!c || c.sk.type !== "timeerase") return;
+    if (c.dazed && enemy.hp > 0) {
+      enemy.stun = Math.max(enemy.stun, c.sk.afterStun !== undefined ? c.sk.afterStun : 0.6);
+      this.events.push({ type: "confused", x: enemy.x, y: enemy.y });
+    }
+    if (broken) this.events.push({ type: "eraseBreak", x: f.x, y: f.y });
+    f.cast = null;
+    f.frame = "idle";
+    f.dashTimer = 0;
+    f.gcd = 0.25;
   }
 
   // ---------- ย้อนเวลา ----------
@@ -397,6 +412,8 @@ class Battle {
     f.weaponDir *= -1; // ฟันโดนแล้วหมุนกลับอีกทิศ
     f.weaponCd = wp.hitCooldown || 0.4;
     this.events.push({ type: "slash", x: hx, y: hy, ang: f.weaponAng });
+    // ตัดเวลาอยู่แล้วโจมตี = เวลากลับมาทันที (แบบ King Crimson) ดาเมจนี้ยังโดนเต็ม
+    if (f.cast && f.cast.sk.type === "timeerase") this._endTimeErase(f, enemy, true);
   }
 
   // ผลักตัวละครตามทิศ (dx,dy) ตัวที่ถูกแช่แข็งไม่ถูกผลัก (ไม่งั้นแรงจะสะสมแล้วกระเด็นตอนเวลากลับมา)
@@ -718,6 +735,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 13;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 14;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

@@ -184,6 +184,10 @@ function handleEvents(events) {
       screenFlash = 0.6;
       spawnParticles(e.x, e.y, "#ff2a55", 24, 320);
       sfx.erase();
+    } else if (e.type === "eraseBreak") {
+      screenFlash = 0.5;
+      spawnParticles(e.x, e.y, "#ff2a55", 30, 380);
+      floaters.push({ x: e.x, y: e.y - 62, text: "เวลากลับมา!", life: 1.1, color: "#ff8fa8", size: 30 });
     } else if (e.type === "confused") {
       floaters.push({ x: e.x, y: e.y - 56, text: "เกิดอะไรขึ้น?", life: 1.2, color: "#ffd1dc", size: 26 });
       spawnParticles(e.x, e.y, "#ff6b8a", 10, 180);
@@ -1133,7 +1137,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 13;
+const EXPECTED_VERSION = 14;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
