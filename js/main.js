@@ -183,6 +183,13 @@ function handleEvents(events) {
     } else if (e.type === "pickWeapon") {
       floaters.push({ x: e.x, y: e.y - 62, text: "ตั้งสติได้!", life: 1.0, color: "#9be8ff", size: 26 });
       sfx.click();
+    } else if (e.type === "backstab") {
+      screenFlash = 0.3;
+      spawnParticles(e.x, e.y, "#ff2a55", 26, 360);
+      floaters.push({ x: e.x, y: e.y - 60, text: "แทงข้างหลัง! x2", life: 1.2, color: "#ff8fa8", size: 32 });
+      floaters.push({ x: e.x, y: e.y - 28, text: "ใบ้สกิล!", life: 1.2, color: "#ffd1dc", size: 26 });
+      shake = Math.max(shake, 12);
+      sfx.slash();
     } else if (e.type === "clash") {
       spawnParticles(e.x, e.y, "#fff3b0", 16, 340);
       spawnParticles(e.x, e.y, "#ffffff", 8, 240);
@@ -850,7 +857,10 @@ function updateHud(b) {
           txt = "กำลังใช้สกิล!";
         } else {
           const remain = Math.max(0, f.cds[j]);
-          if (remain <= 0.05) {
+          if (remain <= 0.05 && f.silence > 0) {
+            pct = 100;
+            txt = "ถูกใบ้!";
+          } else if (remain <= 0.05) {
             cls += " ready";
             pct = 100;
             txt = "พร้อมใช้!";
@@ -1054,6 +1064,20 @@ function render() {
         ctx.restore();
       }
     }
+    // ตัวที่ถูกใบ้สกิล: โชว์ป้ายเวลาเหนือหัว
+    for (const f of battle.fighters) {
+      if (f.silence <= 0 || f.hp <= 0) continue;
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.font = "700 20px " + FONT;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      const txt = "🚫 ใบ้สกิล " + f.silence.toFixed(1);
+      ctx.strokeText(txt, f.x, f.y - f.r - 36);
+      ctx.fillStyle = "#ffb3c6";
+      ctx.fillText(txt, f.x, f.y - f.r - 36);
+      ctx.restore();
+    }
     drawShards();
 
     for (const p of battle.projectiles) {
@@ -1157,7 +1181,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 16;
+const EXPECTED_VERSION = 17;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

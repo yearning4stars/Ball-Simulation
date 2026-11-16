@@ -17,6 +17,8 @@ const TIME_SKILLS = ["timeerase", "rewind", "timeaccel", "timeslow"];
 // จนกว่า mind จะลดลงต่ำกว่า MIND_PICKUP ค่อยหยิบอาวุธกลับมา (ห่างกันเพื่อไม่ให้สลับไปมารัวๆ)
 const MIND_DROP = 50;
 const MIND_PICKUP = 25;
+// ค่าสติที่ถูกบั่นทอน (mind) พอโดนแล้วจะ "ค้างไว้" นานเท่านี้ (วินาที) ก่อนเริ่มค่อยๆ ฟื้นกลับ (โดนซ้ำก็นับค้างใหม่)
+const MIND_HOLD = 2.5;
 
 class Battle {
   constructor(width, height, defA, defB, rng = Math.random) {
@@ -71,6 +73,8 @@ class Battle {
       dashMult: 1,
       hitFlash: 0,
       mind: 0, // ระดับสติ/ความมั่นใจที่ถูกบั่นทอน 0-100 (โดนคำพูดของ Luka)
+      mindHold: 0, // เวลาที่ mind ยังค้างอยู่ก่อนจะเริ่มฟื้น
+      silence: 0, // ถูกใบ้สกิล: ใช้สกิลไม่ได้ (ยังเดินได้) เวลาที่เหลือเป็นวินาที
       stun: 0, // เวลาที่เหลือของอาการสติแตก
       // อาวุธที่หมุนรอบตัวตลอดเวลา (เช่นดาบคาตานะ): หมุนไปเรื่อยๆ จนฟันโดนแล้วกลับทิศ
       weapon: def.weapon || null,
@@ -127,7 +131,9 @@ class Battle {
       f.tdt = fdt;
       // สติ/ความมั่นใจ (mind 0-100): ยิ่งสูงยิ่งสับสน คูลดาวน์เดินช้าลง ทิศเดินเพี้ยน
       const m = f.mind / 100;
-      f.mind = Math.max(0, f.mind - 7 * fdt);
+      if (f.mindHold > 0) f.mindHold -= fdt; // ค้างไว้ก่อน ยังไม่ฟื้น
+      else f.mind = Math.max(0, f.mind - 7 * fdt);
+      f.silence = Math.max(0, f.silence - fdt);
       if (m > 0) this._rotate(f, (this.rng() - 0.5) * 8 * m * fdt);
       const slow = 1 - 0.4 * m;
       f.gcd = Math.max(0, f.gcd - fdt * slow);
@@ -216,7 +222,8 @@ class Battle {
       } else if (sk.type === "dash" && sk.homing) {
         this._steer(f, enemy, sk.homing * dt); // เลี้ยวเข้าหาศัตรูเล็กน้อยระหว่างพุ่ง
       } else if (sk.type === "timeerase") {
-        this._steer(f, enemy, (sk.homing || 3) * dt); // ระหว่างเวลาถูกตัด วิ่งเข้าหาศัตรูเพื่อฟันสวน
+        if (sk.backstab) this._backstabRun(f, enemy, sk, c, dt); // วนไปด้านหลังศัตรูแล้วพุ่งแทง
+        else this._steer(f, enemy, (sk.homing || 3) * dt); // ระหว่างเวลาถูกตัด วิ่งเข้าหาศัตรูเพื่อฟันสวน
       } else if (sk.type === "timeaccel" && sk.hitAndRun) {
         this._hitAndRun(f, enemy, sk, c, dt); // เร่งเวลา: วิ่งวนรอบศัตรู -> พุ่งเข้าโจมตี -> หลบออก วนซ้ำ
       } else if ((sk.type === "timeaccel" || sk.type === "timeslow") && sk.homing) {
@@ -237,7 +244,7 @@ class Battle {
       return;
     }
 
-    if (f.gcd > 0) return;
+    if (f.gcd > 0 || f.silence > 0) return; // ถูกใบ้อยู่: ใช้สกิลไม่ได้ (คูลดาวน์ยังเดินต่อ)
 
     // เลือกสกิลที่พร้อมใช้ โดยให้สกิลที่รอมานานที่สุดไปก่อน (กันสกิลแรกแย่งใช้ตลอด)
     let pick = -1;
@@ -378,6 +385,47 @@ class Battle {
     }
   }
 
+  // ตัดเวลาแบบ "ลอบแทงด้านหลัง": วนรอบศัตรูไปอยู่ด้านหลัง (ฝั่งตรงข้ามกับที่ศัตรูหันหน้า) แล้วพุ่งเข้าแทง
+  // แทงสำเร็จจากด้านหลัง = ดาเมจ x damageMult และใบ้สกิลศัตรู silence วินาที (ดูที่ _updateWeapon)
+  _backstabRun(f, enemy, sk, c, dt) {
+    const bs = sk.backstab;
+    if (!c.hr) c.hr = { phase: "circle", t: 0, struck: false };
+    const s = c.hr;
+    s.t += dt;
+    const ex = f.x - enemy.x;
+    const ey = f.y - enemy.y;
+    const d = Math.hypot(ex, ey) || 0.0001;
+    const ux = ex / d;
+    const uy = ey / d;
+    const R = bs.orbitRadius || 150;
+    const backAng = enemy.facing > 0 ? Math.PI : 0; // ทิศด้านหลังศัตรู (มองจากตัวศัตรู)
+    let diff = backAng - Math.atan2(ey, ex);
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const tol = bs.angleTol || 0.5;
+    let dx, dy;
+    if (s.phase === "circle") {
+      const dir = diff >= 0 ? 1 : -1; // วนไปทางที่สั้นที่สุด
+      const corr = Math.max(-1, Math.min(1, ((R - d) / R) * 2.5));
+      dx = -uy * dir + ux * corr;
+      dy = ux * dir + uy * corr;
+      f.dashMult = bs.orbitSpeed || 1.8;
+      // ถึงด้านหลังแล้ว (หรือวนนานเกินไปเพราะติดกำแพง) -> พุ่งแทง
+      if (Math.abs(diff) <= tol || s.t >= (bs.circleMax || 2.6)) { s.phase = "strike"; s.t = 0; s.struck = false; f.weaponCd = 0; }
+    } else {
+      dx = -ux;
+      dy = -uy; // พุ่งเข้าหาศัตรู
+      f.dashMult = bs.strikeSpeed || 2.4;
+      // แทงแล้ว/โดนปัด/พุ่งนานเกิน หรือศัตรูหมุนตัวจนหลุดจากด้านหลัง -> กลับไปวนใหม่
+      if (s.struck || s.t >= (bs.strikeMax || 0.5) || Math.abs(diff) > tol * 2.5) { s.phase = "circle"; s.t = 0; }
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    const sp = Math.hypot(f.vx, f.vy) || f.def.speed;
+    f.vx = (dx / len) * sp;
+    f.vy = (dy / len) * sp;
+    f.dashTimer = 1; // ให้ _move ใช้ dashMult ที่ตั้งไว้ (ตั้งใหม่ทุกก้าว)
+  }
+
   // เร่งเวลาแบบ "วิ่งวน-โจมตี-หลบ": วนรอบศัตรูที่ระยะ orbitRadius แล้วพุ่งเข้าฟัน จากนั้นถอยออก แล้วเริ่มวนใหม่
   // ใช้เวลาจริงนับ phase (dt คือนาฬิกาของสกิล) ส่วนความเร็วเดินจริงถูกคูณ rate อยู่แล้วในลูปหลัก
   _hitAndRun(f, enemy, sk, c, dt) {
@@ -498,7 +546,7 @@ class Battle {
       f.x = s.x; f.y = s.y; f.vx = s.vx; f.vy = s.vy; f.knockX = s.knockX; f.knockY = s.knockY;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
       // เลือดของคนใช้สกิลย้อนกลับไปด้วย (เลือดศัตรูไม่ถูกย้อน ดาเมจที่ทำไปแล้วยังอยู่)
-      if (f === r.owner) { f.hp = Math.min(f.maxHp, s.hp); f.mind = s.mind; } // เลือดตัวเองย้อนกลับไปเท่ากับตอนนั้นเป๊ะๆ
+      if (f === r.owner) { f.hp = Math.min(f.maxHp, s.hp); f.mind = s.mind; f.mindHold = 0; } // เลือดตัวเองย้อนกลับไปเท่ากับตอนนั้นเป๊ะๆ
     });
     this.projectiles = snap.projectiles.map((p) => ({ ...p }));
     this.waves = snap.waves.map((w) => ({ ...w }));
@@ -563,7 +611,17 @@ class Battle {
     if (!rodHit && !headHit) return;
     if (!rodHit && headHit) { hx = f.x + hcx; hy = f.y + hcy; } // โดนที่หัวเข็มทิศ
 
-    this._damage(enemy, this._out(f, wp.damage), hx, hy);
+    // ลอบแทงด้านหลังระหว่างตัดเวลา: ดาเมจคูณ damageMult และใบ้สกิลศัตรู
+    const ce = f.cast && f.cast.sk.type === "timeerase" && f.cast.sk.backstab ? f.cast : null;
+    const behind = ce && (f.x - enemy.x) * enemy.facing < -enemy.r * 0.3;
+    let dmg = this._out(f, wp.damage);
+    if (behind) {
+      dmg = Math.round(dmg * (ce.sk.backstab.damageMult || 2));
+      enemy.silence = Math.max(enemy.silence, ce.sk.backstab.silence || 2.5);
+      if (enemy.cast) { enemy.cast = null; enemy.frame = "idle"; enemy.dashTimer = 0; } // ถูกใบ้กลางร่าย = สกิลถูกตัดทิ้ง
+      this.events.push({ type: "backstab", x: hx, y: hy });
+    }
+    this._damage(enemy, dmg, hx, hy);
     this._knock(enemy, px, py, wp.knockback || 0);
     f.weaponDir *= -1; // ฟันโดนแล้วหมุนกลับอีกทิศ
     f.weaponCd = wp.hitCooldown || 0.4;
@@ -874,6 +932,7 @@ class Battle {
 
   _hurtMind(f, amount, x, y) {
     f.mind = Math.min(100, f.mind + amount);
+    f.mindHold = MIND_HOLD;
     this.events.push({ type: "mind", x, y, amount });
     if (f.mind >= 100 && f.stun <= 0) {
       f.stun = 1.2; // สติแตก
@@ -912,6 +971,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 16;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 17;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
