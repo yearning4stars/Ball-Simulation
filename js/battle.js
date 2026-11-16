@@ -60,6 +60,8 @@ class Battle {
       dashTimer: 0,
       dashMult: 1,
       hitFlash: 0,
+      mind: 0, // ระดับสติ/ความมั่นใจที่ถูกบั่นทอน 0-100 (โดนคำพูดของ Luka)
+      stun: 0, // เวลาที่เหลือของอาการสติแตก
       // อาวุธที่หมุนรอบตัวตลอดเวลา (เช่นดาบคาตานะ): หมุนไปเรื่อยๆ จนฟันโดนแล้วกลับทิศ
       weapon: def.weapon || null,
       weaponAng: this.rng() * Math.PI * 2,
@@ -100,9 +102,21 @@ class Battle {
       f.facing = enemy.x >= f.x ? 1 : -1;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
       if (f === this.frozen) continue;
-      f.gcd = Math.max(0, f.gcd - dt);
-      for (let i = 0; i < f.cds.length; i++) f.cds[i] -= dt;
-      this._updateSkill(f, enemy, dt);
+      // สติ/ความมั่นใจ (mind 0-100): ยิ่งสูงยิ่งสับสน คูลดาวน์เดินช้าลง ทิศเดินเพี้ยน
+      const m = f.mind / 100;
+      f.mind = Math.max(0, f.mind - 7 * dt);
+      if (m > 0) this._rotate(f, (this.rng() - 0.5) * 8 * m * dt);
+      const slow = 1 - 0.4 * m;
+      f.gcd = Math.max(0, f.gcd - dt * slow);
+      for (let i = 0; i < f.cds.length; i++) f.cds[i] -= dt * slow;
+      if (f.stun > 0) {
+        f.stun -= dt; // สติแตก: ใช้สกิลไม่ได้ ขยับได้ช้า
+        f.cast = null;
+        f.frame = "idle";
+        f.dashTimer = 0;
+      } else {
+        this._updateSkill(f, enemy, dt);
+      }
       this._move(f, dt);
     }
 
@@ -208,7 +222,7 @@ class Battle {
     return {
       t: this.wt,
       fighters: this.fighters.map((f) => ({
-        x: f.x, y: f.y, vx: f.vx, vy: f.vy, knockX: f.knockX, knockY: f.knockY, hp: f.hp,
+        x: f.x, y: f.y, vx: f.vx, vy: f.vy, knockX: f.knockX, knockY: f.knockY, hp: f.hp, mind: f.mind,
       })),
       projectiles: this.projectiles.map((p) => ({ ...p })),
       waves: this.waves.map((w) => ({ ...w })),
@@ -261,7 +275,7 @@ class Battle {
       f.x = s.x; f.y = s.y; f.vx = s.vx; f.vy = s.vy; f.knockX = s.knockX; f.knockY = s.knockY;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
       // เลือดของคนใช้สกิลย้อนกลับไปด้วย (เลือดศัตรูไม่ถูกย้อน ดาเมจที่ทำไปแล้วยังอยู่)
-      if (f === r.owner) f.hp = Math.min(f.maxHp, s.hp); // เลือดตัวเองย้อนกลับไปเท่ากับตอนนั้นเป๊ะๆ
+      if (f === r.owner) { f.hp = Math.min(f.maxHp, s.hp); f.mind = s.mind; } // เลือดตัวเองย้อนกลับไปเท่ากับตอนนั้นเป๊ะๆ
     });
     this.projectiles = snap.projectiles.map((p) => ({ ...p }));
     this.waves = snap.waves.map((w) => ({ ...w }));
@@ -296,7 +310,7 @@ class Battle {
 
     // ปัดกระสุนของศัตรูทิ้ง (ทำได้ตลอด ไม่เกี่ยวกับคูลดาวน์การฟัน)
     for (const p of this.projectiles) {
-      if (p.owner === f || p.dead) continue;
+      if (p.owner === f || p.dead || p.indestructible) continue;
       const qx = p.x - f.x;
       const qy = p.y - f.y;
       const tt = Math.max(s0, Math.min(s1, qx * ca + qy * sa));
@@ -313,7 +327,7 @@ class Battle {
 
     const hx = f.x + ca * t;
     const hy = f.y + sa * t;
-    this._damage(enemy, wp.damage, hx, hy);
+    this._damage(enemy, this._out(f, wp.damage), hx, hy);
     this._knock(enemy, px, py, wp.knockback || 0);
     f.weaponDir *= -1; // ฟันโดนแล้วหมุนกลับอีกทิศ
     f.weaponCd = wp.hitCooldown || 0.4;
@@ -339,7 +353,7 @@ class Battle {
   }
 
   _fireProjectile(f, enemy, sk) {
-    const spread = sk.spread || 0;
+    const spread = (sk.spread || 0) + 0.9 * (f.mind / 100); // สติเสีย -> เล็งเพี้ยน
     const base = Math.atan2(enemy.y - f.y, enemy.x - f.x);
     const ang = base + (this.rng() - 0.5) * spread;
     const dx = Math.cos(ang);
@@ -356,7 +370,10 @@ class Battle {
       dy,
       speed: sk.projectileSpeed,
       r: sk.projectileRadius,
-      damage: sk.damage,
+      damage: this._out(f, sk.damage),
+      text: sk.texts ? sk.texts[Math.floor(this.rng() * sk.texts.length)] : null, // ข้อความบนกระสุนคำพูด
+      mindDamage: sk.mindDamage || 0, // บั่นทอนสติ/ความมั่นใจเท่าไรเมื่อโดน
+      indestructible: !!sk.indestructible, // ปัดทิ้ง/ชนแล้วไม่แตก
       owner: f,
       color: f.def.color,
       shape: sk.shape || "ball", // "ball" หรือ "note"
@@ -397,7 +414,7 @@ class Battle {
   _move(f, dt) {
     const dashing = f.dashTimer > 0;
     if (dashing) f.dashTimer -= dt;
-    const target = f.def.speed * (dashing ? f.dashMult : 1);
+    const target = f.def.speed * (dashing ? f.dashMult : 1) * (f.stun > 0 ? 0.25 : 1);
     const cur = Math.hypot(f.vx, f.vy) || 1;
     f.vx = (f.vx / cur) * target;
     f.vy = (f.vy / cur) * target;
@@ -486,7 +503,7 @@ class Battle {
     const c = attacker.cast;
     if (!c || c.sk.type !== "dash" || c.hit) return;
     c.hit = true;
-    this._damage(target, c.sk.damage, attacker.x + nx * attacker.r, attacker.y + ny * attacker.r);
+    this._damage(target, this._out(attacker, c.sk.damage), attacker.x + nx * attacker.r, attacker.y + ny * attacker.r);
     const kb = c.sk.knockback || 0;
     this._knock(target, nx, ny, kb);
   }
@@ -506,6 +523,7 @@ class Battle {
       const target = this.fighters.find((f) => f !== p.owner);
       if (target.hp > 0 && Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
         this._damage(target, p.damage, p.x, p.y);
+        if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
         // ถีบเบาๆ ตามทิศกระสุน
         target.x += p.dx * 6;
         target.y += p.dy * 6;
@@ -523,8 +541,11 @@ class Battle {
       for (let j = i + 1; j < ps.length; j++) {
         const q = ps[j];
         if (q.dead || q.owner === p.owner) continue;
+        if (p.indestructible && q.indestructible) continue; // ทะลุผ่านกันไป
         if (Math.hypot(p.x - q.x, p.y - q.y) < p.r + q.r) {
-          p.dead = q.dead = true;
+          // ฝั่งที่ทำลายไม่ได้ (โน้ต) รอด อีกฝั่งแตกอย่างเดียว
+          if (!p.indestructible) p.dead = true;
+          if (!q.indestructible) q.dead = true;
           this.events.push({ type: "deflect", x: (p.x + q.x) / 2, y: (p.y + q.y) / 2, effect: "clash" });
           break;
         }
@@ -554,7 +575,7 @@ class Battle {
             // ยิ่งคลื่นเดินทางไกล ดาเมจยิ่งลดลงเป็นเส้นตรง จากค่า damage ไปจนถึง damageFar
             const travel = Math.max(0, Math.min(1, (w.r - w.r0) / (w.maxR - w.r0)));
             const dmg = Math.max(1, Math.round(w.damage + (w.damageFar - w.damage) * travel));
-            this._damage(t, dmg, t.x - (dx / dist) * t.r, t.y - (dy / dist) * t.r);
+            this._damage(t, this._out(w.owner, dmg), t.x - (dx / dist) * t.r, t.y - (dy / dist) * t.r);
             this._knock(t, dx, dy, w.knockback);
           }
         }
@@ -582,7 +603,7 @@ class Battle {
         if (Math.abs(da) > w.halfArc + 0.1) continue;
 
         p.hitByWave = true; // กระสุนลูกหนึ่งโดนคลื่นลูกเดียวกันได้ครั้งเดียว
-        if (w.projectileEffect === "stop") {
+        if (w.projectileEffect === "stop" && !p.indestructible) {
           p.dead = true;
           changed = true;
         } else {
@@ -598,6 +619,21 @@ class Battle {
       }
     }
     if (changed) this.projectiles = this.projectiles.filter((p) => !p.dead);
+  }
+
+  // ดาเมจที่ผู้โจมตีทำได้จริง: ความมั่นใจลด (mind สูง) ดาเมจลดสูงสุด 35%
+  _out(f, dmg) {
+    return Math.max(1, Math.round(dmg * (1 - 0.35 * (f.mind / 100))));
+  }
+
+  _hurtMind(f, amount, x, y) {
+    f.mind = Math.min(100, f.mind + amount);
+    this.events.push({ type: "mind", x, y, amount });
+    if (f.mind >= 100 && f.stun <= 0) {
+      f.stun = 1.2; // สติแตก
+      f.mind = 45;
+      this.events.push({ type: "breakdown", x: f.x, y: f.y });
+    }
   }
 
   _damage(f, amount, x, y) {
@@ -628,6 +664,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 10;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 11;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

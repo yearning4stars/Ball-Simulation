@@ -150,8 +150,9 @@ function handleEvents(events) {
       shake = Math.max(shake, 6);
       sfx.hit();
     } else if (e.type === "muzzle") {
-      spawnParticles(e.x, e.y, e.sound === "note" ? "#e6b3ff" : "#fff3b0", e.sound === "note" ? 4 : 6, 200);
+      spawnParticles(e.x, e.y, e.sound === "note" ? "#e6b3ff" : e.sound === "word" ? "#b38cff" : "#fff3b0", e.sound === "note" ? 4 : 6, 200);
       if (e.sound === "note") sfx.note();
+      else if (e.sound === "word") sfx.word();
       else sfx.shoot();
     } else if (e.type === "deflect") {
       spawnParticles(e.x, e.y, "#ffffff", 8, 220);
@@ -163,6 +164,14 @@ function handleEvents(events) {
     } else if (e.type === "dash") {
       spawnParticles(e.x, e.y, "#ffffff", 12, 220);
       sfx.dash();
+    } else if (e.type === "mind") {
+      spawnParticles(e.x, e.y, "#b38cff", 8, 180);
+      floaters.push({ x: e.x + 14, y: e.y - 34, text: "สติ -" + Math.round(e.amount), life: 1.0, color: "#c9a8ff", size: 22 });
+    } else if (e.type === "breakdown") {
+      spawnParticles(e.x, e.y, "#c9a8ff", 30, 380);
+      floaters.push({ x: e.x, y: e.y - 60, text: "สติแตก!", life: 1.3, color: "#ff9bd8", size: 34 });
+      shake = Math.max(shake, 10);
+      sfx.breakdown();
     } else if (e.type === "slash") {
       spawnParticles(e.x, e.y, "#ffb3c6", 10, 300);
       shake = Math.max(shake, 4);
@@ -354,6 +363,63 @@ function drawKatana(f) {
   ctx.restore();
 }
 
+// ---------- กรอบคำพูด (กระสุนบั่นทอนสติ) ----------
+function drawWord(p) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(Math.sin(p.t * 5 + p.phase) * 0.08);
+  ctx.font = "700 17px " + FONT;
+  const w = ctx.measureText(p.text || "...").width + 22;
+  const h = 30;
+  ctx.shadowColor = p.color;
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = "rgba(24, 12, 40, 0.92)";
+  ctx.strokeStyle = "#c9a8ff";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, -h / 2, w, h, 12);
+  ctx.fill();
+  ctx.stroke();
+  // หางกรอบคำพูด ชี้ไปทางด้านหลัง (ทิศที่มา)
+  const bx = -p.dx * (w / 2 - 6);
+  ctx.beginPath();
+  ctx.moveTo(-w / 4, h / 2 - 1);
+  ctx.lineTo(-w / 4 - 6, h / 2 + 9);
+  ctx.lineTo(-w / 4 + 8, h / 2 - 1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#f1e6ff";
+  ctx.fillText(p.text || "...", 0, 1);
+  ctx.restore();
+}
+
+// ---------- ออร่าสติแตก: สัญลักษณ์วนรอบหัว + แสงม่วง ----------
+function drawMindAura(f) {
+  const lvl = Math.min(1, f.mind / 100);
+  const t = performance.now() / 1000;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.12 + 0.22 * lvl + (f.stun > 0 ? 0.2 : 0);
+  ctx.fillStyle = "#9a6bff";
+  ctx.beginPath();
+  ctx.arc(0, 0, f.r * 1.25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = Math.min(1, 0.35 + lvl);
+  ctx.font = "700 20px " + FONT;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#e0ccff";
+  const glyphs = f.stun > 0 ? ["@", "?!", "@", "…"] : ["?", "…", "!"];
+  glyphs.forEach((g, i) => {
+    const a = t * 2.4 + (i / glyphs.length) * Math.PI * 2;
+    ctx.fillText(g, Math.cos(a) * f.r * 0.9, -f.r * 1.15 + Math.sin(a) * 9);
+  });
+  ctx.restore();
+}
+
 // ---------- โน้ตดนตรี (กระสุนของ Singer) วาดด้วยโค้ด ไม่ต้องมีรูป ----------
 function drawNote(p) {
   const s = p.r;
@@ -424,6 +490,7 @@ const hud = [0, 1].map((i) => ({
   fill: document.getElementById("p" + i + "-hp"),
   hpVal: document.getElementById("p" + i + "-hpval"),
   skillBox: document.getElementById("p" + i + "-skills"),
+  mind: document.getElementById("p" + i + "-mind"),
   rows: [], // แถวสกิล: {bar, fill, val, name}
   builtFor: null, // ตัวละครที่แถวสกิลถูกสร้างไว้ให้
 }));
@@ -482,6 +549,7 @@ function setIdleHud() {
     h.fill.style.width = "100%";
     h.fill.style.background = hpColor(1);
     h.hpVal.textContent = def.hp + " / " + def.hp;
+    if (h.mind) h.mind.style.width = "0%";
     skillsOf(def).forEach((sk, j) => {
       const row = h.rows[j];
       row.bar.className = "bar cd";
@@ -511,6 +579,7 @@ function updateHud(b) {
     h.fill.style.background = hpColor(ratio);
     h.trail.style.width = trail * 100 + "%";
     h.hpVal.textContent = Math.ceil(f.hp) + " / " + f.maxHp;
+    if (h.mind) h.mind.style.width = Math.min(100, f.mind) + "%";
 
     f.skills.forEach((sk, j) => {
       const row = h.rows[j];
@@ -677,6 +746,7 @@ function render() {
       gray(f === battle.frozen); // คนที่ถูกตัดเวลาเป็นภาพขาวดำ
       drawFighter(f, keyOf(f.def));
       if (f.weapon) drawKatana(f);
+      if (f.mind > 4 || f.stun > 0) drawMindAura(f);
     });
     gray(false);
     drawShards();
@@ -684,6 +754,7 @@ function render() {
     for (const p of battle.projectiles) {
       gray(p.owner === battle.frozen);
       if (p.shape === "note") { drawNote(p); gray(false); continue; }
+      if (p.shape === "text") { drawWord(p); gray(false); continue; }
       ctx.fillStyle = "#fff6c2";
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -699,11 +770,11 @@ function render() {
       ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
     }
     ctx.globalAlpha = 1;
-    ctx.fillStyle = "#fff";
-    ctx.font = "700 30px " + FONT;
     ctx.textAlign = "center";
     for (const f of floaters) {
       ctx.globalAlpha = Math.min(1, f.life / 0.4);
+      ctx.font = "700 " + (f.size || 30) + "px " + FONT;
+      ctx.fillStyle = f.color || "#fff";
       ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1;
@@ -774,7 +845,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 10;
+const EXPECTED_VERSION = 11;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

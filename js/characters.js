@@ -26,6 +26,10 @@
 //        wobble, wobbleFreq       ให้ลอยส่ายเป็นลอน (px, ความถี่)
 //        sound: "shoot" | "note"  เสียงตอนยิง
 //        knockback                แรงผลักศัตรูตอนโดน (px/วินาที ตัวเลขน้อย = ผลักนิดเดียว)
+//        indestructible: true     กระสุนทำลายไม่ได้ (ดาบปัดไม่ได้ ชนกระสุนอื่นก็ไม่แตก คลื่น "stop" ก็ไม่ได้ผล)
+//        shape: "text" + texts: [...]  กระสุนเป็นกรอบข้อความ สุ่มคำจากรายการ
+//        mindDamage               ตอนโดนจะบั่นทอนสติ/ความมั่นใจของศัตรู (0-100):
+//                                 ดาเมจของเขาลดสูงสุด 35% เล็งเพี้ยน คูลดาวน์ช้าลง เดินส่าย ครบ 100 = สติแตก ขยับช้าใช้สกิลไม่ได้ 1.2 วิ
 //   "dash"        พุ่งเข้าหาศัตรู ชนครั้งแรกในการพุ่งแต่ละครั้งทำดาเมจ
 //        speedMult, homing (เลี้ยวเข้าหาศัตรูระหว่างพุ่ง เรเดียน/วินาที), knockback
 //   "shockwave"   ปล่อยคลื่นเสียงเป็นส่วนโค้งแผ่ออกไปทางศัตรู โดนแล้วกระเด็น
@@ -125,6 +129,25 @@ const CHARACTERS = {
         wobbleFreq: 9,
         knockback: 70, // โน้ตผลักศัตรูถอยหลังเล็กน้อยทุกครั้งที่โดน
         sound: "note",
+        indestructible: true, // โน้ตของ Luka ทำลายไม่ได้ (ดาบปัดไม่ออก ชนกระสุนอื่นก็ไม่แตก)
+      },
+      {
+        type: "projectile",
+        name: "คำพูดบั่นทอนใจ",
+        cooldown: 6.5,
+        frame: "sing", // อยากมีท่าพูดโดยเฉพาะ: เพิ่ม frame ใหม่ใน frames แล้วเปลี่ยนตรงนี้
+        duration: 1.2,
+        fireDelay: 0.2,
+        count: 3,
+        interval: 0.35,
+        spread: 0.15,
+        damage: 2, // ดาเมจเลือดนิดเดียว ตัวจริงคือบั่นทอนสติ
+        mindDamage: 20, // สติ/ความมั่นใจของศัตรูลดลงต่อคำ (เต็ม 100)
+        projectileSpeed: 300,
+        projectileRadius: 18,
+        shape: "text",
+        texts: ["เธอมันไม่พอ", "ไม่มีใครรอเธออยู่", "ยอมแพ้เถอะ", "ทุกคนผิดหวังในตัวเธอ", "ทำได้แค่นี้เหรอ"],
+        sound: "word",
       },
       {
         type: "shockwave",
@@ -197,6 +220,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 10;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 11;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

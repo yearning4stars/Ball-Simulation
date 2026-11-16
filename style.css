@@ -175,3 +175,8 @@ canvas {
 .bar.cd.ready .fill { background: #3fbf5a; }
 .bar.cd.casting .fill { background: #f0a020; }
 .bar.cd .val { font-size: 0.68rem; }
+
+/* แถบบางๆ ใต้หลอดเลือด: สติ/ความมั่นใจที่ถูกบั่นทอน (เต็ม = สติแตก) */
+.mindbar { height: 4px; margin-top: 3px; background: #2a2f3f; border-radius: 2px; overflow: hidden; }
+.mindbar .fill { height: 100%; width: 0; background: #b38cff; transition: width 0.12s; }
+.panel.right .mindbar .fill { margin-left: auto; }

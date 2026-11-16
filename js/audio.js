@@ -156,6 +156,18 @@ class SoundFX {
     this._noise(0.9, 0.12, "bandpass", 4000, 400);
   }
 
+  word() { // คำพูดบั่นทอนใจ: เสียงกระซิบแหลมต่ำ
+    if (!this._throttle("word", 120)) return;
+    this._noise(0.3, 0.12, "bandpass", 1200, 500);
+    this._tone(330, 311, 0.3, "sine", 0.07);
+    this._tone(349, 330, 0.3, "sine", 0.05);
+  }
+
+  breakdown() { // สติแตก
+    this._tone(700, 90, 0.5, "sawtooth", 0.14);
+    this._noise(0.4, 0.15, "bandpass", 3000, 300);
+  }
+
   ko() { // น็อก
     this._tone(260, 35, 0.7, "sawtooth", 0.22);
     this._noise(0.5, 0.3, "lowpass", 2200, 120);
@@ -173,6 +185,6 @@ class SoundFX {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 10;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 11;
 
 if (typeof module !== "undefined") module.exports = { SoundFX };
