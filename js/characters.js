@@ -50,6 +50,7 @@
 //        hitAndRun (ไม่บังคับ) วิ่งวนรอบศัตรู -> พุ่งเข้าโจมตี -> หลบออก วนซ้ำตลอดช่วงเร่งเวลา (ถ้าใส่ จะใช้แทน homing)
 //        hpRush (ใส่ได้ทุกสกิล) ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: 1 เท่าตอนเลือดเต็ม -> hpRush เท่าตอนเลือดหมด
 //        stunNear, stunRange (shockwave) ถ้าโดนคลื่นตอนคลื่นเดินทางไม่เกิน stunRange (0-1 ของระยะทั้งหมด) จะติดสตั้น stunNear วินาที
+//        restAfter (ใส่ได้ทุกสกิล) ใช้สกิลเสร็จแล้วพักกี่วินาทีก่อนใช้สกิลถัดไป ไม่ใส่ = 0.25
 //        backstab (ใส่ในสกิล timeerase) วนไปด้านหลังศัตรูแล้วแทง สำเร็จ = ดาเมจ damageMult เท่า + ใบ้สกิลศัตรู silence วินาที
 //        weapon ชนกับ weapon ของอีกฝ่าย (เช่น ดาบ FuNx กับเข็มทิศ Johan) จะปัดกันและเด้งออกทั้งคู่ ไม่ต้องตั้งค่าอะไร
 //        ramDamage/ramKnockback (ใส่ใน weapon) ตอนสติแตกหนัก (mind >= 50) ตัวที่ถืออาวุธจะทิ้งอาวุธแล้ววิ่งชนศัตรูแทน จนสติลดต่ำกว่า 25 ค่อยหยิบกลับ
@@ -160,7 +161,7 @@ const CHARACTERS = {
         interval: 0.35,
         spread: 0.15,
         damage: 2, // ดาเมจเลือดนิดเดียว ตัวจริงคือบั่นทอนสติ
-        mindDamage: 11, // สติ/ความมั่นใจของศัตรูลดลงต่อคำ (เต็ม 100) เดิม 20
+        mindDamage: 20, // สติ/ความมั่นใจของศัตรูลดลงต่อคำ (เต็ม 100) โดน 3 คำ = สติเหลือ ~40 -> ทิ้งอาวุธแล้วคลั่งวิ่งชน
         projectileSpeed: 300,
         projectileRadius: 18,
         shape: "text",
@@ -236,6 +237,8 @@ const CHARACTERS = {
           orbitSpeed: 1.8, // ตัวคูณความเร็วตอนวน
           strikeSpeed: 2.4, // ตัวคูณความเร็วตอนพุ่งแทง
           angleTol: 0.5, // อยู่ในมุมด้านหลังไม่เกินกี่เรเดียน ถึงจะพุ่งแทง
+          retreatSpeed: 2.0, // ตัวคูณความเร็วตอนถอยหลังออกห่างก่อนวน (และถอยใหม่หลังแทงพลาด)
+          retreatMax: 0.7, // ถอยนานสุดกี่วินาที
         },
       },
       {
@@ -284,8 +287,9 @@ const CHARACTERS = {
       {
         type: "timeaccel",
         name: "เร่งเวลา",
-        cooldown: 12,
-        initialCooldown: 3,
+        cooldown: 18, // เดิม 12
+        initialCooldown: 5, // เดิม 3
+        restAfter: 2.5, // ใช้เสร็จแล้วพักก่อนใช้สกิลถัดไปกี่วินาที (ไม่ใส่ = 0.25)
         frame: "accel",
         duration: 4, // เร่งเวลาตัวเอง 4 วินาที (วินาทีจริง)
         rate: 2, // ตัวเองเร็วขึ้น 2 เท่า (เดิน หมุนอาวุธ คูลดาวน์)
@@ -303,8 +307,9 @@ const CHARACTERS = {
       {
         type: "timeslow",
         name: "ชะลอเวลา",
-        cooldown: 14,
-        initialCooldown: 7,
+        cooldown: 20, // เดิม 14
+        initialCooldown: 10, // เดิม 7
+        restAfter: 2.5,
         frame: "slow",
         duration: 5, // วงชะลอเวลาอยู่ 5 วินาที (วินาทีจริง)
         radius: 300, // ใครอยู่ในรัศมีนี้ (px) รอบตัว Johan จะช้าลง
@@ -316,6 +321,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 17;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 18;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

@@ -238,7 +238,7 @@ class Battle {
           f.cast = null;
           f.frame = "idle";
           f.dashTimer = 0;
-          f.gcd = 0.25;
+          f.gcd = sk.restAfter !== undefined ? sk.restAfter : 0.25; // พักก่อนใช้สกิลถัดไป
         }
       }
       return;
@@ -389,7 +389,7 @@ class Battle {
   // แทงสำเร็จจากด้านหลัง = ดาเมจ x damageMult และใบ้สกิลศัตรู silence วินาที (ดูที่ _updateWeapon)
   _backstabRun(f, enemy, sk, c, dt) {
     const bs = sk.backstab;
-    if (!c.hr) c.hr = { phase: "circle", t: 0, struck: false };
+    if (!c.hr) c.hr = { phase: "retreat", t: 0, struck: false }; // เริ่มด้วยการถอยหลังออกห่างก่อน
     const s = c.hr;
     s.t += dt;
     const ex = f.x - enemy.x;
@@ -404,7 +404,13 @@ class Battle {
     while (diff < -Math.PI) diff += Math.PI * 2;
     const tol = bs.angleTol || 0.5;
     let dx, dy;
-    if (s.phase === "circle") {
+    if (s.phase === "retreat") {
+      // ถอยหลังออกจากศัตรูให้ได้ระยะวน (หรือถอยนานเกินไปเพราะติดกำแพง) แล้วค่อยวนไปด้านหลัง
+      dx = ux;
+      dy = uy;
+      f.dashMult = bs.retreatSpeed || 2.0;
+      if (d >= R * 0.92 || s.t >= (bs.retreatMax || 0.7)) { s.phase = "circle"; s.t = 0; }
+    } else if (s.phase === "circle") {
       const dir = diff >= 0 ? 1 : -1; // วนไปทางที่สั้นที่สุด
       const corr = Math.max(-1, Math.min(1, ((R - d) / R) * 2.5));
       dx = -uy * dir + ux * corr;
@@ -416,8 +422,8 @@ class Battle {
       dx = -ux;
       dy = -uy; // พุ่งเข้าหาศัตรู
       f.dashMult = bs.strikeSpeed || 2.4;
-      // แทงแล้ว/โดนปัด/พุ่งนานเกิน หรือศัตรูหมุนตัวจนหลุดจากด้านหลัง -> กลับไปวนใหม่
-      if (s.struck || s.t >= (bs.strikeMax || 0.5) || Math.abs(diff) > tol * 2.5) { s.phase = "circle"; s.t = 0; }
+      // แทงแล้ว/โดนปัด/พุ่งนานเกิน หรือศัตรูหมุนตัวจนหลุดจากด้านหลัง -> ถอยออกแล้ววนไปแทงใหม่
+      if (s.struck || s.t >= (bs.strikeMax || 0.5) || Math.abs(diff) > tol * 2.5) { s.phase = "retreat"; s.t = 0; }
     }
     const len = Math.hypot(dx, dy) || 1;
     const sp = Math.hypot(f.vx, f.vy) || f.def.speed;
@@ -971,6 +977,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 17;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 18;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
