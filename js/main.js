@@ -1579,7 +1579,7 @@ function fitCanvas() {
   if (!stage || !stage.getBoundingClientRect) return;
   const hudBox = document.getElementById("hud");
   const parent = stage.parentElement;
-  const availW = (parent && parent.clientWidth ? parent.clientWidth : window.innerWidth) - 32;
+  const availW = (parent && parent.clientWidth ? parent.clientWidth : window.innerWidth) - 16;
   const top = stage.getBoundingClientRect().top + (window.scrollY || 0);
 
   let size = Math.floor(Math.max(240, Math.min(W, availW)));
@@ -1587,7 +1587,7 @@ function fitCanvas() {
     stage.style.width = size + "px";
     // ความสูงแผงเปลี่ยนตามความกว้าง จึงวัดซ้ำจนนิ่ง
     const hudH = hudBox && hudBox.offsetHeight ? hudBox.offsetHeight + 10 : 0;
-    const availH = window.innerHeight - top - hudH - 48; // 48 = เผื่อบรรทัดเวอร์ชันด้านล่าง
+    const availH = window.innerHeight - top - hudH - 26; // 26 = เผื่อบรรทัดเวอร์ชันด้านล่าง
     const next = Math.floor(Math.max(240, Math.min(W, availW, availH)));
     if (next === size) break;
     size = next;
@@ -1596,7 +1596,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 26;
+const EXPECTED_VERSION = 27;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

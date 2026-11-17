@@ -16,7 +16,7 @@ const TIME_SKILLS = ["timeerase", "rewind", "timeaccel", "timeslow"];
 // สติแตกหนัก: mind >= MIND_DROP แล้วตัวที่ถือ weapon จะทิ้งอาวุธ และหันไปใช้ "การชนโจมตี" แทน
 // จนกว่า mind จะลดลงต่ำกว่า MIND_PICKUP ค่อยหยิบอาวุธกลับมา (ห่างกันเพื่อไม่ให้สลับไปมารัวๆ)
 const MIND_DROP = 50;
-const MIND_PICKUP = 26;
+const MIND_PICKUP = 27;
 // ค่าสติที่ถูกบั่นทอน (mind) พอโดนแล้วจะ "ค้างไว้" นานเท่านี้ (วินาที) ก่อนเริ่มค่อยๆ ฟื้นกลับ (โดนซ้ำก็นับค้างใหม่)
 const MIND_HOLD = 2.5;
 
@@ -1637,6 +1637,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 26;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 27;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
