@@ -58,6 +58,11 @@
 //        (ขยับ ยิงสกิล คูลดาวน์ ฟันดาบ ช้าลงหมด) ผู้ใช้ไม่ถูกชะลอ วงชะลอเคลื่อนที่ตามผู้ใช้ ขอบวงค่อยๆ จาง
 //        duration (วินาทีจริง), radius (px), factor (0-1 ยิ่งน้อยยิ่งช้า), homing (วิ่งเข้าหาศัตรูระหว่างชะลอ ไม่ใส่ = ไม่วิ่งเข้าหา)
 //
+//   "metavision"  Meta Vision (Isagi) มองเห็นอนาคตที่เป็นไปได้ นาน duration วินาที: คำนวณวิถีกระสุน/คลื่น/การพุ่งของศัตรูล่วงหน้า lookahead วินาที
+//        ถ้าจะโดนก็สไลด์หลบทันที (ท่านั้นพลาดเป้า) หลบได้ maxDodges ครั้ง พักระหว่างหลบ dodgeCd วินาที dodgePower = แรงสไลด์
+//        counterKick: true = จบแล้วลูกเตะพร้อมยิงสวนทันที ตัดเวลา (ตัดเวลา/ย้อนเวลา ฯลฯ) หลบไม่ได้ เพราะไม่ใช่สิ่งที่มองเห็นล่วงหน้าได้
+//        projectile เพิ่ม: lead (เล็งนำหน้าศัตรูที่กำลังเคลื่อนที่), bounces (กระสุนสะท้อนกำแพงได้กี่ครั้ง), shape: "soccer" (ลูกฟุตบอล)
+//
 //  weapon (ไม่บังคับ) อาวุธที่หมุนรอบตัวตลอดเวลา หมุนไปเรื่อยๆ จนฟันโดนศัตรูแล้วกลับทิศ
 //        length (ความยาวใบดาบ), width, startRatio (จุดจับ เทียบรัศมีตัว), damage, spinSpeed (เรเดียน/วินาที),
 //        hitCooldown (พักก่อนฟันซ้ำได้), knockback, aimBoost/aimRange (เร่งหมุนเมื่อศัตรูอยู่ในระยะ ให้ฟันแม่นขึ้น)
@@ -318,9 +323,55 @@ const CHARACTERS = {
       },
     ],
   },
+  // Isagi (Blue Lock): เตะบอลเป็นการโจมตี + Meta Vision มองเห็นอนาคตที่เป็นไปได้แล้วหลบสกิลศัตรู
+  // ภาพ: assets/characters/isagi/idle.png, kick.png (ท่าเตะ), meta.png (ท่า Meta Vision)  ลูกบอลกับเส้นอนาคต เกมวาดให้เองด้วยโค้ด
+  isagi: {
+    name: "Isagi",
+    color: "#2f7bff",
+    hp: 90,
+    speed: 190,
+    radius: 36,
+    frames: {
+      idle: "assets/characters/isagi/idle.png",
+      kick: "assets/characters/isagi/kick.png",
+      meta: "assets/characters/isagi/meta.png",
+    },
+    skills: [
+      {
+        type: "projectile",
+        name: "เตะบอล (Direct Shot)",
+        cooldown: 2.0,
+        frame: "kick",
+        duration: 0.5,
+        fireDelay: 0.18, // เงื้อเท้าก่อนแล้วค่อยเตะ
+        damage: 13,
+        projectileSpeed: 560,
+        projectileRadius: 13,
+        shape: "soccer", // ลูกฟุตบอลหมุนติ้ว
+        lead: true, // เล็งนำหน้าศัตรู (คำนวณจุดที่ลูกบอลจะไปเจอศัตรู ไม่ใช่เล็งที่ตำแหน่งปัจจุบัน)
+        bounces: 1, // บอลสะท้อนกำแพงได้ 1 ครั้งแล้วยังอันตรายต่อ
+        knockback: 140,
+        sound: "kick",
+      },
+      {
+        type: "metavision",
+        name: "Meta Vision",
+        cooldown: 13,
+        initialCooldown: 4,
+        frame: "meta",
+        duration: 5, // มองเห็นอนาคต 5 วินาที
+        lookahead: 0.9, // มองล่วงหน้ากี่วินาที
+        maxDodges: 5, // หลบได้กี่ครั้งต่อการใช้ 1 ครั้ง (ท่าถี่เกินไปก็หลบไม่ทัน)
+        dodgeCd: 0.28, // พักสั้นๆ ระหว่างการหลบแต่ละครั้ง
+        dodgePower: 620, // แรงสไลด์หลบ (px/วินาที ยิ่งมากยิ่งเลื่อนไกล)
+        counterKick: true, // จบ Meta Vision แล้วเตะสวนทันที (รีเซ็ตคูลดาวน์ลูกเตะ)
+        restAfter: 0.4,
+      },
+    ],
+  },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 18;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 19;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

@@ -219,6 +219,8 @@ class Battle {
           c.fired = true;
           this._fireWave(f, enemy, sk);
         }
+      } else if (sk.type === "metavision") {
+        this._metaVision(f, enemy, sk, c, dt); // มองเห็นอนาคต: หลบกระสุน/คลื่น/การพุ่งของศัตรู
       } else if (sk.type === "dash" && sk.homing) {
         this._steer(f, enemy, sk.homing * dt); // เลี้ยวเข้าหาศัตรูเล็กน้อยระหว่างพุ่ง
       } else if (sk.type === "timeerase") {
@@ -235,6 +237,11 @@ class Battle {
         if (sk.type === "timeerase") {
           this._endTimeErase(f, enemy, false);
         } else {
+          if (sk.type === "metavision" && sk.counterKick) {
+            // จบ Meta Vision: เห็นช่องว่างของศัตรูแล้ว ลูกเตะพร้อมยิงสวนทันที
+            for (let i = 0; i < f.skills.length; i++) if (f.skills[i].type === "projectile") f.cds[i] = Math.min(f.cds[i], 0.15);
+            this.events.push({ type: "metaEnd", x: f.x, y: f.y });
+          }
           f.cast = null;
           f.frame = "idle";
           f.dashTimer = 0;
@@ -293,6 +300,10 @@ class Battle {
     } else if (sk.type === "timeaccel") {
       // เร่งเวลาตัวเอง: ความเร็วเดินจริงถูกคูณ rate ในลูปหลัก (ดู fdt) ที่นี่แค่ประกาศเริ่ม
       this.events.push({ type: "accel", x: f.x, y: f.y, rate: sk.rate || 2 });
+    } else if (sk.type === "metavision") {
+      f.cast.dodges = 0;
+      f.cast.dodgeCd = 0.1;
+      this.events.push({ type: "metaStart", x: f.x, y: f.y });
     } else if (sk.type === "timeslow") {
       this.events.push({ type: "slow", x: f.x, y: f.y, radius: sk.radius || 300 });
     }
@@ -300,6 +311,91 @@ class Battle {
 
   // ---------- อาวุธชนอาวุธ (clash) ----------
   // รูปทรงของอาวุธเป็นแคปซูลหลายชิ้น: ก้าน (จากจุดจับถึงปลาย) และหัวเข็มทิศ (วงกลม ถ้ามี)
+  // ---------- Meta Vision (Isagi) ----------
+  // ทุกก้าว: จำลองอนาคต lookahead วินาที ถ้ากระสุน/คลื่น/การพุ่งของศัตรูจะโดนตัว ก็สไลด์หลบแล้วทำให้ท่านั้นพลาดเป้า
+  // (เก็บจำนวนครั้งที่หลบใน c.dodges และพักสั้นๆ ระหว่างหลบ ถ้าท่ามาถี่เกินไปก็อาจโดนบ้าง)
+  _metaVision(f, enemy, sk, c, dt) {
+    c.dodgeCd = Math.max(0, (c.dodgeCd || 0) - dt);
+    c.threats = []; // ให้ตัววาดเอาไปวาดเส้น "อนาคตที่เห็น"
+    const look = sk.lookahead || 0.9;
+    const maxD = sk.maxDodges !== undefined ? sk.maxDodges : 5;
+    const threats = [];
+
+    // กระสุนศัตรู: หาจุดที่เข้าใกล้ตัวมากที่สุดบนเส้นทางตรง
+    for (const p of this.projectiles) {
+      if (p.owner === f || p.dead || p.evadedBy === f) continue;
+      const ps = this._timeScale(p.x, p.y, p.owner);
+      const sp = p.speed * ps;
+      if (sp <= 0) continue;
+      const rx = f.x - p.bx;
+      const ry = f.y - p.by;
+      const tc = (rx * p.dx + ry * p.dy) / sp; // เวลาที่เข้าใกล้ที่สุด
+      if (tc < 0 || tc > look) continue;
+      const cx = p.bx + p.dx * sp * tc - f.x;
+      const cy = p.by + p.dy * sp * tc - f.y;
+      if (Math.hypot(cx, cy) > f.r + p.r + (p.wobble || 0) + 10) continue;
+      threats.push({ kind: "p", ref: p, t: tc, dx: p.dx, dy: p.dy, side: p.dx * (f.y - p.by) - p.dy * (f.x - p.bx) });
+      c.threats.push({ x: p.x, y: p.y, ex: p.bx + p.dx * sp * Math.min(look, tc + 0.15), ey: p.by + p.dy * sp * Math.min(look, tc + 0.15) });
+    }
+    // คลื่นเสียงของศัตรู: จะแผ่มาถึงตัวภายใน lookahead และตัวอยู่ในส่วนโค้ง
+    for (const w of this.waves) {
+      if (w.owner === f || w.hit || w.evadedBy === f) continue;
+      const dx = f.x - w.x;
+      const dy = f.y - w.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+      let da = Math.atan2(dy, dx) - w.ang;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      const slack = Math.asin(Math.min(1, f.r / dist));
+      if (Math.abs(da) > w.halfArc + slack) continue;
+      const tt = Math.max(0, (dist - f.r - w.r) / w.speed);
+      if (tt > look || dist - f.r > w.maxR) continue;
+      threats.push({ kind: "w", ref: w, t: tt, dx: Math.cos(w.ang), dy: Math.sin(w.ang), side: da >= 0 ? 1 : -1 });
+      c.threats.push({ x: w.x + Math.cos(w.ang) * w.r, y: w.y + Math.sin(w.ang) * w.r, ex: f.x, ey: f.y });
+    }
+    // ศัตรูกำลังพุ่งชน: ยังไม่ชนและกำลังพุ่งมาทางนี้
+    const ec = enemy.cast;
+    if (ec && ec.sk.type === "dash" && !ec.hit && enemy.dashTimer > 0) {
+      const dx = f.x - enemy.x;
+      const dy = f.y - enemy.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+      const sp = Math.hypot(enemy.vx, enemy.vy) || 1;
+      const closing = (enemy.vx * dx + enemy.vy * dy) / (sp * dist); // 1 = พุ่งตรงมาที่เรา
+      if (closing > 0.6 && (dist - f.r - enemy.r) / sp <= look) {
+        threats.push({ kind: "d", ref: ec, t: (dist - f.r - enemy.r) / sp, dx: enemy.vx / sp, dy: enemy.vy / sp, side: (enemy.vx / sp) * dy - (enemy.vy / sp) * dx });
+        c.threats.push({ x: enemy.x, y: enemy.y, ex: f.x, ey: f.y });
+      }
+    }
+
+    if (!threats.length || c.dodgeCd > 0 || c.dodges >= maxD) return;
+
+    // หลบ: สไลด์ตั้งฉากกับทิศที่ท่ามา เลือกฝั่งที่ไม่ชนกำแพง (ไม่ชอบฝั่งที่อยู่ติดกำแพง)
+    const first = threats.reduce((a, b) => (b.t < a.t ? b : a));
+    let nx = -first.dy;
+    let ny = first.dx;
+    let sign = first.side >= 0 ? -1 : 1; // หนีไปฝั่งตรงข้ามกับที่ท่าเฉียดมาทางนั้น
+    const margin = f.r * 2.2;
+    const room = (sg) => {
+      const px = f.x + nx * sg * 120;
+      const py = f.y + ny * sg * 120;
+      return Math.min(px, this.w - px, py, this.h - py);
+    };
+    if (room(sign) < margin && room(-sign) > room(sign)) sign = -sign;
+    nx *= sign;
+    ny *= sign;
+    const power = sk.dodgePower || 620;
+    this._knock(f, nx, ny, power);
+    // ท่าทั้งหมดที่เห็นว่าจะโดนในช่วงเวลาใกล้กัน (ภายใน 0.35 วินาทีจากท่าแรก) ถือว่าหลบพร้อมกัน
+    for (const th of threats) {
+      if (th.t - first.t > 0.35) continue;
+      if (th.kind === "d") th.ref.hit = true; // การพุ่งพลาดเป้า (ถือว่าใช้ไปแล้ว)
+      else th.ref.evadedBy = f;
+    }
+    c.dodges++;
+    c.dodgeCd = sk.dodgeCd !== undefined ? sk.dodgeCd : 0.28;
+    this.events.push({ type: "dodge", x: f.x, y: f.y, nx, ny, left: maxD - c.dodges });
+  }
+
   _weaponShapes(f) {
     const wp = f.weapon;
     const s0 = f.r * (wp.startRatio || 0.5);
@@ -657,7 +753,22 @@ class Battle {
 
   _fireProjectile(f, enemy, sk) {
     const spread = (sk.spread || 0) + 0.9 * (f.mind / 100); // สติเสีย -> เล็งเพี้ยน
-    const base = Math.atan2(enemy.y - f.y, enemy.x - f.x);
+    let tx = enemy.x;
+    let ty = enemy.y;
+    if (sk.lead && f.def.speed) {
+      // เล็งนำหน้า: หาจุดที่ลูกบอลไปเจอศัตรูที่กำลังเคลื่อนที่ (วนคำนวณ 3 รอบพอ)
+      const evx = enemy.vx + enemy.knockX;
+      const evy = enemy.vy + enemy.knockY;
+      for (let i = 0; i < 3; i++) {
+        const tt = Math.hypot(tx - f.x, ty - f.y) / sk.projectileSpeed;
+        tx = enemy.x + evx * tt;
+        ty = enemy.y + evy * tt;
+      }
+      // ทำนายแล้วทะลุกำแพง -> เล็งไปที่ขอบสนามแทน
+      tx = Math.max(10, Math.min(this.w - 10, tx));
+      ty = Math.max(10, Math.min(this.h - 10, ty));
+    }
+    const base = Math.atan2(ty - f.y, tx - f.x);
     const ang = base + (this.rng() - 0.5) * spread;
     const dx = Math.cos(ang);
     const dy = Math.sin(ang);
@@ -684,6 +795,7 @@ class Battle {
       wobble: sk.wobble || 0, // ความกว้างการส่าย (px)
       wobbleFreq: sk.wobbleFreq || 10,
       knockback: sk.knockback || 0, // แรงผลักศัตรูตอนโดน (เช่นโน้ตของ Luka)
+      bounces: sk.bounces || 0, // สะท้อนกำแพงได้อีกกี่ครั้ง (ลูกเตะของ Isagi)
       phase: this.rng() * Math.PI * 2,
       t: 0,
       spin: (this.rng() - 0.5) * 0.6,
@@ -821,8 +933,25 @@ class Battle {
       p.x = p.bx - p.dy * off;
       p.y = p.by + p.dx * off;
 
+      if (p.bounces > 0) {
+        // สะท้อนกำแพง (ฐานตำแหน่ง bx,by) แล้วบอลยังอันตรายอยู่
+        let bounced = false;
+        if (p.bx < p.r) { p.bx = p.r; p.dx = Math.abs(p.dx); bounced = true; }
+        else if (p.bx > this.w - p.r) { p.bx = this.w - p.r; p.dx = -Math.abs(p.dx); bounced = true; }
+        if (p.by < p.r) { p.by = p.r; p.dy = Math.abs(p.dy); bounced = true; }
+        else if (p.by > this.h - p.r) { p.by = this.h - p.r; p.dy = -Math.abs(p.dy); bounced = true; }
+        if (bounced) {
+          p.bounces--;
+          p.x = p.bx;
+          p.y = p.by;
+          this.events.push({ type: "bounce", x: p.x, y: p.y });
+        }
+      }
       const target = this.fighters.find((f) => f !== p.owner);
-      if (target === this.eraser) {
+      if (p.evadedBy === target) {
+        // เป้าหมายมองเห็นอนาคตแล้วหลบไปแล้ว: กระสุนพลาดเป้า บินผ่านไป
+        if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) p.dead = true;
+      } else if (target === this.eraser) {
         // เป้าหมายอยู่นอกความจริง: กระสุนบินทะลุผ่านความว่างเปล่าไป
         if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) p.dead = true;
       } else if (target.hp > 0 && Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
@@ -866,7 +995,7 @@ class Battle {
       w.r += w.speed * dt * ws;
       if (!w.hit) {
         const t = this.fighters.find((f) => f !== w.owner);
-        if (t.hp > 0 && t !== this.eraser) { // คนที่ตัดเวลาอยู่ คลื่นทะลุผ่านตัวไป
+        if (t.hp > 0 && t !== this.eraser && w.evadedBy !== t) { // คนที่ตัดเวลาอยู่ / หลบไปแล้ว คลื่นทะลุผ่านตัวไป
           const dx = t.x - w.x;
           const dy = t.y - w.y;
           const dist = Math.hypot(dx, dy) || 0.0001;
@@ -977,6 +1106,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 18;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 19;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

@@ -156,6 +156,7 @@ function handleEvents(events) {
     } else if (e.type === "muzzle") {
       spawnParticles(e.x, e.y, e.sound === "note" ? "#fff1a8" : e.sound === "word" ? "#ffe27a" : "#fff3b0", e.sound === "note" ? 4 : 6, 200);
       if (e.sound === "note") sfx.note();
+      else if (e.sound === "kick") sfx.kick();
       else if (e.sound === "word") sfx.word();
       else sfx.shoot();
     } else if (e.type === "deflect") {
@@ -228,6 +229,22 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, "#45e0c0", 24, 300);
       floaters.push({ x: e.x, y: e.y - 62, text: "ชะลอเวลา!", life: 1.1, color: "#7ff5dc", size: 30 });
       sfx.slow();
+    } else if (e.type === "metaStart") {
+      screenFlash = 0.2;
+      spawnParticles(e.x, e.y, "#6fd3ff", 22, 300);
+      floaters.push({ x: e.x, y: e.y - 62, text: "Meta Vision!", life: 1.2, color: "#8fe0ff", size: 30 });
+      sfx.meta();
+    } else if (e.type === "metaEnd") {
+      spawnParticles(e.x, e.y, "#6fd3ff", 12, 220);
+      floaters.push({ x: e.x, y: e.y - 62, text: "เห็นช่องว่างแล้ว!", life: 1.0, color: "#8fe0ff", size: 26 });
+    } else if (e.type === "dodge") {
+      const f = battle.fighters.find((g) => g.hp > 0 && Math.hypot(g.x - e.x, g.y - e.y) < 1);
+      if (f) for (let i = 0; i < 4; i++) ghosts.push({ key: charKey(f.def), x: f.x - e.nx * i * 14, y: f.y - e.ny * i * 14, r: f.r, vy: f.vy, facing: f.facing, frame: f.frame, life: 0.35, tint: "blue" });
+      spawnParticles(e.x, e.y, "#6fd3ff", 14, 280);
+      floaters.push({ x: e.x, y: e.y - 56, text: "หลบ!", life: 0.8, color: "#8fe0ff", size: 28 });
+      sfx.dodge();
+    } else if (e.type === "bounce") {
+      spawnParticles(e.x, e.y, "#ffffff", 8, 200);
     } else if (e.type === "rewind") {
       screenFlash = 0.35;
       sfx.rewind();
@@ -605,7 +622,7 @@ function drawGhosts() {
   for (const g of ghosts) {
     ctx.save();
     ctx.globalAlpha = Math.max(0, g.life / 0.3) * 0.35;
-    ctx.filter = "sepia(1) saturate(4) brightness(1.1)";
+    ctx.filter = g.tint === "blue" ? "sepia(1) hue-rotate(160deg) saturate(5) brightness(1.2)" : "sepia(1) saturate(4) brightness(1.1)";
     drawFighter({ x: g.x, y: g.y, r: g.r, vy: g.vy, facing: g.facing, frame: g.frame, hitFlash: 0, def: CHARACTERS[g.key] }, g.key);
     ctx.restore();
   }
@@ -622,6 +639,100 @@ function drawTimeLabel(txt, color) {
   ctx.strokeText(txt, W / 2, 42);
   ctx.fillStyle = color;
   ctx.fillText(txt, W / 2, 42);
+  ctx.restore();
+}
+
+// ---------- ลูกฟุตบอล (กระสุนของ Isagi) ----------
+function drawSoccer(p) {
+  const r = p.r;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.t * 14 * (p.spin >= 0 ? 1 : -1));
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#1a1a22";
+  const pent = (cx, cy, rad, rot) => {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = rot + (i / 5) * Math.PI * 2;
+      const x = cx + Math.cos(a) * rad;
+      const y = cy + Math.sin(a) * rad;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+  pent(0, 0, r * 0.42, -Math.PI / 2);
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + (i / 5) * Math.PI * 2 + Math.PI / 5;
+    pent(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95, r * 0.32, a);
+  }
+  ctx.restore();
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+// ---------- Meta Vision: ออร่าฟ้า ตา และเส้น "อนาคตที่มองเห็น" ----------
+function drawMetaAura(f) {
+  const t = performance.now() / 1000;
+  const R = f.r * 1.45;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.16 + 0.06 * Math.sin(t * 6);
+  ctx.fillStyle = "#4fb8ff";
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 0.85;
+  ctx.strokeStyle = "#8fe0ff";
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([4, 7]);
+  ctx.lineDashOffset = t * 40;
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // ดวงตาเหนือหัว
+  const ey = -f.r - 20;
+  ctx.fillStyle = "rgba(10,30,60,0.8)";
+  ctx.beginPath();
+  ctx.ellipse(0, ey, 20, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#8fe0ff";
+  ctx.beginPath();
+  ctx.arc(0, ey, 5.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// เส้นอนาคตที่ Isagi เห็น: เส้นประจากท่าของศัตรูไปจุดที่จะโดน
+function drawMetaThreats(f) {
+  const th = f.cast && f.cast.threats;
+  if (!th || !th.length) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(143,224,255,0.75)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.lineDashOffset = -performance.now() / 40;
+  for (const q of th) {
+    ctx.beginPath();
+    ctx.moveTo(q.x, q.y);
+    ctx.lineTo(q.ex, q.ey);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(143,224,255,0.85)";
+  for (const q of th) {
+    ctx.beginPath();
+    ctx.arc(q.ex, q.ey, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -1043,6 +1154,7 @@ function render() {
       if (f === battle.eraser) ctx.filter = "none";
       if (f.weapon && !f.disarmed) (f.weapon.type === "compass" ? drawCompass(f) : drawKatana(f));
       if (f.cast && f.cast.sk.type === "timeaccel") drawAccelAura(f);
+      if (f.cast && f.cast.sk.type === "metavision") drawMetaAura(f);
       if (f.mind > 4 || f.stun > 0 || f === battle.dazed) drawMindAura(f);
     });
     gray(false);
@@ -1079,11 +1191,13 @@ function render() {
       ctx.restore();
     }
     drawShards();
+    for (const f of battle.fighters) if (f.hp > 0 && f.cast && f.cast.sk.type === "metavision") drawMetaThreats(f);
 
     for (const p of battle.projectiles) {
       gray(p.owner === battle.dazed);
       if (p.shape === "note") { drawNote(p); gray(false); continue; }
       if (p.shape === "text") { drawWord(p); gray(false); continue; }
+      if (p.shape === "soccer") { drawSoccer(p); gray(false); continue; }
       ctx.fillStyle = "#fff6c2";
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -1115,6 +1229,7 @@ function render() {
       const left = Math.max(0, c.sk.duration - c.t).toFixed(1);
       if (c.sk.type === "timeaccel") drawTimeLabel("⏩ เร่งเวลา x" + (c.sk.rate || 2) + "  " + left + " วิ", "#ffcf5a");
       else if (c.sk.type === "timeslow") drawTimeLabel("⏳ ชะลอเวลา  " + left + " วิ", "#7ff5dc");
+      else if (c.sk.type === "metavision") drawTimeLabel("👁 Meta Vision  " + left + " วิ  (หลบได้อีก " + Math.max(0, (c.sk.maxDodges || 0) - (c.dodges || 0)) + ")", "#8fe0ff");
     }
     if (screenFlash > 0) {
       ctx.fillStyle = "rgba(255,255,255," + Math.min(1, screenFlash).toFixed(3) + ")";
@@ -1181,7 +1296,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 18;
+const EXPECTED_VERSION = 19;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

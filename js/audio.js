@@ -106,6 +106,25 @@ class SoundFX {
     this._tone(420, 90, 0.13, "sawtooth", 0.14);
   }
 
+  kick() { // เตะบอล: ตุ้บหนักๆ + ลมหวิว
+    if (!this._throttle("kick", 80)) return;
+    this._tone(170, 60, 0.12, "sine", 0.3);
+    this._noise(0.1, 0.18, "lowpass", 900, 200);
+    this._tone(300, 520, 0.1, "triangle", 0.05, 0.03);
+  }
+
+  meta() { // Meta Vision: ใสๆ ขึ้นสูงเหมือนตาเปิด
+    this._tone(660, 1320, 0.35, "sine", 0.1);
+    this._tone(990, 1980, 0.3, "triangle", 0.05, 0.08);
+    this._noise(0.3, 0.06, "highpass", 4500, 6000);
+  }
+
+  dodge() { // หลบ: วูบเบาๆ
+    if (!this._throttle("dodge", 120)) return;
+    this._noise(0.18, 0.2, "bandpass", 1800, 600);
+    this._tone(900, 400, 0.14, "triangle", 0.06);
+  }
+
   hit() { // โดนตี / ชน
     if (!this._throttle("hit", 60)) return;
     this._tone(200, 55, 0.14, "square", 0.16);
@@ -196,6 +215,6 @@ class SoundFX {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 18;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 19;
 
 if (typeof module !== "undefined") module.exports = { SoundFX };
