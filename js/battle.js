@@ -21,7 +21,12 @@ const MIND_PICKUP = 25;
 const MIND_HOLD = 2.5;
 
 class Battle {
-  constructor(width, height, defA, defB, rng = Math.random) {
+  // Battle(w, h, [def, def, ...], rng?, teams?)  หรือแบบเดิม Battle(w, h, defA, defB, rng?)
+  // teams = เลขทีมของแต่ละคน เช่น [0,0,1,1] = 2v2, ไม่ใส่ = ทุกคนต่างคนต่างอยู่ (1v1 / ffa)
+  constructor(width, height, a, b, c) {
+    let defs, rng, teams;
+    if (Array.isArray(a)) { defs = a; rng = b || Math.random; teams = c || null; }
+    else { defs = [a, b]; rng = c || Math.random; teams = null; }
     this.w = width;
     this.h = height;
     this.rng = rng;
@@ -35,14 +40,11 @@ class Battle {
     this._histAcc = 0;
     this.rewind = null; // กำลังย้อนเวลาอยู่หรือไม่ {owner, t, dur, back, t0}
     this.eraser = null; // ตัวที่กำลังใช้ "ตัดเวลา"
-    this.dazed = null; // ตัวที่ตกอยู่ในเวลาที่ถูกตัด: เหม่อลอย ทำตามโชคชะตาที่บันทึกไว้ (ไม่รู้ว่า FuNx อยู่ตรงไหนจริงๆ)
+    this.dazedList = []; // ตัวที่ตกอยู่ในเวลาที่ถูกตัด: เหม่อลอย ทำตามโชคชะตาที่บันทึกไว้ (ไม่รู้ว่า FuNx อยู่ตรงไหนจริงๆ)
     this.slower = null; // ตัวที่กำลังใช้ "ชะลอเวลา" (Johan) วงชะลอเวลาอยู่รอบตัวนี้
     this.phantom = null; // ตำแหน่งที่ FuNx เคยยืนก่อนตัดเวลา: สิ่งเดียวที่ตัวเหม่อลอย "จำได้" และใช้เล็ง
 
-    this.fighters = [
-      this._makeFighter(defA, width * 0.25, height * 0.5, 0),
-      this._makeFighter(defB, width * 0.75, height * 0.5, Math.PI),
-    ];
+    this.fighters = this._spawn(defs, teams);
 
     // บอลบนสนาม: สร้างเมื่อมีตัวละครที่มีสกิล ballkick (Isagi)
     this.balls = [];
@@ -53,6 +55,62 @@ class Battle {
         hot: false, owner: null, meta: false, damage: 0, knock: 0, rot: 0, reflectCd: 0, evadedBy: null,
       });
     }
+  }
+
+  // วางตัวละคร: 2 ทีม = ทีมละฝั่ง (ซ้าย/ขวา) เรียงแนวตั้ง, มากกว่านั้น (ffa) = วางเป็นวงกลมรอบสนามหันเข้าหากลาง
+  _spawn(defs, teams) {
+    const n = defs.length;
+    const tm = teams && teams.length === n ? teams : defs.map((_, i) => i);
+    const uniq = [...new Set(tm)];
+    const list = [];
+    if (uniq.length === 2) {
+      uniq.forEach((t, side) => {
+        const members = tm.map((x, i) => (x === t ? i : -1)).filter((i) => i >= 0);
+        members.forEach((i, k) => {
+          const y = (this.h * (k + 1)) / (members.length + 1);
+          list[i] = this._makeFighter(defs[i], this.w * (side === 0 ? 0.22 : 0.78), y, side === 0 ? 0 : Math.PI);
+        });
+      });
+    } else {
+      const R = Math.min(this.w, this.h) * 0.32;
+      defs.forEach((d, i) => {
+        const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
+        const x = this.w / 2 + Math.cos(a) * R;
+        const y = this.h / 2 + Math.sin(a) * R;
+        list[i] = this._makeFighter(d, x, y, Math.atan2(this.h / 2 - y, this.w / 2 - x));
+      });
+    }
+    list.forEach((f, i) => { f.idx = i; f.team = tm[i]; });
+    return list;
+  }
+
+  // ศัตรูที่ยังมีชีวิต (คนละทีม) ของ f
+  _foes(f) {
+    return this.fighters.filter((g) => g !== f && g.team !== f.team && g.hp > 0);
+  }
+
+  // เป้าหมายหลักของ f = ศัตรูที่อยู่ใกล้ที่สุด
+  _target(f) {
+    let best = null;
+    let bd = Infinity;
+    for (const g of this._foes(f)) {
+      const d = Math.hypot(g.x - f.x, g.y - f.y);
+      if (d < bd) { bd = d; best = g; }
+    }
+    return best || this.fighters.find((g) => g !== f && g.hp > 0) || f;
+  }
+
+  isDazed(f) {
+    return this.dazedList.includes(f);
+  }
+
+  _evaded(o, f) {
+    return !!(o.evadedBy && o.evadedBy.includes(f));
+  }
+
+  _markEvaded(o, f) {
+    if (!o.evadedBy) o.evadedBy = [];
+    o.evadedBy.push(f);
   }
 
   _makeFighter(def, x, y, angle) {
@@ -121,16 +179,16 @@ class Battle {
     this.wt += dt;
     this._recordHistory(dt);
 
-    const [a, b] = this.fighters;
     // ตัดเวลา (King Crimson): เวลายังเดินต่อ แต่ผู้ใช้ "ไม่อยู่ในความจริง" (โดนอะไรไม่ได้ ทะลุผ่านหมด)
     // ส่วนศัตรูในรัศมีจะเหม่อลอยทำตามโชคชะตาเดิม โดยเล็งไปที่ตำแหน่งเก่าของผู้ใช้เท่านั้น
     this.eraser = this.fighters.find((f) => f.cast && f.cast.sk.type === "timeerase") || null;
-    this.dazed = this.eraser && this.eraser.cast.dazed ? (this.eraser === a ? b : a) : null;
+    this.dazedList = this.eraser && this.eraser.cast.dazedList ? this.eraser.cast.dazedList.filter((g) => g.hp > 0) : [];
     // ชะลอเวลา (Johan): คนอื่นที่อยู่ในวงจะเดินช้าลง / เร่งเวลา: ผู้ใช้เองเดินเร็วขึ้น
     this.slower = this.fighters.find((f) => f.cast && f.cast.sk.type === "timeslow") || null;
     for (const f of this.fighters) {
-      let enemy = f === a ? b : a;
-      if (f === this.dazed) enemy = this.phantom;
+      if (f.hp <= 0) continue;
+      let enemy = this._target(f);
+      if (this.isDazed(f) && this.phantom) enemy = this.phantom;
       f.facing = enemy.x >= f.x ? 1 : -1;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
       // เวลาที่ตัวนี้ "รู้สึก": ถูกชะลอ (ts) และ/หรือเร่งเอง (rate)
@@ -172,18 +230,26 @@ class Battle {
     }
 
     if (this.rewind) { this._checkWinner(); return; } // เพิ่งเริ่มย้อนเวลาในก้าวนี้
-    this._fighterCollision(a, b);
-    this._weaponClash(a, b); // อาวุธชนอาวุธ: ปัดกันและเด้งออก (ก่อนคิดว่าอาวุธโดนตัว)
+    const F = this.fighters;
+    for (let i = 0; i < F.length; i++) {
+      for (let j = i + 1; j < F.length; j++) if (F[i].hp > 0 && F[j].hp > 0) this._fighterCollision(F[i], F[j]);
+    }
+    for (let i = 0; i < F.length; i++) {
+      for (let j = i + 1; j < F.length; j++) {
+        if (F[i].team !== F[j].team) this._weaponClash(F[i], F[j]); // อาวุธชนอาวุธ: ปัดกันและเด้งออก (ก่อนคิดว่าอาวุธโดนตัว)
+      }
+    }
     for (const f of this.fighters) {
-      if (f.weapon && !f.disarmed) this._updateWeapon(f, f === a ? b : a, f.tdt);
+      if (f.hp > 0 && f.weapon && !f.disarmed) this._updateWeapon(f, this._target(f), f.tdt);
     }
     this._updateProjectiles(dt);
     this._updateBalls(dt);
     this._updateWaves(dt);
     // ตัดเวลาอาจจบกลางก้าวนี้ (cast ถูกเคลียร์) ให้สถานะที่ตัววาดอ่านตรงกับความจริงเสมอ
-    if (this.eraser && !(this.eraser.cast && this.eraser.cast.sk.type === "timeerase")) {
+    // (นับจากสถานะจริงตอนนี้ ไม่ใช่ตัวที่จำไว้ตอนต้นก้าว เพราะอีกคนอาจเพิ่งเริ่มตัดเวลาต่อจากคนที่เพิ่งจบในก้าวเดียวกัน)
+    if (!this.fighters.some((g) => g.cast && g.cast.sk.type === "timeerase")) {
       this.eraser = null;
-      this.dazed = null;
+      this.dazedList = [];
       this.phantom = null;
     }
     // ชะลอเวลาอาจจบกลางก้าวนี้ ให้ตัววาดเห็นสถานะตรงกับความจริง
@@ -195,7 +261,7 @@ class Battle {
   // ผู้ใช้สกิลไม่ถูกชะลอ ขอบวง 20% นอกสุดค่อยๆ จางกลับเป็นปกติ (กันกระตุกตรงขอบ)
   _timeScale(x, y, owner) {
     const s = this.slower;
-    if (!s || !s.cast || owner === s) return 1;
+    if (!s || !s.cast || (owner && owner.team === s.team)) return 1;
     const sk = s.cast.sk;
     const R = sk.radius || 300;
     const d = Math.hypot(x - s.x, y - s.y);
@@ -319,7 +385,9 @@ class Battle {
       f.vx = (dx / len) * f.def.speed;
       f.vy = (dy / len) * f.def.speed;
       // ศัตรูที่อยู่ในรัศมีจะเหม่อลอย ทำตามโชคชะตาเดิมโดยเล็งไปที่ตำแหน่งเก่าของ FuNx
-      const inRange = Math.hypot(enemy.x - f.x, enemy.y - f.y) <= (sk.radius || 480);
+      const list = this._foes(f).filter((g) => Math.hypot(g.x - f.x, g.y - f.y) <= (sk.radius || 480));
+      const inRange = list.length > 0;
+      f.cast.dazedList = list;
       f.cast.dazed = inRange;
       this.phantom = inRange ? { x: f.x, y: f.y, r: f.r, vx: 0, vy: 0, knockX: 0, knockY: 0, hp: f.hp } : null;
       this.events.push({ type: "erase", x: f.x, y: f.y, dazed: inRange });
@@ -427,7 +495,7 @@ class Battle {
         const nx = dx / dist;
         const ny = dy / dist;
         if (b.hot) {
-          if (b.owner === f || b.evadedBy === f || f === this.eraser) continue; // เจ้าของบอล/หลบไปแล้ว/อยู่นอกความจริง: ทะลุผ่าน
+          if (b.owner.team === f.team || this._evaded(b, f) || f === this.eraser) continue; // ทีมเดียวกับเจ้าของบอล/หลบไปแล้ว/อยู่นอกความจริง: ทะลุผ่าน
           this._damage(f, this._out(b.owner, b.damage), b.x - nx * b.r, b.y - ny * b.r);
           this._knock(f, b.vx, b.vy, b.knock);
           // บอลกระดอนออกจากตัวแล้วกลายเป็นบอลเปล่า
@@ -478,7 +546,7 @@ class Battle {
 
     // กระสุนศัตรู: หาจุดที่เข้าใกล้ตัวมากที่สุดบนเส้นทางตรง
     for (const p of this.projectiles) {
-      if (p.owner === f || p.dead || p.evadedBy === f) continue;
+      if (p.owner.team === f.team || p.dead || this._evaded(p, f)) continue;
       const ps = this._timeScale(p.x, p.y, p.owner);
       const sp = p.speed * ps;
       if (sp <= 0) continue;
@@ -494,7 +562,7 @@ class Battle {
     }
     // บอลที่ศัตรูเตะ/สะท้อนมา
     for (const b of this.balls) {
-      if (!b.hot || b.owner === f || b.evadedBy === f) continue;
+      if (!b.hot || b.owner.team === f.team || this._evaded(b, f)) continue;
       const sp = Math.hypot(b.vx, b.vy);
       if (sp < 1) continue;
       const bdx = b.vx / sp;
@@ -509,7 +577,7 @@ class Battle {
     }
     // คลื่นเสียงของศัตรู: จะแผ่มาถึงตัวภายใน lookahead และตัวอยู่ในส่วนโค้ง
     for (const w of this.waves) {
-      if (w.owner === f || w.hit || w.evadedBy === f) continue;
+      if (w.owner.team === f.team || w.hits.includes(f) || this._evaded(w, f)) continue;
       const dx = f.x - w.x;
       const dy = f.y - w.y;
       const dist = Math.hypot(dx, dy) || 0.0001;
@@ -524,6 +592,7 @@ class Battle {
       c.threats.push({ x: w.x + Math.cos(w.ang) * w.r, y: w.y + Math.sin(w.ang) * w.r, ex: f.x, ey: f.y });
     }
     // ศัตรูกำลังพุ่งชน: ยังไม่ชนและกำลังพุ่งมาทางนี้
+    for (const enemy of this._foes(f)) {
     const ec = enemy.cast;
     if (ec && ec.sk.type === "dash" && !ec.hit && enemy.dashTimer > 0) {
       const dx = f.x - enemy.x;
@@ -535,6 +604,7 @@ class Battle {
         threats.push({ kind: "d", ref: ec, t: (dist - f.r - enemy.r) / sp, dx: enemy.vx / sp, dy: enemy.vy / sp, side: (enemy.vx / sp) * dy - (enemy.vy / sp) * dx });
         c.threats.push({ x: enemy.x, y: enemy.y, ex: f.x, ey: f.y });
       }
+    }
     }
 
     if (!threats.length || c.dodgeCd > 0 || c.dodges >= maxD) return;
@@ -559,7 +629,7 @@ class Battle {
     for (const th of threats) {
       if (th.t - first.t > 0.35) continue;
       if (th.kind === "d") th.ref.hit = true; // การพุ่งพลาดเป้า (ถือว่าใช้ไปแล้ว)
-      else th.ref.evadedBy = f;
+      else this._markEvaded(th.ref, f);
     }
     c.dodges++;
     c.dodgeCd = sk.dodgeCd !== undefined ? sk.dodgeCd : 0.28;
@@ -749,9 +819,10 @@ class Battle {
   _endTimeErase(f, enemy, broken) {
     const c = f.cast;
     if (!c || c.sk.type !== "timeerase") return;
-    if (c.dazed && enemy.hp > 0) {
-      enemy.stun = Math.max(enemy.stun, c.sk.afterStun !== undefined ? c.sk.afterStun : 0.6);
-      this.events.push({ type: "confused", x: enemy.x, y: enemy.y });
+    for (const g of c.dazedList || []) {
+      if (g.hp <= 0) continue;
+      g.stun = Math.max(g.stun, c.sk.afterStun !== undefined ? c.sk.afterStun : 0.6);
+      this.events.push({ type: "confused", x: g.x, y: g.y });
     }
     if (broken) this.events.push({ type: "eraseBreak", x: f.x, y: f.y });
     f.cast = null;
@@ -768,7 +839,7 @@ class Battle {
         x: f.x, y: f.y, vx: f.vx, vy: f.vy, knockX: f.knockX, knockY: f.knockY, hp: f.hp, mind: f.mind,
       })),
       projectiles: this.projectiles.map((p) => ({ ...p })),
-      waves: this.waves.map((w) => ({ ...w })),
+      waves: this.waves.map((w) => ({ ...w, hits: w.hits.slice() })),
       balls: this.balls.map((b) => ({ ...b })),
     };
   }
@@ -797,7 +868,7 @@ class Battle {
   _startRewind(f, sk) {
     this.rewind = { owner: f, t: 0, dur: sk.duration, back: sk.rewindSeconds || 5, t0: this.wt };
     for (const g of this.fighters) {
-      if (g === f) continue;
+      if (g.team === f.team) continue;
       g.cast = null; // ศัตรูที่กำลังร่ายอยู่ถูกย้อนกลับไปด้วย
       g.frame = "idle";
       g.dashTimer = 0;
@@ -822,7 +893,7 @@ class Battle {
       if (f === r.owner) { f.hp = Math.min(f.maxHp, s.hp); f.mind = s.mind; f.mindHold = 0; } // เลือดตัวเองย้อนกลับไปเท่ากับตอนนั้นเป๊ะๆ
     });
     this.projectiles = snap.projectiles.map((p) => ({ ...p }));
-    this.waves = snap.waves.map((w) => ({ ...w }));
+    this.waves = snap.waves.map((w) => ({ ...w, hits: w.hits.slice() }));
     this.balls = snap.balls.map((b) => ({ ...b }));
 
     if (prog >= 1) {
@@ -876,7 +947,7 @@ class Battle {
     }
     // ปัดบอลของศัตรู: ไม่แตก แต่สะท้อนกลับไปหาคนเตะ
     for (const b of this.balls) {
-      if (!b.hot || b.owner === f || b.reflectCd > 0) continue;
+      if (!b.hot || b.owner.team === f.team || b.reflectCd > 0) continue;
       const qx = b.x - f.x;
       const qy = b.y - f.y;
       const tt = Math.max(s0, Math.min(s1, qx * ca + qy * sa));
@@ -888,7 +959,16 @@ class Battle {
         f.weaponDir *= -1;
       }
     }
-    if (f.weaponCd > 0 || enemy.hp <= 0 || enemy === this.eraser) return; // ฟันคนที่อยู่นอกความจริงไม่โดน
+    if (f.weaponCd > 0) return;
+    for (const foe of this._foes(f)) {
+      if (foe === this.eraser) continue; // ฟันคนที่อยู่นอกความจริงไม่โดน
+      if (this._weaponHit(f, foe, wp, s0, s1, ca, sa, head, hcx, hcy, reachW)) return; // ฟันโดนได้ทีละคนต่อครั้ง
+    }
+  }
+
+  _weaponHit(f, enemy, wp, s0, s1, ca, sa, head, hcx, hcy, reachW) {
+    const px = enemy.x - f.x;
+    const py = enemy.y - f.y;
     const t = Math.max(s0, Math.min(s1, px * ca + py * sa)); // จุดบนใบดาบที่ใกล้ศัตรูที่สุด
     const dx = px - ca * t;
     const dy = py - sa * t;
@@ -896,7 +976,7 @@ class Battle {
     let hy = f.y + sa * t;
     const rodHit = Math.hypot(dx, dy) <= enemy.r + reachW;
     const headHit = head > 0 && Math.hypot(px - hcx, py - hcy) <= enemy.r + head;
-    if (!rodHit && !headHit) return;
+    if (!rodHit && !headHit) return false;
     if (!rodHit && headHit) { hx = f.x + hcx; hy = f.y + hcy; } // โดนที่หัวเข็มทิศ
 
     // ลอบแทงด้านหลังระหว่างตัดเวลา: ดาเมจคูณ damageMult และใบ้สกิลศัตรู
@@ -917,6 +997,7 @@ class Battle {
     this.events.push({ type: "slash", x: hx, y: hy, ang: f.weaponAng });
     // ตัดเวลาอยู่แล้วโจมตี = เวลากลับมาทันที (แบบ King Crimson) ดาเมจนี้ยังโดนเต็ม
     if (f.cast && f.cast.sk.type === "timeerase") this._endTimeErase(f, enemy, true);
+    return true;
   }
 
   // ผลักตัวละครตามทิศ (dx,dy) ตัวที่ถูกแช่แข็งไม่ถูกผลัก (ไม่งั้นแรงจะสะสมแล้วกระเด็นตอนเวลากลับมา)
@@ -1008,7 +1089,7 @@ class Battle {
       knockback: sk.knockback || 0,
       owner: f,
       color: f.def.color,
-      hit: false,
+      hits: [], // คนที่โดนคลื่นนี้ไปแล้ว (คลื่นลูกเดียวโดนคนเดียวกันได้ครั้งเดียว)
     });
     this.events.push({ type: "wave", x: f.x, y: f.y, sound: sk.sound || "wave" });
   }
@@ -1080,6 +1161,7 @@ class Battle {
     this._rotate(a, (this.rng() - 0.5) * 0.3);
     this._rotate(b, (this.rng() - 0.5) * 0.3);
 
+    if (a.team === b.team) return; // เพื่อนร่วมทีมชนกันแค่เด้ง ไม่มีดาเมจ
     this._dashHit(a, b, nx, ny);
     this._dashHit(b, a, -nx, -ny);
     this._ramHit(a, b, nx, ny);
@@ -1133,24 +1215,23 @@ class Battle {
           this.events.push({ type: "bounce", x: p.x, y: p.y });
         }
       }
-      const target = this.fighters.find((f) => f !== p.owner);
-      if (p.evadedBy === target) {
-        // เป้าหมายมองเห็นอนาคตแล้วหลบไปแล้ว: กระสุนพลาดเป้า บินผ่านไป
-        if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) p.dead = true;
-      } else if (target === this.eraser) {
-        // เป้าหมายอยู่นอกความจริง: กระสุนบินทะลุผ่านความว่างเปล่าไป
-        if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) p.dead = true;
-      } else if (target.hp > 0 && Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
-        this._damage(target, p.damage, p.x, p.y);
-        if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
-        // ถีบเบาๆ ตามทิศกระสุน
-        target.x += p.dx * 6;
-        target.y += p.dy * 6;
-        this._knock(target, p.dx, p.dy, p.knockback);
-        p.dead = true;
-      } else if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) {
-        p.dead = true;
+      let hit = false;
+      for (const target of this._foes(p.owner)) {
+        // หลบไปแล้ว (Meta Vision) / อยู่นอกความจริง (ตัดเวลา): กระสุนบินทะลุผ่านไป
+        if (this._evaded(p, target) || target === this.eraser) continue;
+        if (Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
+          this._damage(target, p.damage, p.x, p.y);
+          if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
+          // ถีบเบาๆ ตามทิศกระสุน
+          target.x += p.dx * 6;
+          target.y += p.dy * 6;
+          this._knock(target, p.dx, p.dy, p.knockback);
+          p.dead = true;
+          hit = true;
+          break;
+        }
       }
+      if (!hit && (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30)) p.dead = true;
     }
     // กระสุนของคนละฝ่ายชนกัน -> แตกทั้งคู่
     const ps = this.projectiles;
@@ -1159,7 +1240,7 @@ class Battle {
       if (p.dead) continue;
       for (let j = i + 1; j < ps.length; j++) {
         const q = ps[j];
-        if (q.dead || q.owner === p.owner) continue;
+        if (q.dead || q.owner.team === p.owner.team) continue;
         if (p.indestructible && q.indestructible) continue; // ทะลุผ่านกันไป
         if (Math.hypot(p.x - q.x, p.y - q.y) < p.r + q.r) {
           // ฝั่งที่ทำลายไม่ได้ (โน้ต) รอด อีกฝั่งแตกอย่างเดียว
@@ -1179,9 +1260,9 @@ class Battle {
       // ดูที่แนวหน้าคลื่น: ถ้าคลื่นของศัตรูเข้าไปในวงชะลอเวลา คลื่นจะแผ่ช้าลง
       const ws = this._timeScale(w.x + Math.cos(w.ang) * w.r, w.y + Math.sin(w.ang) * w.r, w.owner);
       w.r += w.speed * dt * ws;
-      if (!w.hit) {
-        const t = this.fighters.find((f) => f !== w.owner);
-        if (t.hp > 0 && t !== this.eraser && w.evadedBy !== t) { // คนที่ตัดเวลาอยู่ / หลบไปแล้ว คลื่นทะลุผ่านตัวไป
+      for (const t of this._foes(w.owner)) {
+        if (w.hits.includes(t) || t === this.eraser || this._evaded(w, t)) continue; // โดนไปแล้ว / ตัดเวลาอยู่ / หลบไปแล้ว: คลื่นทะลุผ่านตัวไป
+        {
           const dx = t.x - w.x;
           const dy = t.y - w.y;
           const dist = Math.hypot(dx, dy) || 0.0001;
@@ -1191,7 +1272,7 @@ class Battle {
           while (da < -Math.PI) da += Math.PI * 2;
           const slack = Math.asin(Math.min(1, t.r / dist));
           if (Math.abs(da) <= w.halfArc + slack && dist - t.r <= w.r) {
-            w.hit = true;
+            w.hits.push(t);
             // ยิ่งคลื่นเดินทางไกล ดาเมจยิ่งลดลงเป็นเส้นตรง จากค่า damage ไปจนถึง damageFar
             const travel = Math.max(0, Math.min(1, (w.r - w.r0) / (w.maxR - w.r0)));
             const dmg = Math.max(1, Math.round(w.damage + (w.damageFar - w.damage) * travel));
@@ -1217,7 +1298,7 @@ class Battle {
       if (w.projectileEffect === "none") continue;
       const band = w.speed * dt + 16; // ความหนาของแนวคลื่นที่ปะทะกระสุนได้
       for (const p of this.projectiles) {
-        if (p.owner === w.owner || p.dead || p.hitByWave) continue;
+      if (p.owner.team === w.owner.team || p.dead || p.hitByWave) continue;
         const dx = p.x - w.x;
         const dy = p.y - w.y;
         const d = Math.hypot(dx, dy) || 0.0001;
@@ -1247,7 +1328,7 @@ class Battle {
     for (const w of this.waves) {
       if (w.projectileEffect === "none") continue;
       for (const b of this.balls) {
-        if (!b.hot || b.owner === w.owner || b.reflectCd > 0) continue;
+        if (!b.hot || b.owner.team === w.owner.team || b.reflectCd > 0) continue;
         const dx = b.x - w.x;
         const dy = b.y - w.y;
         const d = Math.hypot(dx, dy) || 0.0001;
@@ -1282,13 +1363,22 @@ class Battle {
     f.hp = Math.max(0, f.hp - amount);
     f.hitFlash = 0.15;
     this.events.push({ type: "hit", x, y, amount });
+    if (f.hp <= 0 && !f.dead) {
+      // ตายกลางแมตช์ (โหมดหลายคน): หยุดสกิล แล้วให้ตัววาดทำให้แตกกระจาย
+      f.dead = true;
+      f.cast = null;
+      f.frame = "idle";
+      f.dashTimer = 0;
+      this.events.push({ type: "death", fighter: f, x: f.x, y: f.y });
+    }
   }
 
   _checkWinner() {
-    const [a, b] = this.fighters;
-    if (a.hp <= 0 && b.hp <= 0) this.winner = "draw";
-    else if (a.hp <= 0) this.winner = 1;
-    else if (b.hp <= 0) this.winner = 0;
+    // ผู้ชนะ = เลขทีมที่เหลือรอดทีมเดียว (1v1 / ffa เลขทีม = ลำดับผู้เล่น) ตายหมดพร้อมกัน = เสมอ
+    const alive = this.fighters.filter((f) => f.hp > 0);
+    const teamsAlive = [...new Set(alive.map((f) => f.team))];
+    if (!alive.length) this.winner = "draw";
+    else if (teamsAlive.length === 1) this.winner = teamsAlive[0];
     if (this.winner !== null) {
       this.events.push({ type: "ko" });
       this.projectiles = []; // กระสุนและคลื่นที่ค้างอยู่หายไปพร้อมจบแมตช์
@@ -1296,7 +1386,7 @@ class Battle {
       this.waves = [];
       this.rewind = null;
       this.eraser = null;
-      this.dazed = null;
+      this.dazedList = [];
       this.slower = null;
       this.phantom = null;
       for (const f of this.fighters) {
@@ -1309,6 +1399,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 21;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 22;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

@@ -7,8 +7,12 @@ const W = canvas.width;
 const H = canvas.height;
 const FONT = '"Prompt", "Noto Sans Thai", system-ui, sans-serif';
 
-const selA = document.getElementById("charA");
-const selB = document.getElementById("charB");
+const selMode = document.getElementById("mode");
+const selCount = document.getElementById("ffaCount");
+const ffaWrap = document.getElementById("ffaWrap");
+const playersBox = document.getElementById("players");
+let playerSels = []; // select เลือกตัวละครของผู้เล่นแต่ละคน (จำนวนเปลี่ยนตามโหมด)
+let layout = null; // รายละเอียดโหมดที่เลือกอยู่ {mode, n, teams, labels, colors}
 const btnFight = document.getElementById("fight");
 const btnSpeed = document.getElementById("speed");
 const btnMute = document.getElementById("mute");
@@ -49,25 +53,78 @@ function loadAllImages() {
 }
 
 // ---------- UI ----------
-function fillSelects() {
+// ---------- โหมดการเล่น ----------
+const TEAM_INFO = [
+  { name: "ทีมแดง", color: "#ff6b6b" },
+  { name: "ทีมฟ้า", color: "#4db8ff" },
+];
+const FFA_COLORS = ["#ff6b6b", "#4db8ff", "#6bff9e", "#ffd35a", "#d28bff", "#ff9f5a"];
+
+// อ่านโหมดที่เลือกอยู่ แล้วบอกว่ามีกี่คน ใครอยู่ทีมไหน ป้ายชื่อ และสีประจำตัว (colors = null: ไม่วาดวงสีใต้ตัวละคร)
+function currentLayout() {
+  const mode = selMode.value;
+  if (mode === "2v2") {
+    const teams = [0, 0, 1, 1];
+    return {
+      mode, n: 4, teams,
+      labels: ["ทีมแดง 1", "ทีมแดง 2", "ทีมฟ้า 1", "ทีมฟ้า 2"],
+      colors: teams.map((t) => TEAM_INFO[t].color),
+    };
+  }
+  if (mode === "ffa") {
+    const n = Math.max(3, Math.min(6, parseInt(selCount.value, 10) || 4));
+    const idx = Array.from({ length: n }, (_, i) => i);
+    return { mode, n, teams: idx, labels: idx.map((i) => "ผู้เล่น " + (i + 1)), colors: idx.map((i) => FFA_COLORS[i]) };
+  }
+  return { mode: "1v1", n: 2, teams: [0, 1], labels: ["ผู้เล่น 1", "ผู้เล่น 2"], colors: null };
+}
+
+// สร้างช่องเลือกตัวละครตามจำนวนผู้เล่นของโหมด (เก็บค่าที่เลือกไว้เดิมตามลำดับ)
+function rebuildPlayers() {
   const keys = Object.keys(CHARACTERS);
-  for (const sel of [selA, selB]) {
-    sel.innerHTML = "";
+  const old = playerSels.map((sel) => sel.value);
+  layout = currentLayout();
+  ffaWrap.hidden = layout.mode !== "ffa";
+  playersBox.innerHTML = "";
+  playerSels = [];
+  for (let i = 0; i < layout.n; i++) {
+    const label = document.createElement("label");
+    label.textContent = layout.labels[i] + " ";
+    if (layout.colors) label.style.color = layout.colors[i];
+    const sel = document.createElement("select");
     for (const k of keys) {
       const opt = document.createElement("option");
       opt.value = k;
       opt.textContent = CHARACTERS[k].name;
       sel.appendChild(opt);
     }
+    sel.value = old[i] && CHARACTERS[old[i]] ? old[i] : keys[i % keys.length];
+    sel.addEventListener("change", () => {
+      sfx.unlock();
+      sfx.click();
+      if (!battle || battle.winner !== null) setIdleHud();
+    });
+    label.appendChild(sel);
+    playersBox.appendChild(label);
+    if ((layout.mode === "1v1" && i === 0) || (layout.mode === "2v2" && i === 1)) {
+      const vs = document.createElement("span");
+      vs.className = "vs";
+      vs.textContent = "VS";
+      playersBox.appendChild(vs);
+    }
+    playerSels.push(sel);
   }
-  selA.value = keys[0];
-  selB.value = keys[1] || keys[0];
+  buildHudPanels();
+  setIdleHud();
+  fitCanvas();
 }
 
 function startBattle() {
   sfx.unlock();
   sfx.start();
-  battle = new Battle(W, H, CHARACTERS[selA.value], CHARACTERS[selB.value]);
+  const defs = playerSels.map((sel) => CHARACTERS[sel.value]);
+  battle = new Battle(W, H, defs, Math.random, layout.teams);
+  battle.layout = layout;
   battle.fighters.forEach((f) => { f.trailHp = f.hp; }); // แถบเลือดที่ค่อยๆ ลดตามหลัง
   particles = [];
   shards = [];
@@ -93,13 +150,18 @@ btnMute.addEventListener("click", () => {
   sfx.click();
   updateMuteLabel();
 });
-for (const sel of [selA, selB]) {
-  sel.addEventListener("change", () => {
-    sfx.unlock();
-    sfx.click();
-    if (!battle || battle.winner !== null) setIdleHud();
-  });
-}
+selMode.addEventListener("change", () => {
+  sfx.unlock();
+  sfx.click();
+  battle = null; // เปลี่ยนโหมดแล้วกลับไปหน้าเลือกตัว
+  rebuildPlayers();
+});
+selCount.addEventListener("change", () => {
+  sfx.unlock();
+  sfx.click();
+  battle = null;
+  rebuildPlayers();
+});
 
 // ---------- เอฟเฟกต์ ----------
 function spawnParticles(x, y, color, n, power) {
@@ -258,14 +320,15 @@ function handleEvents(events) {
     } else if (e.type === "rewind") {
       screenFlash = 0.35;
       sfx.rewind();
+    } else if (e.type === "death") {
+      // ตายกลางแมตช์: แตกเป็นเศษภาพ (คนที่เหลือสู้ต่อ)
+      const f = e.fighter;
+      spawnParticles(f.x, f.y, f.def.color, 40, 420);
+      spawnShards(f, charKey(f.def));
+      shake = Math.max(shake, 12);
+      sfx.breakdown();
     } else if (e.type === "ko") {
       shake = 16;
-      const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def);
-      for (const f of battle.fighters) {
-        if (f.hp > 0) continue;
-        spawnParticles(f.x, f.y, f.def.color, 40, 420);
-        spawnShards(f, keyOf(f.def));
-      }
       sfx.ko();
       if (battle.winner === "draw") sfx.draw();
       else sfx.win();
@@ -467,10 +530,10 @@ function drawCompass(f) {
   const hc = reach - head; // จุดกึ่งกลางหัวเข็มทิศ
   const dir = f.weaponDir;
   const hot = f.weaponCd > (wp.hitCooldown || 0.4) - 0.12;
-  const enemy = battle && battle.fighters.find((g) => g !== f);
+  const enemy = battle && battle._target(f);
   const now = performance.now() / 1000;
   // มุมเข็ม (สัมพัทธ์กับก้านที่หมุนอยู่): ชี้ไปที่ศัตรู ถ้าไม่มีศัตรูให้หมุนเล่น
-  const toEnemy = enemy && enemy.hp > 0 ? Math.atan2(enemy.y - f.y, enemy.x - f.x) : now * 5;
+  const toEnemy = enemy && enemy !== f && enemy.hp > 0 ? Math.atan2(enemy.y - f.y, enemy.x - f.x) : now * 5;
   const needle = toEnemy - f.weaponAng + Math.sin(now * 11) * 0.07;
 
   ctx.save();
@@ -640,15 +703,40 @@ function drawGhosts() {
 }
 
 // ป้ายนับถอยหลังด้านบนสนาม (ใช้กับเร่ง/ชะลอเวลา)
+let labelRow = 0; // ป้ายด้านบนสนามหลายป้ายพร้อมกัน (หลายคนใช้สกิลเวลาพร้อมกัน) ให้เรียงลงมา
 function drawTimeLabel(txt, color) {
+  const ly = 42 + 32 * labelRow++;
   ctx.save();
   ctx.textAlign = "center";
   ctx.font = "700 26px " + FONT;
   ctx.lineWidth = 5;
   ctx.strokeStyle = "rgba(0,0,0,0.7)";
-  ctx.strokeText(txt, W / 2, 42);
+  ctx.strokeText(txt, W / 2, ly);
   ctx.fillStyle = color;
-  ctx.fillText(txt, W / 2, 42);
+  ctx.fillText(txt, W / 2, ly);
+  ctx.restore();
+}
+
+// วงสีทีม/ผู้เล่นใต้ตัวละคร + เลขผู้เล่น (โหมด 2v2 และ ffa)
+function drawTeamMark(f, color, num) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 4;
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.ellipse(f.x, f.y + f.r * 0.95, f.r * 1.15, f.r * 0.38, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(f.x, f.y + f.r * 0.95 + f.r * 0.38 + 9, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#10131d";
+  ctx.font = "700 12px " + FONT;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(num), f.x, f.y + f.r * 0.95 + f.r * 0.38 + 10);
+  ctx.textBaseline = "alphabetic";
   ctx.restore();
 }
 
@@ -811,7 +899,7 @@ function drawWord(p) {
 
 // ---------- ออร่าสติแตก: สัญลักษณ์วนรอบหัว + แสงม่วง ----------
 function drawMindAura(f) {
-  const lvl = battle && f === battle.dazed ? Math.max(0.5, f.mind / 100) : Math.min(1, f.mind / 100);
+  const lvl = battle && battle.isDazed(f) ? Math.max(0.5, f.mind / 100) : Math.min(1, f.mind / 100);
   const t = performance.now() / 1000;
   ctx.save();
   ctx.translate(f.x, f.y);
@@ -825,7 +913,7 @@ function drawMindAura(f) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#e0ccff";
-  const dz = battle && f === battle.dazed;
+  const dz = battle && battle.isDazed(f);
   const glyphs = f.stun > 0 ? ["@", "?!", "@", "…"] : dz ? ["…", "…", "?"] : ["?", "…", "!"];
   glyphs.forEach((g, i) => {
     const a = t * 2.4 + (i / glyphs.length) * Math.PI * 2;
@@ -897,17 +985,56 @@ function drawWaves(b) {
 }
 
 // ---------- แผงข้อมูลผู้เล่น (HTML อยู่นอกสนาม) ----------
-const hud = [0, 1].map((i) => ({
-  panel: document.getElementById("p" + i),
-  name: document.getElementById("p" + i + "-name"),
-  trail: document.getElementById("p" + i + "-trail"),
-  fill: document.getElementById("p" + i + "-hp"),
-  hpVal: document.getElementById("p" + i + "-hpval"),
-  skillBox: document.getElementById("p" + i + "-skills"),
-  mind: document.getElementById("p" + i + "-mind"),
-  rows: [], // แถวสกิล: {bar, fill, val, name}
-  builtFor: null, // ตัวละครที่แถวสกิลถูกสร้างไว้ให้
-}));
+let hud = []; // แผงของผู้เล่นแต่ละคน (สร้างใหม่ตามโหมดที่เลือก)
+
+// side ของแผง: 1v1 ซ้าย/ขวา, 2v2 ทีมแดงซ้าย ทีมฟ้าขวา, ffa ชิดซ้ายหมด
+function panelSide(i) {
+  if (!layout || layout.mode === "1v1") return i === 0 ? "left" : "right";
+  if (layout.mode === "2v2") return layout.teams[i] === 0 ? "left" : "right";
+  return "left";
+}
+
+function buildHudPanels() {
+  const box = document.getElementById("hud");
+  if (!box || !layout) return;
+  box.innerHTML = "";
+  const n = layout.n;
+  const cols = n <= 2 ? 2 : n === 3 ? 3 : n === 4 ? 2 : 3;
+  box.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+  box.classList.toggle("many", n > 2);
+  // 2v2: เรียงให้ทีมแดงอยู่คอลัมน์ซ้าย ทีมฟ้าอยู่คอลัมน์ขวา
+  const order = layout.mode === "2v2" ? [0, 2, 1, 3] : Array.from({ length: n }, (_, i) => i);
+  hud = new Array(n);
+  for (const i of order) {
+    const panel = document.createElement("div");
+    panel.className = "panel " + panelSide(i);
+    panel.innerHTML =
+      '<div class="pname"><span class="pnum"></span><span class="pnm">-</span></div>' +
+      '<div class="bar hp"><div class="trail"></div><div class="fill"></div><span class="val">-</span></div>' +
+      '<div class="mindbar" title="สติ/ความมั่นใจที่ถูกบั่นทอน"><div class="fill"></div></div>' +
+      '<div class="skills"></div>';
+    box.appendChild(panel);
+    const q = (sel) => panel.querySelector(sel);
+    const num = q(".pnum");
+    if (layout.colors) {
+      num.textContent = String(i + 1);
+      num.style.background = layout.colors[i];
+    } else {
+      num.style.display = "none";
+    }
+    hud[i] = {
+      panel,
+      name: q(".pnm"),
+      trail: q(".trail"),
+      fill: q(".bar.hp .fill"),
+      hpVal: q(".bar.hp .val"),
+      skillBox: q(".skills"),
+      mind: q(".mindbar .fill"),
+      rows: [],
+      builtFor: null,
+    };
+  }
+}
 
 function hpColor(ratio) {
   return ratio > 0.5 ? "#4cd964" : ratio > 0.25 ? "#ffcc00" : "#ff453a";
@@ -951,12 +1078,13 @@ function buildSkillRows(h, def) {
 // ก่อนเริ่มสู้: โชว์ข้อมูลของตัวละครที่เลือกไว้ในช่อง
 function setIdleHud() {
   let rebuilt = false;
-  [selA, selB].forEach((sel, i) => {
+  playerSels.forEach((sel, i) => {
     const def = CHARACTERS[sel.value];
     const h = hud[i];
-    if (!def || !h.panel) return;
+    if (!def || !h || !h.panel) return;
     if (buildSkillRows(h, def)) rebuilt = true;
-    h.panel.className = "panel " + (i === 0 ? "left" : "right");
+    h.panel.className = "panel " + panelSide(i);
+    h.panel.style.borderColor = layout && layout.colors ? layout.colors[i] : "";
     h.name.textContent = def.name;
     h.name.style.color = def.color;
     h.trail.style.width = "100%";
@@ -979,11 +1107,12 @@ function updateHud(b) {
   let rebuilt = false;
   b.fighters.forEach((f, i) => {
     const h = hud[i];
-    if (!h.panel) return;
+    if (!h || !h.panel) return;
     if (buildSkillRows(h, f.def)) rebuilt = true;
     const alive = f.hp > 0;
-    h.panel.className =
-      "panel " + (i === 0 ? "left" : "right") + (alive ? "" : " dead") + (b.winner === i ? " winner" : "");
+    const won = b.winner === f.team;
+    h.panel.className = "panel " + panelSide(i) + (alive ? "" : " dead") + (won ? " winner" : "");
+    h.panel.style.borderColor = layout && layout.colors && !won ? layout.colors[i] : "";
     h.name.textContent = f.def.name;
     h.name.style.color = f.def.color;
 
@@ -1035,8 +1164,14 @@ function drawWinnerBanner(b) {
   ctx.fillRect(0, H / 2 - 80, W, 150);
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  const text = b.winner === "draw" ? "เสมอ!" : b.fighters[b.winner].def.name + " ชนะ!";
-  ctx.font = "700 56px " + FONT;
+  let text = "เสมอ!";
+  if (b.winner !== "draw") {
+    const L = b.layout;
+    if (L && L.mode === "2v2") text = TEAM_INFO[b.winner].name + " ชนะ!";
+    else if (L && L.mode === "ffa") text = "ผู้เล่น " + (b.winner + 1) + " (" + b.fighters[b.winner].def.name + ") ชนะ!";
+    else text = b.fighters[b.winner].def.name + " ชนะ!";
+  }
+  ctx.font = "700 " + (text.length > 18 ? 40 : 56) + "px " + FONT;
   ctx.lineWidth = 6;
   ctx.strokeStyle = "rgba(0,0,0,0.6)";
   ctx.strokeText(text, W / 2, H / 2 + 8);
@@ -1088,9 +1223,10 @@ function drawEraseLabel(b) {
   ctx.lineWidth = 5;
   ctx.strokeStyle = "rgba(0,0,0,0.7)";
   const txt = "⏱ เวลาถูกตัดทิ้ง  " + left.toFixed(1) + " วิ";
-  ctx.strokeText(txt, W / 2, 42);
+  const ly = 42 + 32 * labelRow++;
+  ctx.strokeText(txt, W / 2, ly);
   ctx.fillStyle = "#ff6b8a";
-  ctx.fillText(txt, W / 2, 42);
+  ctx.fillText(txt, W / 2, ly);
   ctx.restore();
 }
 
@@ -1171,9 +1307,8 @@ function render() {
   if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
   drawArena();
   if (battle) {
-    const keys = [selA.value, selB.value];
-    // หา key ของตัวละครจาก def (กันกรณีเปลี่ยน select กลางเกม)
-    const keyOf = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def) || keys[0];
+    labelRow = 0;
+    const keyOf = (def) => charKey(def) || Object.keys(CHARACTERS)[0];
     if (battle.winner !== null) drawWinnerBanner(battle);
     if (battle.eraser && battle.eraser.cast) drawEraseBackdrop(battle);
     if (battle.slower && battle.slower.cast) drawSlowField(battle);
@@ -1184,18 +1319,19 @@ function render() {
     drawWaves(battle);
     battle.fighters.forEach((f) => {
       if (f.hp <= 0) return;
-      gray(f === battle.dazed);
+      gray(battle.isDazed(f));
       if (f === battle.eraser) {
         ctx.filter = "drop-shadow(0 0 10px #ff2a55)";
         ctx.globalAlpha = 0.72;
       }
+      if (battle.layout && battle.layout.colors) drawTeamMark(f, battle.layout.colors[f.idx], f.idx + 1);
       drawFighter(f, keyOf(f.def));
       ctx.globalAlpha = 1;
       if (f === battle.eraser) ctx.filter = "none";
       if (f.weapon && !f.disarmed) (f.weapon.type === "compass" ? drawCompass(f) : drawKatana(f));
       if (f.cast && f.cast.sk.type === "timeaccel") drawAccelAura(f);
       if (f.cast && f.cast.sk.type === "metavision") drawMetaAura(f);
-      if (f.mind > 4 || f.stun > 0 || f === battle.dazed) drawMindAura(f);
+      if (f.mind > 4 || f.stun > 0 || battle.isDazed(f)) drawMindAura(f);
     });
     gray(false);
     // ตัวที่ถูกชะลอเวลา: โชว์ป้ายความเร็วเหนือหัว
@@ -1235,7 +1371,7 @@ function render() {
 
     for (const b of battle.balls) drawBall(b);
     for (const p of battle.projectiles) {
-      gray(p.owner === battle.dazed);
+      gray(battle.isDazed(p.owner));
       if (p.shape === "note") { drawNote(p); gray(false); continue; }
       if (p.shape === "text") { drawWord(p); gray(false); continue; }
       if (p.shape === "soccer") { drawSoccer(p); gray(false); continue; }
@@ -1337,7 +1473,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 21;
+const EXPECTED_VERSION = 22;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
@@ -1353,8 +1489,7 @@ function checkVersions() {
   }
 }
 
-fillSelects();
-setIdleHud();
+rebuildPlayers();
 updateMuteLabel();
 checkVersions();
 fitCanvas();
