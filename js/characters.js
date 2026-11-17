@@ -352,7 +352,7 @@ const CHARACTERS = {
         frame: "idle",
         duration: 3.5, // วิ่งไปหาบอลนานสุดเท่านี้ ถ้าไปไม่ถึงก็เลิก
         chaseSpeed: 2.4, // ตัวคูณความเร็วตอนพุ่งไปหาบอล
-        damage: 12, // ดาเมจเมื่อบอลที่เตะโดนศัตรู
+        damage: 8, // ดาเมจเมื่อบอลที่เตะโดนศัตรู
         kickSpeed: 640, // ความเร็วบอลหลังโดนเตะ
         knockback: 160,
         ballRadius: 15,
@@ -361,7 +361,7 @@ const CHARACTERS = {
         type: "metavision",
         name: "Meta Vision",
         cooldown: 13,
-        initialCooldown: 4,
+        initialCooldown: 8,
         frame: "meta",
         duration: 5, // มองเห็นอนาคต 5 วินาที
         lookahead: 0.9, // มองล่วงหน้ากี่วินาที
