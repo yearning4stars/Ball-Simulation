@@ -321,7 +321,7 @@ class Battle {
       // ศัตรูที่อยู่ในรัศมีจะเหม่อลอย ทำตามโชคชะตาเดิมโดยเล็งไปที่ตำแหน่งเก่าของ FuNx
       const inRange = Math.hypot(enemy.x - f.x, enemy.y - f.y) <= (sk.radius || 480);
       f.cast.dazed = inRange;
-      this.phantom = inRange ? { x: f.x, y: f.y, r: f.r, vx: 0, vy: 0, hp: f.hp } : null;
+      this.phantom = inRange ? { x: f.x, y: f.y, r: f.r, vx: 0, vy: 0, knockX: 0, knockY: 0, hp: f.hp } : null;
       this.events.push({ type: "erase", x: f.x, y: f.y, dazed: inRange });
     } else if (sk.type === "rewind") {
       this._startRewind(f, sk);
@@ -344,8 +344,8 @@ class Battle {
   _leadPoint(from, enemy, speed) {
     let tx = enemy.x;
     let ty = enemy.y;
-    const evx = enemy.vx + enemy.knockX;
-    const evy = enemy.vy + enemy.knockY;
+    const evx = (enemy.vx || 0) + (enemy.knockX || 0);
+    const evy = (enemy.vy || 0) + (enemy.knockY || 0);
     for (let i = 0; i < 3; i++) {
       const tt = Math.hypot(tx - from.x, ty - from.y) / speed;
       tx = enemy.x + evx * tt;
@@ -398,6 +398,9 @@ class Battle {
 
   _updateBalls(dt) {
     for (const b of this.balls) {
+      if (!isFinite(b.x + b.y + b.vx + b.vy)) { // กันบั๊กเผื่อไว้: ค่าบอลเพี้ยน -> วางกลับกลางสนามเป็นบอลเปล่า
+        b.x = this.w / 2; b.y = this.h / 2; b.vx = b.vy = 0; b.hot = false; b.owner = null; b.meta = false;
+      }
       const d = dt * this._timeScale(b.x, b.y, b.owner);
       b.reflectCd = Math.max(0, b.reflectCd - dt);
       b.x += b.vx * d;
@@ -940,8 +943,8 @@ class Battle {
     let ty = enemy.y;
     if (sk.lead && f.def.speed) {
       // เล็งนำหน้า: หาจุดที่ลูกบอลไปเจอศัตรูที่กำลังเคลื่อนที่ (วนคำนวณ 3 รอบพอ)
-      const evx = enemy.vx + enemy.knockX;
-      const evy = enemy.vy + enemy.knockY;
+      const evx = (enemy.vx || 0) + (enemy.knockX || 0);
+      const evy = (enemy.vy || 0) + (enemy.knockY || 0);
       for (let i = 0; i < 3; i++) {
         const tt = Math.hypot(tx - f.x, ty - f.y) / sk.projectileSpeed;
         tx = enemy.x + evx * tt;
@@ -1306,6 +1309,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 20;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 21;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
