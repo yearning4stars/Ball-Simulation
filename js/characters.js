@@ -392,7 +392,7 @@ const CHARACTERS = {
   florentino: {
     name: "Florentino",
     color: "#d4382f",
-    hp: 150,
+    hp: 100,
     speed: 190,
     radius: 36,
     energyMax: 100, // พลังงาน (Triple Threat ใช้ 100, Blossom ใช้ 20)
@@ -445,7 +445,6 @@ const CHARACTERS = {
         flowerDist: 64, // ดอกไม้อยู่ใกล้ตัวเป้าหมายมาก (px จากจุดกึ่งกลาง) ให้แทงทะลุไปเก็บได้ทีละดอก
         sound: "shoot",
         restAfter: 0.15,
-        indestructible: true,
       },
       {
         // สกิล 2 Triple Threat: แทง 3 จังหวะ (ครั้งที่ 2 ส่งศัตรูลอย 0.75 วินาที ครั้งที่ 3 แทงสองที) แต่ละที + ดาเมจจริง % ของเลือดสูงสุด จบด้วย Shuffle
@@ -487,6 +486,7 @@ const CHARACTERS = {
         speedMult: 5,
         damage: 5,
         duelTime: 5, // ดวล 5 วินาที
+        meleeResist: 0.5, // ระหว่างดวล ลดดาเมจระยะใกล้ที่โดนตัวเอง 50%
         duelMult: 1.4, // ดาเมจต่อคู่ดวล x1.4 (เกมจริง: เกราะศัตรูลด 25% + ดาเมจเพิ่ม 20%)
         restAfter: 0.3,
       },
@@ -495,6 +495,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 25;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 26;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

@@ -16,7 +16,7 @@ const TIME_SKILLS = ["timeerase", "rewind", "timeaccel", "timeslow"];
 // สติแตกหนัก: mind >= MIND_DROP แล้วตัวที่ถือ weapon จะทิ้งอาวุธ และหันไปใช้ "การชนโจมตี" แทน
 // จนกว่า mind จะลดลงต่ำกว่า MIND_PICKUP ค่อยหยิบอาวุธกลับมา (ห่างกันเพื่อไม่ให้สลับไปมารัวๆ)
 const MIND_DROP = 50;
-const MIND_PICKUP = 25;
+const MIND_PICKUP = 26;
 // ค่าสติที่ถูกบั่นทอน (mind) พอโดนแล้วจะ "ค้างไว้" นานเท่านี้ (วินาที) ก่อนเริ่มค่อยๆ ฟื้นกลับ (โดนซ้ำก็นับค้างใหม่)
 const MIND_HOLD = 2.5;
 
@@ -457,7 +457,7 @@ class Battle {
     let amt = this._out(f, dmg * this._dmgMult(f, target));
     if (truePct) amt += Math.max(1, Math.round(target.maxHp * truePct));
     const d = Math.hypot(target.x - f.x, target.y - f.y) || 1;
-    this._damage(target, amt, target.x - ((target.x - f.x) / d) * target.r, target.y - ((target.y - f.y) / d) * target.r);
+    this._damage(target, amt, target.x - ((target.x - f.x) / d) * target.r, target.y - ((target.y - f.y) / d) * target.r, true);
     this._knock(target, target.x - f.x, target.y - f.y, 90);
     f.combatT = 0;
     this.events.push({ type: "slash", x: target.x, y: target.y, ang: Math.atan2(target.y - f.y, target.x - f.x) });
@@ -521,7 +521,7 @@ class Battle {
     f.dashMult = sk.speedMult || 5;
     if (f.duel || enemy === this.phantom || enemy === this.eraser || enemy.hp <= 0) return;
     if (Math.hypot(enemy.x - f.x, enemy.y - f.y) <= f.r + enemy.r + 10) {
-      f.duel = { target: enemy, t: sk.duelTime || 5, mult: sk.duelMult || 1.4 };
+      f.duel = { target: enemy, t: sk.duelTime || 5, mult: sk.duelMult || 1.4, resist: sk.meleeResist || 0 };
       this._florHit(f, enemy, sk.damage || 5, 0);
       this.events.push({ type: "duel", x: enemy.x, y: enemy.y });
       c.t = sk.duration; // จบการพุ่ง
@@ -1194,7 +1194,7 @@ class Battle {
       if (enemy.cast) { enemy.cast = null; enemy.frame = "idle"; enemy.dashTimer = 0; } // ถูกใบ้กลางร่าย = สกิลถูกตัดทิ้ง
       this.events.push({ type: "backstab", x: hx, y: hy });
     }
-    this._damage(enemy, dmg, hx, hy);
+    this._damage(enemy, dmg, hx, hy, true);
     this._knock(enemy, px, py, wp.knockback || 0);
     f.weaponDir *= -1; // ฟันโดนแล้วหมุนกลับอีกทิศ
     f.weaponCd = wp.hitCooldown || 0.4;
@@ -1383,7 +1383,7 @@ class Battle {
     if (!att.disarmed || att.ramCd > 0 || tgt.hp <= 0) return;
     const wp = att.weapon;
     att.ramCd = 0.6;
-    this._damage(tgt, this._out(att, wp.ramDamage !== undefined ? wp.ramDamage : wp.damage), att.x + nx * att.r, att.y + ny * att.r);
+    this._damage(tgt, this._out(att, wp.ramDamage !== undefined ? wp.ramDamage : wp.damage), att.x + nx * att.r, att.y + ny * att.r, true);
     this._knock(tgt, nx, ny, wp.ramKnockback !== undefined ? wp.ramKnockback : wp.knockback || 0);
     if (att.cast && att.cast.hr) att.cast.hr.struck = true;
     this.events.push({ type: "ram", x: att.x + nx * att.r, y: att.y + ny * att.r });
@@ -1394,7 +1394,7 @@ class Battle {
     const c = attacker.cast;
     if (!c || c.sk.type !== "dash" || c.hit) return;
     c.hit = true;
-    this._damage(target, this._out(attacker, c.sk.damage * this._dmgMult(attacker, target)), attacker.x + nx * attacker.r, attacker.y + ny * attacker.r);
+    this._damage(target, this._out(attacker, c.sk.damage * this._dmgMult(attacker, target)), attacker.x + nx * attacker.r, attacker.y + ny * attacker.r, true);
     const kb = c.sk.knockback || 0;
     this._knock(target, nx, ny, kb);
     attacker.combatT = 0;
@@ -1585,7 +1585,9 @@ class Battle {
     }
   }
 
-  _damage(f, amount, x, y) {
+  _damage(f, amount, x, y, melee) {
+    // Gentleman's Duel: ระหว่างดวล ดาเมจระยะใกล้ (แทง/ฟัน/พุ่งชน) ที่โดน Florentino ลดลง 50%
+    if (melee && f.duel) amount *= 1 - (f.duel.resist || 0);
     f.hp = Math.max(0, f.hp - amount);
     f.hitFlash = 0.15;
     f.combatT = 0;
@@ -1635,6 +1637,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 25;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 26;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
