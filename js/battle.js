@@ -43,6 +43,16 @@ class Battle {
       this._makeFighter(defA, width * 0.25, height * 0.5, 0),
       this._makeFighter(defB, width * 0.75, height * 0.5, Math.PI),
     ];
+
+    // บอลบนสนาม: สร้างเมื่อมีตัวละครที่มีสกิล ballkick (Isagi)
+    this.balls = [];
+    const ks = this.fighters.map((f) => f.skills.find((k) => k.type === "ballkick")).find(Boolean);
+    if (ks) {
+      this.balls.push({
+        x: width * 0.5, y: height * 0.5, vx: 0, vy: 0, r: ks.ballRadius || 15,
+        hot: false, owner: null, meta: false, damage: 0, knock: 0, rot: 0, reflectCd: 0, evadedBy: null,
+      });
+    }
   }
 
   _makeFighter(def, x, y, angle) {
@@ -66,6 +76,7 @@ class Battle {
       cds: skills.map((sk, i) =>
         sk.initialCooldown !== undefined ? sk.initialCooldown : 0.8 + this.rng() * 0.6 + i * 0.9
       ),
+      kickCd: 0, // พักก่อนเตะบอลซ้ำระหว่าง Meta Vision
       gcd: 0, // พักสั้นๆ หลังใช้สกิลจบ ก่อนใช้สกิลถัดไป
       frame: "idle",
       cast: null, // {i, sk, t, shots, fired, hit}
@@ -143,6 +154,7 @@ class Battle {
         const rush = f.skills[i].hpRush ? 1 + (f.skills[i].hpRush - 1) * lost : 1;
         f.cds[i] -= fdt * slow * rush;
       }
+      f.kickCd = Math.max(0, f.kickCd - fdt);
       f.ramCd = Math.max(0, f.ramCd - fdt);
       f.clashCd = Math.max(0, f.clashCd - fdt);
       this._updateDisarm(f);
@@ -166,6 +178,7 @@ class Battle {
       if (f.weapon && !f.disarmed) this._updateWeapon(f, f === a ? b : a, f.tdt);
     }
     this._updateProjectiles(dt);
+    this._updateBalls(dt);
     this._updateWaves(dt);
     // ตัดเวลาอาจจบกลางก้าวนี้ (cast ถูกเคลียร์) ให้สถานะที่ตัววาดอ่านตรงกับความจริงเสมอ
     if (this.eraser && !(this.eraser.cast && this.eraser.cast.sk.type === "timeerase")) {
@@ -219,6 +232,18 @@ class Battle {
           c.fired = true;
           this._fireWave(f, enemy, sk);
         }
+      } else if (sk.type === "ballkick") {
+        // พุ่งไปที่บอลแล้วเตะใส่ศัตรู (เตะเสร็จค้างท่าเตะนิดหนึ่งแล้วจบ)
+        if (!c.kicked) {
+          const st = this._chaseBall(f, sk, dt);
+          if (st === "reach") {
+            this._kickBall(f, enemy, sk, 1, 1, 1, false);
+            c.kicked = true;
+            c.kickedAt = c.t;
+            f.frame = "kick";
+            f.dashTimer = 0;
+          } else if (st === "none") c.t = sk.duration;
+        } else if (c.t - c.kickedAt >= 0.25) c.t = sk.duration;
       } else if (sk.type === "metavision") {
         this._metaVision(f, enemy, sk, c, dt); // มองเห็นอนาคต: หลบกระสุน/คลื่น/การพุ่งของศัตรู
       } else if (sk.type === "dash" && sk.homing) {
@@ -237,9 +262,10 @@ class Battle {
         if (sk.type === "timeerase") {
           this._endTimeErase(f, enemy, false);
         } else {
+          if (sk.type === "ballkick" && !c.kicked) f.cds[c.i] = 1; // ไปไม่ถึงบอล: ลองใหม่เร็วๆ
           if (sk.type === "metavision" && sk.counterKick) {
-            // จบ Meta Vision: เห็นช่องว่างของศัตรูแล้ว ลูกเตะพร้อมยิงสวนทันที
-            for (let i = 0; i < f.skills.length; i++) if (f.skills[i].type === "projectile") f.cds[i] = Math.min(f.cds[i], 0.15);
+            // จบ Meta Vision: เห็นช่องว่างของศัตรูแล้ว พุ่งเตะบอลสวนทันที
+            for (let i = 0; i < f.skills.length; i++) if (f.skills[i].type === "ballkick") f.cds[i] = Math.min(f.cds[i], 0.15);
             this.events.push({ type: "metaEnd", x: f.x, y: f.y });
           }
           f.cast = null;
@@ -262,6 +288,8 @@ class Battle {
       if (timeBusy && TIME_SKILLS.includes(s2.type)) continue; // เวลาถูกแตะอยู่แล้ว
       // ย้อนเวลาจะใช้ก็ต่อเมื่อเสียเลือดไปพอสมควรในช่วงที่ย้อนกลับได้ (ไม่งั้นย้อนไปก็เปล่าประโยชน์)
       if (s2.type === "rewind" && !this._rewindWorthIt(f, s2)) continue;
+      // เตะบอลได้เมื่อมีบอลเปล่าให้เตะ (ถ้าบอลกำลังลอยเป็นอันตรายอยู่ ต้องรอ)
+      if (s2.type === "ballkick" && (!this.balls.length || this.balls[0].hot)) continue;
       if (pick === -1 || f.cds[i] < f.cds[pick]) pick = i;
     }
     if (pick === -1) return;
@@ -311,12 +339,136 @@ class Battle {
 
   // ---------- อาวุธชนอาวุธ (clash) ----------
   // รูปทรงของอาวุธเป็นแคปซูลหลายชิ้น: ก้าน (จากจุดจับถึงปลาย) และหัวเข็มทิศ (วงกลม ถ้ามี)
+  // ---------- บอลบนสนาม (Isagi) ----------
+  // จุดที่ควรเตะไป: ศัตรูที่กำลังเคลื่อนที่ ณ เวลาที่บอลไปถึง
+  _leadPoint(from, enemy, speed) {
+    let tx = enemy.x;
+    let ty = enemy.y;
+    const evx = enemy.vx + enemy.knockX;
+    const evy = enemy.vy + enemy.knockY;
+    for (let i = 0; i < 3; i++) {
+      const tt = Math.hypot(tx - from.x, ty - from.y) / speed;
+      tx = enemy.x + evx * tt;
+      ty = enemy.y + evy * tt;
+    }
+    return { x: Math.max(10, Math.min(this.w - 10, tx)), y: Math.max(10, Math.min(this.h - 10, ty)) };
+  }
+
+  // วิ่งไปหาบอลเปล่า: คืน "reach" (ถึงแล้ว เตะได้) | "chase" (กำลังไป) | "none" (ไม่มีบอลเปล่า)
+  _chaseBall(f, ks, dt) {
+    const b = this.balls[0];
+    if (!b || b.hot) return "none";
+    this._steer(f, b, 14 * dt);
+    f.dashTimer = 0.2;
+    f.dashMult = ks.chaseSpeed || 2.4;
+    return Math.hypot(b.x - f.x, b.y - f.y) <= f.r + b.r + 6 ? "reach" : "chase";
+  }
+
+  _kickBall(f, enemy, ks, speedMult, dmgMult, knockMult, meta) {
+    const b = this.balls[0];
+    if (!b) return;
+    const speed = (ks.kickSpeed || 640) * speedMult;
+    const aim = this._leadPoint(b, enemy, speed);
+    const ang = Math.atan2(aim.y - b.y, aim.x - b.x);
+    b.vx = Math.cos(ang) * speed;
+    b.vy = Math.sin(ang) * speed;
+    b.hot = true;
+    b.owner = f;
+    b.meta = meta;
+    b.damage = Math.round((ks.damage || 12) * dmgMult);
+    b.knock = (ks.knockback || 0) * knockMult;
+    b.evadedBy = null;
+    b.reflectCd = 0.2;
+    this.events.push({ type: "kick", x: b.x, y: b.y, meta });
+  }
+
+  // สะท้อนบอลของศัตรู: เจ้าของบอลเปลี่ยนเป็นคนปัด ส่งไปทาง (tx,ty) เร็วอย่างน้อย minSpeed
+  _reflectBall(b, by, tx, ty, minSpeed) {
+    if (b.reflectCd > 0) return;
+    const sp = Math.max(minSpeed, Math.hypot(b.vx, b.vy));
+    const ang = Math.atan2(ty - b.y, tx - b.x);
+    b.vx = Math.cos(ang) * sp;
+    b.vy = Math.sin(ang) * sp;
+    b.owner = by;
+    b.hot = true;
+    b.evadedBy = null;
+    b.reflectCd = 0.3;
+    this.events.push({ type: "reflect", x: b.x, y: b.y });
+  }
+
+  _updateBalls(dt) {
+    for (const b of this.balls) {
+      const d = dt * this._timeScale(b.x, b.y, b.owner);
+      b.reflectCd = Math.max(0, b.reflectCd - dt);
+      b.x += b.vx * d;
+      b.y += b.vy * d;
+      const sp = Math.hypot(b.vx, b.vy);
+      b.rot += ((sp * d) / b.r) * (b.vx >= 0 ? 1 : -1);
+      // เด้งกำแพง
+      if (b.x < b.r) { b.x = b.r; b.vx = Math.abs(b.vx) * 0.92; }
+      if (b.x > this.w - b.r) { b.x = this.w - b.r; b.vx = -Math.abs(b.vx) * 0.92; }
+      if (b.y < b.r) { b.y = b.r; b.vy = Math.abs(b.vy) * 0.92; }
+      if (b.y > this.h - b.r) { b.y = this.h - b.r; b.vy = -Math.abs(b.vy) * 0.92; }
+      // ลูกที่เตะแล้วค่อยๆ ช้าลง บอลเปล่าหยุดเร็ว
+      const drag = Math.exp(-(b.hot ? 0.2 : 1.3) * d);
+      b.vx *= drag;
+      b.vy *= drag;
+      if (b.hot && Math.hypot(b.vx, b.vy) < 170) { b.hot = false; b.owner = null; b.meta = false; b.evadedBy = null; }
+
+      for (const f of this.fighters) {
+        if (f.hp <= 0) continue;
+        const dx = b.x - f.x;
+        const dy = b.y - f.y;
+        const dist = Math.hypot(dx, dy) || 0.0001;
+        if (dist >= f.r + b.r) continue;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        if (b.hot) {
+          if (b.owner === f || b.evadedBy === f || f === this.eraser) continue; // เจ้าของบอล/หลบไปแล้ว/อยู่นอกความจริง: ทะลุผ่าน
+          this._damage(f, this._out(b.owner, b.damage), b.x - nx * b.r, b.y - ny * b.r);
+          this._knock(f, b.vx, b.vy, b.knock);
+          // บอลกระดอนออกจากตัวแล้วกลายเป็นบอลเปล่า
+          const dot = b.vx * nx + b.vy * ny;
+          b.vx = (b.vx - 2 * dot * nx) * 0.35;
+          b.vy = (b.vy - 2 * dot * ny) * 0.35;
+          b.x = f.x + nx * (f.r + b.r + 2);
+          b.y = f.y + ny * (f.r + b.r + 2);
+          b.hot = false;
+          b.owner = null;
+          b.meta = false;
+          b.evadedBy = null;
+        } else {
+          // บอลเปล่า: ใครชนก็ดันบอลไป (ไม่มีดาเมจ)
+          b.x = f.x + nx * (f.r + b.r);
+          b.y = f.y + ny * (f.r + b.r);
+          const fs = Math.hypot(f.vx + f.knockX, f.vy + f.knockY);
+          const push = Math.max(fs * 1.1, 150);
+          b.vx = nx * push;
+          b.vy = ny * push;
+        }
+      }
+    }
+  }
+
   // ---------- Meta Vision (Isagi) ----------
   // ทุกก้าว: จำลองอนาคต lookahead วินาที ถ้ากระสุน/คลื่น/การพุ่งของศัตรูจะโดนตัว ก็สไลด์หลบแล้วทำให้ท่านั้นพลาดเป้า
   // (เก็บจำนวนครั้งที่หลบใน c.dodges และพักสั้นๆ ระหว่างหลบ ถ้าท่ามาถี่เกินไปก็อาจโดนบ้าง)
   _metaVision(f, enemy, sk, c, dt) {
     c.dodgeCd = Math.max(0, (c.dodgeCd || 0) - dt);
     c.threats = []; // ให้ตัววาดเอาไปวาดเส้น "อนาคตที่เห็น"
+    // ระหว่าง Meta Vision ยังพุ่งเตะบอลได้ต่อเนื่อง และเตะแรงกว่าปกติ
+    const ks = f.skills.find((k) => k.type === "ballkick");
+    c.kickFlash = Math.max(0, (c.kickFlash || 0) - dt);
+    f.frame = c.kickFlash > 0 ? "kick" : sk.frame || "idle";
+    if (ks && f.kickCd <= 0) {
+      const st = this._chaseBall(f, ks, dt);
+      if (st === "reach") {
+        this._kickBall(f, enemy, ks, sk.kickSpeedMult || 1.5, sk.kickDamageMult || 1.8, sk.kickKnockMult || 1.6, true);
+        f.kickCd = sk.kickCd !== undefined ? sk.kickCd : 1;
+        c.kickFlash = 0.25;
+        f.dashTimer = 0;
+      }
+    }
     const look = sk.lookahead || 0.9;
     const maxD = sk.maxDodges !== undefined ? sk.maxDodges : 5;
     const threats = [];
@@ -336,6 +488,21 @@ class Battle {
       if (Math.hypot(cx, cy) > f.r + p.r + (p.wobble || 0) + 10) continue;
       threats.push({ kind: "p", ref: p, t: tc, dx: p.dx, dy: p.dy, side: p.dx * (f.y - p.by) - p.dy * (f.x - p.bx) });
       c.threats.push({ x: p.x, y: p.y, ex: p.bx + p.dx * sp * Math.min(look, tc + 0.15), ey: p.by + p.dy * sp * Math.min(look, tc + 0.15) });
+    }
+    // บอลที่ศัตรูเตะ/สะท้อนมา
+    for (const b of this.balls) {
+      if (!b.hot || b.owner === f || b.evadedBy === f) continue;
+      const sp = Math.hypot(b.vx, b.vy);
+      if (sp < 1) continue;
+      const bdx = b.vx / sp;
+      const bdy = b.vy / sp;
+      const tc = ((f.x - b.x) * bdx + (f.y - b.y) * bdy) / sp;
+      if (tc < 0 || tc > look) continue;
+      const cx = b.x + bdx * sp * tc - f.x;
+      const cy = b.y + bdy * sp * tc - f.y;
+      if (Math.hypot(cx, cy) > f.r + b.r + 10) continue;
+      threats.push({ kind: "b", ref: b, t: tc, dx: bdx, dy: bdy, side: bdx * (f.y - b.y) - bdy * (f.x - b.x) });
+      c.threats.push({ x: b.x, y: b.y, ex: b.x + bdx * sp * Math.min(look, tc + 0.15), ey: b.y + bdy * sp * Math.min(look, tc + 0.15) });
     }
     // คลื่นเสียงของศัตรู: จะแผ่มาถึงตัวภายใน lookahead และตัวอยู่ในส่วนโค้ง
     for (const w of this.waves) {
@@ -599,6 +766,7 @@ class Battle {
       })),
       projectiles: this.projectiles.map((p) => ({ ...p })),
       waves: this.waves.map((w) => ({ ...w })),
+      balls: this.balls.map((b) => ({ ...b })),
     };
   }
 
@@ -652,6 +820,7 @@ class Battle {
     });
     this.projectiles = snap.projectiles.map((p) => ({ ...p }));
     this.waves = snap.waves.map((w) => ({ ...w }));
+    this.balls = snap.balls.map((b) => ({ ...b }));
 
     if (prog >= 1) {
       this.wt = snap.t;
@@ -700,6 +869,20 @@ class Battle {
       if (hitRod || hitHead) {
         p.dead = true;
         this.events.push({ type: "deflect", x: p.x, y: p.y, effect: "parry" });
+      }
+    }
+    // ปัดบอลของศัตรู: ไม่แตก แต่สะท้อนกลับไปหาคนเตะ
+    for (const b of this.balls) {
+      if (!b.hot || b.owner === f || b.reflectCd > 0) continue;
+      const qx = b.x - f.x;
+      const qy = b.y - f.y;
+      const tt = Math.max(s0, Math.min(s1, qx * ca + qy * sa));
+      const hitRod = Math.hypot(qx - ca * tt, qy - sa * tt) <= b.r + reachW + 3;
+      const hitHead = head > 0 && Math.hypot(qx - hcx, qy - hcy) <= b.r + head + 2;
+      if (hitRod || hitHead) {
+        const back = this._leadPoint(b, b.owner, Math.max(520, Math.hypot(b.vx, b.vy)));
+        this._reflectBall(b, f, back.x, back.y, 520);
+        f.weaponDir *= -1;
       }
     }
     if (f.weaponCd > 0 || enemy.hp <= 0 || enemy === this.eraser) return; // ฟันคนที่อยู่นอกความจริงไม่โดน
@@ -1057,6 +1240,22 @@ class Battle {
         this.events.push({ type: "deflect", x: p.x, y: p.y, effect: w.projectileEffect });
       }
     }
+    // คลื่นเสียงโดนบอลที่ศัตรูเตะ: สะท้อนออกไปทางด้านหน้าคลื่น (ไปหาคนเตะ)
+    for (const w of this.waves) {
+      if (w.projectileEffect === "none") continue;
+      for (const b of this.balls) {
+        if (!b.hot || b.owner === w.owner || b.reflectCd > 0) continue;
+        const dx = b.x - w.x;
+        const dy = b.y - w.y;
+        const d = Math.hypot(dx, dy) || 0.0001;
+        if (Math.abs(d - w.r) > w.speed * dt + 16 + b.r) continue;
+        let da = Math.atan2(dy, dx) - w.ang;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        if (Math.abs(da) > w.halfArc + 0.1) continue;
+        this._reflectBall(b, w.owner, b.x + (dx / d) * 100, b.y + (dy / d) * 100, 520);
+      }
+    }
     if (changed) this.projectiles = this.projectiles.filter((p) => !p.dead);
   }
 
@@ -1090,6 +1289,7 @@ class Battle {
     if (this.winner !== null) {
       this.events.push({ type: "ko" });
       this.projectiles = []; // กระสุนและคลื่นที่ค้างอยู่หายไปพร้อมจบแมตช์
+      this.balls = [];
       this.waves = [];
       this.rewind = null;
       this.eraser = null;
@@ -1106,6 +1306,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 19;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 20;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

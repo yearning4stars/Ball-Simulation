@@ -243,6 +243,16 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, "#6fd3ff", 14, 280);
       floaters.push({ x: e.x, y: e.y - 56, text: "หลบ!", life: 0.8, color: "#8fe0ff", size: 28 });
       sfx.dodge();
+    } else if (e.type === "kick") {
+      spawnParticles(e.x, e.y, e.meta ? "#ffd65a" : "#ffffff", e.meta ? 22 : 12, e.meta ? 380 : 260);
+      shake = Math.max(shake, e.meta ? 9 : 5);
+      if (e.meta) floaters.push({ x: e.x, y: e.y - 40, text: "Meta Kick!", life: 1.0, color: "#ffd65a", size: 30 });
+      sfx.kick();
+    } else if (e.type === "reflect") {
+      spawnParticles(e.x, e.y, "#ffffff", 16, 320);
+      floaters.push({ x: e.x, y: e.y - 36, text: "สะท้อน!", life: 0.9, color: "#fff3b0", size: 30 });
+      shake = Math.max(shake, 6);
+      sfx.deflect();
     } else if (e.type === "bounce") {
       spawnParticles(e.x, e.y, "#ffffff", 8, 200);
     } else if (e.type === "rewind") {
@@ -647,7 +657,7 @@ function drawSoccer(p) {
   const r = p.r;
   ctx.save();
   ctx.translate(p.x, p.y);
-  ctx.rotate(p.t * 14 * (p.spin >= 0 ? 1 : -1));
+  ctx.rotate(p.rot !== undefined ? p.rot : p.t * 14 * (p.spin >= 0 ? 1 : -1));
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -675,6 +685,36 @@ function drawSoccer(p) {
   ctx.beginPath();
   ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
   ctx.stroke();
+}
+
+// บอลบนสนาม: เงา + ลูกฟุตบอล ถ้าถูกเตะ (hot) มีแสงและเส้นความเร็วตามหลัง (Meta Kick เป็นสีทองและแรงกว่า)
+function drawBall(b) {
+  const sp = Math.hypot(b.vx, b.vy);
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.beginPath();
+  ctx.ellipse(b.x, b.y + b.r * 0.9, b.r * 0.9, b.r * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (b.hot && sp > 1) {
+    const col = b.meta ? "255,214,90" : "120,200,255";
+    const len = Math.min(0.09 * sp, 90);
+    const ux = b.vx / sp;
+    const uy = b.vy / sp;
+    const g = ctx.createLinearGradient(b.x, b.y, b.x - ux * len, b.y - uy * len);
+    g.addColorStop(0, "rgba(" + col + ",0.85)");
+    g.addColorStop(1, "rgba(" + col + ",0)");
+    ctx.strokeStyle = g;
+    ctx.lineWidth = b.r * (b.meta ? 2.2 : 1.6);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - ux * len, b.y - uy * len);
+    ctx.stroke();
+    ctx.shadowColor = "rgb(" + col + ")";
+    ctx.shadowBlur = b.meta ? 26 : 16;
+  }
+  drawSoccer({ x: b.x, y: b.y, r: b.r, rot: b.rot, color: b.hot ? (b.meta ? "#ffd65a" : "#78c8ff") : "#9aa3b5" });
+  ctx.restore();
 }
 
 // ---------- Meta Vision: ออร่าฟ้า ตา และเส้น "อนาคตที่มองเห็น" ----------
@@ -1193,6 +1233,7 @@ function render() {
     drawShards();
     for (const f of battle.fighters) if (f.hp > 0 && f.cast && f.cast.sk.type === "metavision") drawMetaThreats(f);
 
+    for (const b of battle.balls) drawBall(b);
     for (const p of battle.projectiles) {
       gray(p.owner === battle.dazed);
       if (p.shape === "note") { drawNote(p); gray(false); continue; }
@@ -1296,7 +1337,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 19;
+const EXPECTED_VERSION = 20;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

@@ -61,6 +61,11 @@
 //   "metavision"  Meta Vision (Isagi) มองเห็นอนาคตที่เป็นไปได้ นาน duration วินาที: คำนวณวิถีกระสุน/คลื่น/การพุ่งของศัตรูล่วงหน้า lookahead วินาที
 //        ถ้าจะโดนก็สไลด์หลบทันที (ท่านั้นพลาดเป้า) หลบได้ maxDodges ครั้ง พักระหว่างหลบ dodgeCd วินาที dodgePower = แรงสไลด์
 //        counterKick: true = จบแล้วลูกเตะพร้อมยิงสวนทันที ตัดเวลา (ตัดเวลา/ย้อนเวลา ฯลฯ) หลบไม่ได้ เพราะไม่ใช่สิ่งที่มองเห็นล่วงหน้าได้
+//   "ballkick"    บอลฟุตบอลอยู่บนสนามตลอด (สร้างให้อัตโนมัติถ้ามีใครมีสกิลนี้) ผู้ใช้พุ่งไปที่บอลแล้วเตะใส่ศัตรู (เล็งนำหน้า)
+//        บอลที่เตะแล้วทำดาเมจ damage + แรงผลัก knockback เด้งกำแพงได้ จนช้าลงถึงเกณฑ์ก็กลายเป็นบอลเปล่า (ไม่มีดาเมจ ใครชนก็ดันบอลได้)
+//        ศัตรูปัดด้วยอาวุธ (ดาบ/เข็มทิศ) หรือคลื่นเสียง = บอลสะท้อนกลับไปหาผู้เตะ (เจ้าของบอลเปลี่ยน โดนผู้เตะได้เหมือนกัน)
+//        duration (เวลาพุ่งหาบอลสูงสุด), chaseSpeed, kickSpeed, ballRadius
+//        ใส่ใน metavision: kickCd, kickSpeedMult, kickDamageMult, kickKnockMult = เตะบอลระหว่าง Meta Vision ได้ แรงกว่าปกติ
 //        projectile เพิ่ม: lead (เล็งนำหน้าศัตรูที่กำลังเคลื่อนที่), bounces (กระสุนสะท้อนกำแพงได้กี่ครั้ง), shape: "soccer" (ลูกฟุตบอล)
 //
 //  weapon (ไม่บังคับ) อาวุธที่หมุนรอบตัวตลอดเวลา หมุนไปเรื่อยๆ จนฟันโดนศัตรูแล้วกลับทิศ
@@ -323,7 +328,7 @@ const CHARACTERS = {
       },
     ],
   },
-  // Isagi (Blue Lock): เตะบอลเป็นการโจมตี + Meta Vision มองเห็นอนาคตที่เป็นไปได้แล้วหลบสกิลศัตรู
+  // Isagi (Blue Lock): พุ่งเตะบอลที่อยู่บนสนามใส่ศัตรู + Meta Vision มองเห็นอนาคตที่เป็นไปได้แล้วหลบสกิลศัตรู
   // ภาพ: assets/characters/isagi/idle.png, kick.png (ท่าเตะ), meta.png (ท่า Meta Vision)  ลูกบอลกับเส้นอนาคต เกมวาดให้เองด้วยโค้ด
   isagi: {
     name: "Isagi",
@@ -338,20 +343,19 @@ const CHARACTERS = {
     },
     skills: [
       {
-        type: "projectile",
-        name: "เตะบอล (Direct Shot)",
-        cooldown: 2.0,
-        frame: "kick",
-        duration: 0.5,
-        fireDelay: 0.18, // เงื้อเท้าก่อนแล้วค่อยเตะ
-        damage: 13,
-        projectileSpeed: 560,
-        projectileRadius: 13,
-        shape: "soccer", // ลูกฟุตบอลหมุนติ้ว
-        lead: true, // เล็งนำหน้าศัตรู (คำนวณจุดที่ลูกบอลจะไปเจอศัตรู ไม่ใช่เล็งที่ตำแหน่งปัจจุบัน)
-        bounces: 1, // บอลสะท้อนกำแพงได้ 1 ครั้งแล้วยังอันตรายต่อ
-        knockback: 140,
-        sound: "kick",
+        // บอลอยู่บนสนามตลอด: Isagi พุ่งไปที่บอลแล้วเตะใส่ศัตรู (เล็งนำหน้า) บอลเด้งกำแพงได้
+        // ศัตรูปัดด้วยอาวุธหรือคลื่นเสียง = บอลสะท้อนกลับมาหา Isagi แทน (ยังโดนดาเมจได้)
+        type: "ballkick",
+        name: "พุ่งเตะบอล",
+        cooldown: 3.2,
+        initialCooldown: 0.8,
+        frame: "idle",
+        duration: 3.5, // วิ่งไปหาบอลนานสุดเท่านี้ ถ้าไปไม่ถึงก็เลิก
+        chaseSpeed: 2.4, // ตัวคูณความเร็วตอนพุ่งไปหาบอล
+        damage: 12, // ดาเมจเมื่อบอลที่เตะโดนศัตรู
+        kickSpeed: 640, // ความเร็วบอลหลังโดนเตะ
+        knockback: 160,
+        ballRadius: 15,
       },
       {
         type: "metavision",
@@ -365,6 +369,11 @@ const CHARACTERS = {
         dodgeCd: 0.28, // พักสั้นๆ ระหว่างการหลบแต่ละครั้ง
         dodgePower: 620, // แรงสไลด์หลบ (px/วินาที ยิ่งมากยิ่งเลื่อนไกล)
         counterKick: true, // จบ Meta Vision แล้วเตะสวนทันที (รีเซ็ตคูลดาวน์ลูกเตะ)
+        // ระหว่าง Meta Vision เตะบอลได้ต่อเนื่อง (ไม่ต้องรอคูลดาวน์ปกติ) และเตะแรงกว่าปกติ
+        kickCd: 1.0, // เตะซ้ำได้ทุกกี่วินาทีระหว่าง Meta Vision
+        kickSpeedMult: 1.5, // บอลเร็วขึ้นกี่เท่า
+        kickDamageMult: 1.8, // ดาเมจแรงขึ้นกี่เท่า
+        kickKnockMult: 1.6, // แรงผลักแรงขึ้นกี่เท่า
         restAfter: 0.4,
       },
     ],
@@ -372,6 +381,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 19;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 20;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };
