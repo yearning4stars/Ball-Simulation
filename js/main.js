@@ -1596,7 +1596,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 27;
+const EXPECTED_VERSION = 28;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

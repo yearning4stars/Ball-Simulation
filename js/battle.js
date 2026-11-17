@@ -16,7 +16,7 @@ const TIME_SKILLS = ["timeerase", "rewind", "timeaccel", "timeslow"];
 // สติแตกหนัก: mind >= MIND_DROP แล้วตัวที่ถือ weapon จะทิ้งอาวุธ และหันไปใช้ "การชนโจมตี" แทน
 // จนกว่า mind จะลดลงต่ำกว่า MIND_PICKUP ค่อยหยิบอาวุธกลับมา (ห่างกันเพื่อไม่ให้สลับไปมารัวๆ)
 const MIND_DROP = 50;
-const MIND_PICKUP = 27;
+const MIND_PICKUP = 28;
 // ค่าสติที่ถูกบั่นทอน (mind) พอโดนแล้วจะ "ค้างไว้" นานเท่านี้ (วินาที) ก่อนเริ่มค่อยๆ ฟื้นกลับ (โดนซ้ำก็นับค้างใหม่)
 const MIND_HOLD = 2.5;
 
@@ -452,6 +452,14 @@ class Battle {
     return (1 + 0.04 * (f.adStacks || 0)) * (f.duel && f.duel.target === target ? f.duel.mult : 1);
   }
 
+  // ตีคู่ดวลซ้ำ = เพิ่มเวลาดวล (หลอดดวล) ให้รำต่อได้ ไม่เกิน cap
+  _duelExtend(f, target) {
+    const d = f.duel;
+    if (!d || d.target !== target || !d.extend) return;
+    d.t = Math.min(d.cap || d.t + d.extend, d.t + d.extend);
+    this.events.push({ type: "duelExtend", x: target.x, y: target.y });
+  }
+
   // ดาเมจของท่า Triple Threat / ประกาศดวล: ดาเมจกายภาพ + ดาเมจจริง truePct ของเลือดสูงสุดศัตรู
   _florHit(f, target, dmg, truePct) {
     let amt = this._out(f, dmg * this._dmgMult(f, target));
@@ -460,6 +468,7 @@ class Battle {
     this._damage(target, amt, target.x - ((target.x - f.x) / d) * target.r, target.y - ((target.y - f.y) / d) * target.r, true);
     this._knock(target, target.x - f.x, target.y - f.y, 90);
     f.combatT = 0;
+    this._duelExtend(f, target);
     this.events.push({ type: "slash", x: target.x, y: target.y, ang: Math.atan2(target.y - f.y, target.x - f.x) });
   }
 
@@ -521,7 +530,7 @@ class Battle {
     f.dashMult = sk.speedMult || 5;
     if (f.duel || enemy === this.phantom || enemy === this.eraser || enemy.hp <= 0) return;
     if (Math.hypot(enemy.x - f.x, enemy.y - f.y) <= f.r + enemy.r + 10) {
-      f.duel = { target: enemy, t: sk.duelTime || 5, mult: sk.duelMult || 1.4, resist: sk.meleeResist || 0 };
+      f.duel = { target: enemy, t: sk.duelTime || 5, mult: sk.duelMult || 1.4, resist: sk.meleeResist || 0, extend: sk.duelExtend || 0, cap: sk.duelCap || 0 };
       this._florHit(f, enemy, sk.damage || 5, 0);
       this.events.push({ type: "duel", x: enemy.x, y: enemy.y });
       c.t = sk.duration; // จบการพุ่ง
@@ -1263,7 +1272,8 @@ class Battle {
       flowerDist: sk.flowerDist || 64, // ดอกไม้อยู่ห่างจากจุดกึ่งกลางเป้าหมายกี่ px (ใกล้ตัวมาก ให้แทงทะลุไปเก็บได้)
       text: sk.texts ? sk.texts[Math.floor(this.rng() * sk.texts.length)] : null, // ข้อความบนกระสุนคำพูด
       mindDamage: sk.mindDamage || 0, // บั่นทอนสติ/ความมั่นใจเท่าไรเมื่อโดน
-      indestructible: !!sk.indestructible, // ปัดทิ้ง/ชนแล้วไม่แตก
+      unblockable: !!sk.unblockable, // ปัดไม่ได้เลย: ดาบ/คลื่น/กระสุนอื่นไม่มีผล (Blossom)
+      indestructible: !!sk.indestructible || !!sk.unblockable, // ปัดทิ้ง/ชนแล้วไม่แตก
       owner: f,
       color: f.def.color,
       shape: sk.shape || "ball", // "ball" หรือ "note"
@@ -1398,6 +1408,7 @@ class Battle {
     const kb = c.sk.knockback || 0;
     this._knock(target, nx, ny, kb);
     attacker.combatT = 0;
+    this._duelExtend(attacker, target);
     if (c.sk.slowDuration) { // Lunge: ชะลอศัตรู
       target.slowT = Math.max(target.slowT, c.sk.slowDuration);
       target.slowMult = c.sk.slowMult !== undefined ? c.sk.slowMult : 0.3;
@@ -1449,6 +1460,7 @@ class Battle {
             target.stun = Math.max(target.stun, p.stunOnHit);
             this.events.push({ type: "dartStun", x: target.x, y: target.y });
           }
+          this._duelExtend(p.owner, target);
           if (p.flowers) this._spawnFlowers(p.owner, target, p.flowers, p.flowerDist);
           if (p.energyRefill) p.owner.energy = p.owner.def.energyMax || p.owner.energy; // ปาโดนแล้วพร้อมแทงต่อทันที
           p.owner.combatT = 0;
@@ -1524,7 +1536,7 @@ class Battle {
       if (w.projectileEffect === "none") continue;
       const band = w.speed * dt + 16; // ความหนาของแนวคลื่นที่ปะทะกระสุนได้
       for (const p of this.projectiles) {
-      if (p.owner.team === w.owner.team || p.dead || p.hitByWave) continue;
+      if (p.owner.team === w.owner.team || p.dead || p.hitByWave || p.unblockable) continue;
         const dx = p.x - w.x;
         const dy = p.y - w.y;
         const d = Math.hypot(dx, dy) || 0.0001;
@@ -1637,6 +1649,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 27;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 28;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
