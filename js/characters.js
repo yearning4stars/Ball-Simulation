@@ -392,7 +392,7 @@ const CHARACTERS = {
   florentino: {
     name: "Florentino",
     color: "#d4382f",
-    hp: 100,
+    hp: 150,
     speed: 190,
     radius: 36,
     energyMax: 100, // พลังงาน (Triple Threat ใช้ 100, Blossom ใช้ 20)
