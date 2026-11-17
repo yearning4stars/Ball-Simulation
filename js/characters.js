@@ -416,11 +416,11 @@ const CHARACTERS = {
         duration: 0.45,
         speedMult: 3,
         homing: 4,
-        damage: 7,
+        damage: 4,
         knockback: 120,
         slowDuration: 0.5,
         slowMult: 0.3, // ชะลอ 70%
-        heal: 6,
+        heal: 4,
         shuffle: { slide: 260, ccImmune: 0.5, boost: 0.5 },
         restAfter: 0.2,
       },
@@ -434,7 +434,7 @@ const CHARACTERS = {
         frame: "blossom",
         duration: 0.4,
         fireDelay: 0.12,
-        damage: 8,
+        damage: 5,
         projectileSpeed: 640,
         projectileRadius: 8,
         shape: "dart",
@@ -461,17 +461,17 @@ const CHARACTERS = {
         speedMult: 2.4,
         homing: 14,
         reach: 60, // แทงถึงเมื่อห่างจากขอบตัวศัตรูไม่เกินเท่านี้ (px)
-        truePct: 0.02, // ดาเมจจริงต่อที = 2% ของเลือดสูงสุดศัตรู (เกมจริง 4%)
+        truePct: 0.01, // ดาเมจจริงต่อที = 1% ของเลือดสูงสุดศัตรู (เกมจริง 4%)
         strikes: [
-          { t: 0.12, damage: 4 },
-          { t: 0.32, damage: 4, stun: 0.75 }, // ลอย
-          { t: 0.52, damage: 3 },
-          { t: 0.62, damage: 3 },
+          { t: 0.08, damage: 3 },
+          { t: 0.22, damage: 3, stun: 0.75 }, // ลอย
+          { t: 0.36, damage: 2 },
+          { t: 0.44, damage: 2 },
         ],
-        exitAt: 0.7, // แทงจบแล้วพุ่งทะลุตัวศัตรูไปเก็บดอกไม้ที่ใกล้สุด 1 ดอก (เก็บแล้วพลังงานเต็ม + แทงต่อได้ทันที)
-        exitSpeed: 3.4,
+        exitAt: 0.5, // แทงจบแล้วพุ่งทะลุตัวศัตรูไปเก็บดอกไม้ที่ใกล้สุด 1 ดอก (เก็บแล้วพลังงานเต็ม + แทงต่อได้ทันที)
+        exitSpeed: 4.2,
         shuffle: { slide: 0, ccImmune: 0.5, boost: 0.5 },
-        restAfter: 0.1,
+        restAfter: 0, // เก็บดอกแล้วแทงต่อทันที (ตามคลิป: ห้ามรอ)
       },
       {
         // อัลติเมท Gentleman's Duel: ชาร์จแล้วพุ่งไปหาศัตรูที่ใกล้สุด เริ่มดวล 5 วินาที: ดาเมจที่ใส่คู่ดวลเพิ่ม (duelMult)
@@ -494,6 +494,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 24;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 25;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

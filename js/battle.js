@@ -1635,6 +1635,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 24;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 25;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

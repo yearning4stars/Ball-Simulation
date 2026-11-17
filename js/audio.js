@@ -215,6 +215,6 @@ class SoundFX {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 24;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 25;
 
 if (typeof module !== "undefined") module.exports = { SoundFX };
