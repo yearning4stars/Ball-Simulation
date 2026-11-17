@@ -180,3 +180,29 @@ canvas {
 .mindbar { height: 4px; margin-top: 3px; background: #2a2f3f; border-radius: 2px; overflow: hidden; }
 .mindbar .fill { height: 100%; width: 0; background: #b38cff; transition: width 0.12s; }
 .panel.right .mindbar .fill { margin-left: auto; }
+
+/* ---------- หลายผู้เล่น (2v2 / ffa) ---------- */
+.controls label { display: inline-flex; align-items: center; gap: 6px; }
+label[hidden] { display: none; }
+.pnum {
+  display: inline-block;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  margin-right: 6px;
+  border-radius: 9px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #10131d;
+}
+.panel.right .pname { display: flex; justify-content: flex-end; }
+.panel.right .pnum { margin-right: 0; margin-left: 6px; order: 2; }
+.hud.many { gap: 6px; }
+.hud.many .panel { padding: 4px 6px 5px; }
+.hud.many .pname { font-size: 0.8rem; }
+.hud.many .bar { height: 16px; }
+.hud.many .bar .val { font-size: 0.7rem; }
+.hud.many .bar.cd { height: 13px; }
+.hud.many .skname { flex-basis: 40%; font-size: 0.62rem; }
+.hud.many .bar.cd .val { font-size: 0.6rem; }
