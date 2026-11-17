@@ -245,7 +245,7 @@ class Battle {
         f.frame = "idle";
         f.dashTimer = 0;
       } else {
-        if (!f.cast) this._chaseFlowers(f, fdt); // วิ่งไปเก็บดอกไม้ของตัวเอง
+        if (!f.cast && !this._chaseFlowers(f, enemy, fdt)) this._approach(f, enemy, fdt); // ว่างๆ: วิ่งไปเก็บดอกไม้ของตัวเอง ไม่งั้นเข้าหาศัตรูให้อยู่ในระยะสกิล
         this._updateSkill(f, enemy, cdt);
       }
       this._move(f, fdt);
@@ -383,7 +383,8 @@ class Battle {
       if (timeBusy && TIME_SKILLS.includes(s2.type)) continue; // เวลาถูกแตะอยู่แล้ว
       // ย้อนเวลาจะใช้ก็ต่อเมื่อเสียเลือดไปพอสมควรในช่วงที่ย้อนกลับได้ (ไม่งั้นย้อนไปก็เปล่าประโยชน์)
       if (s2.type === "rewind" && !this._rewindWorthIt(f, s2)) continue;
-      if (s2.requires === "lunge" && !f.lunge) continue; // Lunge ใช้ได้เมื่อการโจมตีปกติครั้งถัดไปพร้อม
+      // Lunge (โจมตีปกติ) ใช้ได้เมื่อพร้อม และไม่ใช้ระหว่างวงจรรำ (ยังมีดอกไม้ให้เก็บ หรือ Triple Threat พร้อมแทง)
+      if (s2.requires === "lunge" && (!f.lunge || this.flowers.some((fl) => fl.owner === f) || this._stabReady(f, enemy))) continue;
       if (s2.energyCost && f.energy < s2.energyCost) continue; // พลังงานไม่พอ
       if (s2.maxRange && Math.hypot(enemy.x - f.x, enemy.y - f.y) > s2.maxRange) continue; // ศัตรูไกลเกินระยะ
       // เตะบอลได้เมื่อมีบอลเปล่าให้เตะ (ถ้าบอลกำลังลอยเป็นอันตรายอยู่ ต้องรอ)
@@ -462,27 +463,53 @@ class Battle {
     this.events.push({ type: "slash", x: target.x, y: target.y, ang: Math.atan2(target.y - f.y, target.x - f.x) });
   }
 
-  // Triple Threat: พุ่งเข้าหาแล้วแทง 3 จังหวะ (ครั้งที่ 2 ส่งศัตรูลอย ครั้งที่ 3 แทงสองที) โดนฮีโร่ = Blossom คูลดาวน์ลด 1 วินาที
+  // Triple Threat ("แทง"): พุ่งเข้าหาแล้วแทง 3 จังหวะ (ครั้งที่ 2 ส่งศัตรูลอย ครั้งที่ 3 แทงสองที) โดนฮีโร่ = Blossom คูลดาวน์ลด 1 วินาที
+  // แล้ว "พุ่งทะลุตัวศัตรูไป" เก็บดอกไม้ที่อยู่ใกล้ที่สุด 1 ดอก (เก็บแล้วพลังงานเต็ม + แทงได้อีก) ระหว่างแทงจะไม่เก็บดอก
   _tripleRun(f, enemy, sk, c, dt) {
-    this._steer(f, enemy, (sk.homing || 14) * dt);
-    f.dashTimer = 0.2;
-    f.dashMult = sk.speedMult || 2.4;
     const list = sk.strikes || [];
     c.next = c.next || 0;
-    while (c.next < list.length && c.t >= list[c.next].t) {
-      const st = list[c.next++];
-      const reach = f.r + enemy.r + (sk.reach || 60);
-      if (enemy === this.phantom || enemy === this.eraser || enemy.hp <= 0) continue;
-      if (Math.hypot(enemy.x - f.x, enemy.y - f.y) > reach) continue; // แทงไม่ถึง
-      this._florHit(f, enemy, st.damage, sk.truePct || 0);
-      if (st.stun) {
-        enemy.stun = Math.max(enemy.stun, st.stun); // ลอยกลางอากาศ = ขยับ/ร่ายไม่ได้
-        this.events.push({ type: "airborne", x: enemy.x, y: enemy.y });
+    if (!c.exit) {
+      // ช่วงแทง: เข้าหาศัตรู ถ้าทับตัวแล้วก็ไหลทะลุไปตามความเร็วเดิม (ไม่หมุนตามจุดศูนย์กลางที่ทับกัน)
+      if (Math.hypot(enemy.x - f.x, enemy.y - f.y) > f.r + enemy.r * 0.5 + 4) this._steer(f, enemy, (sk.homing || 14) * dt);
+      f.dashTimer = 0.2;
+      f.dashMult = sk.speedMult || 2.4;
+      while (c.next < list.length && c.t >= list[c.next].t) {
+        const st = list[c.next++];
+        const reach = f.r + enemy.r + (sk.reach || 60);
+        if (enemy === this.phantom || enemy === this.eraser || enemy.hp <= 0) continue;
+        if (Math.hypot(enemy.x - f.x, enemy.y - f.y) > reach) continue; // แทงไม่ถึง
+        this._florHit(f, enemy, st.damage, sk.truePct || 0);
+        if (st.stun) {
+          enemy.stun = Math.max(enemy.stun, st.stun); // ลอยกลางอากาศ = ขยับ/ร่ายไม่ได้
+          this.events.push({ type: "airborne", x: enemy.x, y: enemy.y });
+        }
+        if (!c.cutDone) {
+          c.cutDone = true;
+          f.skills.forEach((k, i) => { if (k.flowers) f.cds[i] = Math.max(0, f.cds[i] - 1); });
+        }
       }
-      if (!c.cutDone) {
-        c.cutDone = true;
-        f.skills.forEach((k, i) => { if (k.flowers) f.cds[i] = Math.max(0, f.cds[i] - 1); });
+      if (c.next >= list.length && c.t >= (sk.exitAt || list[list.length - 1].t + 0.1)) {
+        c.exit = true;
+        c.flowersAtExit = this.flowers.filter((fl) => fl.owner === f).length;
       }
+      return;
+    }
+    // ช่วงพุ่งออก: พุ่งทะลุไปหาดอกไม้ที่ใกล้ที่สุด (ไม่มีดอกไม้ = พุ่งผ่านตัวศัตรูไปอีกนิดแล้วจบ)
+    let best = null;
+    let bd = Infinity;
+    for (const fl of this.flowers) {
+      if (fl.owner !== f) continue;
+      const d = Math.hypot(fl.x - f.x, fl.y - f.y);
+      if (d < bd) { bd = d; best = fl; }
+    }
+    f.dashTimer = 0.2;
+    f.dashMult = sk.exitSpeed || 3.4;
+    if (best) {
+      this._steer(f, best, 20 * dt);
+      const now = this.flowers.filter((fl) => fl.owner === f).length;
+      if (now < c.flowersAtExit) c.t = sk.duration; // เก็บดอกได้แล้ว: จบท่า
+    } else if (c.t >= (c.exitStart = c.exitStart || c.t) + 0.2) {
+      c.t = sk.duration;
     }
   }
 
@@ -509,23 +536,30 @@ class Battle {
   }
 
   // Blossom: ดอกไม้ปรากฏรอบเป้าหมาย (อยู่ได้ 5 วินาที) เฉพาะเจ้าของเก็บได้
-  _spawnFlowers(owner, target, n) {
+  _spawnFlowers(owner, target, n, dist) {
     const a0 = this.rng() * Math.PI * 2;
     for (let k = 0; k < n; k++) {
       const a = a0 + (k / n) * Math.PI * 2;
-      const x = Math.max(20, Math.min(this.w - 20, target.x + Math.cos(a) * 95));
-      const y = Math.max(20, Math.min(this.h - 20, target.y + Math.sin(a) * 95));
+      const x = Math.max(20, Math.min(this.w - 20, target.x + Math.cos(a) * (dist || 64)));
+      const y = Math.max(20, Math.min(this.h - 20, target.y + Math.sin(a) * (dist || 64)));
       this.flowers.push({ x, y, r: 16, t: 5, life: 5, owner, bob: this.rng() * 6 });
     }
     this.events.push({ type: "flowers", x: target.x, y: target.y });
   }
 
   _updateFlowers(dt) {
+    const got = new Set(); // เก็บได้ทีละดอกต่อเฟรม
     for (const fl of this.flowers) {
       fl.t -= dt;
       const o = fl.owner;
       if (fl.t <= 0 || o.hp <= 0) { fl.gone = true; continue; }
+      // ระหว่างแทง (Triple Threat) ยังไม่เก็บ ต้องแทงจบแล้วพุ่งออกไปเก็บ (ทีละดอกต่อการแทง 1 ครั้ง)
+      if (o.cast && o.cast.sk.type === "triplethreat" && !o.cast.exit) continue;
+      if (got.has(o)) continue;
+      // แทงพร้อมอยู่แล้ว (พลังงานเต็ม/คูลดาวน์หมด) = ไม่เก็บเอง เก็บด้วยการแทงพุ่งทะลุแทน (ได้ครบทุกดอก ทีละดอกต่อการแทง)
+      if (!(o.cast && o.cast.sk.type === "triplethreat") && this._stabReady(o, this._target(o), true)) continue;
       if (Math.hypot(o.x - fl.x, o.y - fl.y) < o.r + fl.r) {
+        got.add(o);
         // เก็บดอกไม้: เติมพลังงานเต็ม + Lunge พร้อมใช้ + รีเซ็ตคูลดาวน์สกิลที่ใช้พลังงาน (Triple Threat)
         fl.gone = true;
         o.energy = o.def.energyMax || o.energy;
@@ -537,9 +571,16 @@ class Battle {
     this.flowers = this.flowers.filter((fl) => !fl.gone);
   }
 
-  // ว่างๆ ก็วิ่งไปเก็บดอกไม้ของตัวเอง (เร็วขึ้นนิดหน่อย)
-  _chaseFlowers(f, dt) {
-    if (!this.flowers.length || f.stun > 0) return;
+  // สกิลที่ใช้พลังงาน (Triple Threat) พร้อมแทงเลยไหม: คูลดาวน์หมด พลังงานพอ และศัตรูอยู่ในระยะ
+  _stabReady(f, enemy, ignoreRange) {
+    return f.skills.some((k, i) =>
+      k.energyCost && f.cds[i] <= 0 && f.energy >= k.energyCost &&
+      (ignoreRange || !k.maxRange || Math.hypot(enemy.x - f.x, enemy.y - f.y) <= k.maxRange));
+  }
+
+  // ว่างๆ ก็วิ่งไปเก็บดอกไม้ของตัวเอง (เร็วขึ้นนิดหน่อย) ยกเว้นพร้อมแทงอยู่แล้ว (ให้แทงพุ่งทะลุไปเก็บแทน) คืน true ถ้าสั่งวิ่งไปแล้ว
+  _chaseFlowers(f, enemy, dt) {
+    if (!this.flowers.length || f.stun > 0 || this._stabReady(f, enemy, true)) return false; // พร้อมแทงอยู่ = เข้าหาศัตรูแล้วแทงทะลุไปเก็บ ไม่เดินไปเก็บเอง
     let best = null;
     let bd = Infinity;
     for (const fl of this.flowers) {
@@ -547,10 +588,28 @@ class Battle {
       const d = Math.hypot(fl.x - f.x, fl.y - f.y);
       if (d < bd) { bd = d; best = fl; }
     }
-    if (!best) return;
+    if (!best) return false;
     this._steer(f, best, 8 * dt);
     f.dashTimer = Math.max(f.dashTimer, 0.1);
     f.dashMult = 1.6;
+    return true;
+  }
+
+  // ตัวที่มีสกิลจำกัดระยะ (maxRange): เข้าหาศัตรูจนอยู่ในระยะของสกิลที่พร้อมใช้
+  _approach(f, enemy, dt) {
+    if (f.stun > 0 || enemy === f || enemy === this.phantom) return;
+    let range = 0;
+    f.skills.forEach((k, i) => {
+      if (!k.maxRange || f.cds[i] > 0) return;
+      if (k.energyCost && f.energy < k.energyCost) return;
+      range = Math.max(range, k.maxRange);
+    });
+    if (!range) return;
+    if (Math.hypot(enemy.x - f.x, enemy.y - f.y) > range * 0.85) {
+      this._steer(f, enemy, 8 * dt);
+      f.dashTimer = Math.max(f.dashTimer, 0.1);
+      f.dashMult = 1.5;
+    }
   }
 
   // ---------- บอลบนสนาม (Isagi) ----------
@@ -1200,6 +1259,8 @@ class Battle {
       damage: this._out(f, sk.damage * this._dmgMult(f, enemy)),
       stunOnHit: sk.stun || 0, // โดนแล้วสตันศัตรูกี่วินาที (Blossom)
       flowers: sk.flowers || 0, // โดนแล้วดอกไม้ปรากฏรอบเป้าหมายกี่ดอก (Blossom)
+      energyRefill: !!sk.energyRefill,
+      flowerDist: sk.flowerDist || 64, // ดอกไม้อยู่ห่างจากจุดกึ่งกลางเป้าหมายกี่ px (ใกล้ตัวมาก ให้แทงทะลุไปเก็บได้)
       text: sk.texts ? sk.texts[Math.floor(this.rng() * sk.texts.length)] : null, // ข้อความบนกระสุนคำพูด
       mindDamage: sk.mindDamage || 0, // บั่นทอนสติ/ความมั่นใจเท่าไรเมื่อโดน
       indestructible: !!sk.indestructible, // ปัดทิ้ง/ชนแล้วไม่แตก
@@ -1283,6 +1344,7 @@ class Battle {
 
   // ตัวละครชนกัน: เด้งออกจากกันเฉยๆ ไม่มีดาเมจ ยกเว้นสกิลพุ่งชนที่ทำดาเมจเมื่อชนศัตรู
   _fighterCollision(a, b) {
+    if ((a.cast && a.cast.sk.passThrough) || (b.cast && b.cast.sk.passThrough)) return; // Triple Threat: แทงพุ่งทะลุตัวศัตรูไป ไม่ชนกัน
     if (a === this.eraser || b === this.eraser) return; // คนที่ตัดเวลาอยู่นอกความจริง ตัวละครเดินทะลุกันได้
     const dx = b.x - a.x;
     const dy = b.y - a.y;
@@ -1387,7 +1449,8 @@ class Battle {
             target.stun = Math.max(target.stun, p.stunOnHit);
             this.events.push({ type: "dartStun", x: target.x, y: target.y });
           }
-          if (p.flowers) this._spawnFlowers(p.owner, target, p.flowers);
+          if (p.flowers) this._spawnFlowers(p.owner, target, p.flowers, p.flowerDist);
+          if (p.energyRefill) p.owner.energy = p.owner.def.energyMax || p.owner.energy; // ปาโดนแล้วพร้อมแทงต่อทันที
           p.owner.combatT = 0;
           p.dead = true;
           hit = true;
@@ -1572,6 +1635,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 23;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 24;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

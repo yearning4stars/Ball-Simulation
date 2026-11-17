@@ -396,7 +396,7 @@ const CHARACTERS = {
     speed: 190,
     radius: 36,
     energyMax: 100, // พลังงาน (Triple Threat ใช้ 100, Blossom ใช้ 20)
-    energyRegen: 8, // พลังงานฟื้นเองวินาทีละเท่านี้ (เก็บดอกไม้ = เต็มทันที)
+    energyRegen: 25, // พลังงานฟื้นเองวินาทีละเท่านี้ (เก็บดอกไม้ = เต็มทันที) ตั้งเอง ให้ปา -> แทง ต่อกันได้หลังแทงครั้งที่ 4
     lungeRearm: 3, // ไม่โดน/ไม่ทำดาเมจนานเท่านี้ (วินาที) = ออกจากการต่อสู้ แล้ว Lunge พร้อมใช้อีกครั้ง
     frames: {
       idle: "assets/characters/florentino/idle.png",
@@ -425,12 +425,12 @@ const CHARACTERS = {
         restAfter: 0.2,
       },
       {
-        // สกิล 1 Blossom: ปาลูกดอก ดาเมจ + สตัน 0.75 วินาที แล้วดอกไม้ 3 ดอกปรากฏรอบเป้าหมาย 5 วินาที (เก็บ: พลังงานเต็ม + Lunge พร้อม + รีเซ็ต Triple Threat)
+        // วงจรรำ: ปา -> แทง -> (พุ่งทะลุ เก็บดอก) แทง -> เก็บดอก แทง -> เก็บดอก แทง -> ปาอีกที  (แทง 4 ครั้งตัดคูลดาวน์ Blossom 4 วินาที จึงปาได้พอดี)
+        // สกิล 1 Blossom: ปาลูกดอก ดาเมจ + สตัน 0.75 วินาที แล้วดอกไม้ 3 ดอกปรากฏรอบเป้าหมาย 5 วินาที (เก็บทีละดอกตอนแทงพุ่งออก: พลังงานเต็ม + Lunge พร้อม + รีเซ็ต Triple Threat)
         type: "projectile",
         name: "Blossom (ปาดอก)",
         cooldown: 8, // เกมจริง 10 / 9.6 / 9.2 / 8.8 / 8.4 / 8 วินาที (เลเวล 1-6)
         initialCooldown: 0.5,
-        energyCost: 20,
         frame: "blossom",
         duration: 0.4,
         fireDelay: 0.12,
@@ -440,6 +440,9 @@ const CHARACTERS = {
         shape: "dart",
         stun: 0.75,
         flowers: 3,
+        energyRefill: true, // ปาโดนแล้วพลังงานเต็ม ให้ "ปา -> แทง" ต่อกันได้ (ตั้งเองตามที่เล่นจริง)
+        maxRange: 300, // ปาเมื่อศัตรูอยู่ในระยะนี้ (ไม่งั้นวิ่งเข้าหาก่อน)
+        flowerDist: 64, // ดอกไม้อยู่ใกล้ตัวเป้าหมายมาก (px จากจุดกึ่งกลาง) ให้แทงทะลุไปเก็บได้ทีละดอก
         sound: "shoot",
         restAfter: 0.15,
       },
@@ -448,23 +451,27 @@ const CHARACTERS = {
         // โดนฮีโร่ = Blossom คูลดาวน์ลด 1 วินาที
         type: "triplethreat",
         name: "Triple Threat (รำ)",
-        cooldown: 6, // เกมจริงไม่มีตัวเลข: ตั้งเอง
+        cooldown: 3, // เกมจริงไม่มีตัวเลข: ตั้งเอง (แทง 4 ครั้งต่อรอบ ครั้งละ ~1 วินาที ต้องพร้อมแทงต่อหลังปาอีกที)
+        initialCooldown: 0,
         energyCost: 100,
         maxRange: 320,
+        passThrough: true, // แทงพุ่งทะลุตัวศัตรู ไม่ชนกัน
         frame: "triple",
-        duration: 1.2,
+        duration: 1.5, // เพดานเวลา (ปกติจบเองตอนเก็บดอกไม้ได้)
         speedMult: 2.4,
         homing: 14,
         reach: 60, // แทงถึงเมื่อห่างจากขอบตัวศัตรูไม่เกินเท่านี้ (px)
         truePct: 0.02, // ดาเมจจริงต่อที = 2% ของเลือดสูงสุดศัตรู (เกมจริง 4%)
         strikes: [
-          { t: 0.2, damage: 4 },
-          { t: 0.5, damage: 4, stun: 0.75 }, // ลอย
-          { t: 0.8, damage: 3 },
-          { t: 0.95, damage: 3 },
+          { t: 0.12, damage: 4 },
+          { t: 0.32, damage: 4, stun: 0.75 }, // ลอย
+          { t: 0.52, damage: 3 },
+          { t: 0.62, damage: 3 },
         ],
-        shuffle: { slide: 260, ccImmune: 0.5, boost: 0.5 },
-        restAfter: 0.3,
+        exitAt: 0.7, // แทงจบแล้วพุ่งทะลุตัวศัตรูไปเก็บดอกไม้ที่ใกล้สุด 1 ดอก (เก็บแล้วพลังงานเต็ม + แทงต่อได้ทันที)
+        exitSpeed: 3.4,
+        shuffle: { slide: 0, ccImmune: 0.5, boost: 0.5 },
+        restAfter: 0.1,
       },
       {
         // อัลติเมท Gentleman's Duel: ชาร์จแล้วพุ่งไปหาศัตรูที่ใกล้สุด เริ่มดวล 5 วินาที: ดาเมจที่ใส่คู่ดวลเพิ่ม (duelMult)
@@ -472,7 +479,7 @@ const CHARACTERS = {
         type: "duel",
         name: "Gentleman's Duel",
         cooldown: 25, // เกมจริง 35 / 30 / 25 วินาที (เลเวล 1-3)
-        initialCooldown: 3,
+        initialCooldown: 1,
         frame: "duel",
         duration: 1.6, // ชาร์จ + พุ่งนานสุดเท่านี้
         charge: 0.4,
@@ -487,6 +494,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 23;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 24;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };
