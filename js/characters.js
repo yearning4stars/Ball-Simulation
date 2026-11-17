@@ -67,6 +67,13 @@
 //        duration (เวลาพุ่งหาบอลสูงสุด), chaseSpeed, kickSpeed, ballRadius
 //        ใส่ใน metavision: kickCd, kickSpeedMult, kickDamageMult, kickKnockMult = เตะบอลระหว่าง Meta Vision ได้ แรงกว่าปกติ
 //        projectile เพิ่ม: lead (เล็งนำหน้าศัตรูที่กำลังเคลื่อนที่), bounces (กระสุนสะท้อนกำแพงได้กี่ครั้ง), shape: "soccer" (ลูกฟุตบอล)
+//   "triplethreat" Triple Threat (Florentino): พุ่งเข้าหาแล้วแทงตามรายการ strikes [{t (วินาทีที่แทง), damage, stun (ส่งลอยกี่วินาที)}]
+//        truePct = ดาเมจจริงต่อที (เศษส่วนของเลือดสูงสุดศัตรู) reach, speedMult, homing, shuffle  โดนฮีโร่ = สกิลที่มี flowers คูลดาวน์ลด 1 วินาที
+//   "duel"        Gentleman's Duel (Florentino): ชาร์จ charge วินาทีแล้วพุ่งหาศัตรูที่ใกล้สุด ชนแล้วดวล duelTime วินาที (ดาเมจต่อคู่ดวล x duelMult)
+//        คู่ดวลตายระหว่างดวล = พลังโจมตีถาวรเพิ่ม +4% (สูงสุด 10 ครั้ง) speedMult, damage
+//   ค่าเพิ่มที่ใส่ได้ในทุกสกิล: energyCost (ใช้พลังงาน ต้องมีใน def: energyMax, energyRegen), maxRange (ศัตรูต้องอยู่ในระยะ px ถึงจะใช้),
+//        requires: "lunge" (ใช้ได้เมื่อ Lunge พร้อม: ไม่โดน/ไม่ทำดาเมจนาน def.lungeRearm วินาที หรือเก็บดอกไม้) shuffle: {slide, ccImmune, boost} (ไถลออก กันสถานะ วิ่งเร็วขึ้นหลังจบท่า)
+//        dash เพิ่ม: slowDuration, slowMult, heal  projectile เพิ่ม: stun (สตันเมื่อโดน), flowers (ดอกไม้ที่ปรากฏรอบเป้าหมาย) shape: "dart"
 //
 //  weapon (ไม่บังคับ) อาวุธที่หมุนรอบตัวตลอดเวลา หมุนไปเรื่อยๆ จนฟันโดนศัตรูแล้วกลับทิศ
 //        length (ความยาวใบดาบ), width, startRatio (จุดจับ เทียบรัศมีตัว), damage, spinSpeed (เรเดียน/วินาที),
@@ -378,9 +385,108 @@ const CHARACTERS = {
       },
     ],
   },
+  // Florentino (RoV / Arena of Valor): ท่า "รำปาดอก" = ปาดอก (Blossom) -> วิ่งเก็บดอกไม้เติมพลังงานและรีเซ็ตสกิล 2 -> รำ 3 ท่า (Triple Threat) -> Shuffle ไถลออก
+  // ค่าคูลดาวน์อ้างอิงเกมจริงที่เลเวลสูงสุด: Blossom 10 -> 8 วินาที, Gentleman's Duel 35 -> 25 วินาที
+  // Triple Threat ในเกมจริงไม่มีคูลดาวน์เป็นตัวเลข ใช้พลังงาน 100 (เก็บดอกไม้ = เติมเต็ม + รีเซ็ต) ค่า cooldown 6 / energyRegen 8 ด้านล่างเป็นค่าที่ผมตั้งเอง ปรับได้
+  // ภาพ: assets/characters/florentino/idle.png, blossom.png (ท่าปาดอก), triple.png (ท่ารำ), duel.png (ท่าประกาศดวล)  ดาบ ดอกไม้ ลูกดอก เกมวาดให้เองด้วยโค้ด
+  florentino: {
+    name: "Florentino",
+    color: "#d4382f",
+    hp: 100,
+    speed: 190,
+    radius: 36,
+    energyMax: 100, // พลังงาน (Triple Threat ใช้ 100, Blossom ใช้ 20)
+    energyRegen: 8, // พลังงานฟื้นเองวินาทีละเท่านี้ (เก็บดอกไม้ = เต็มทันที)
+    lungeRearm: 3, // ไม่โดน/ไม่ทำดาเมจนานเท่านี้ (วินาที) = ออกจากการต่อสู้ แล้ว Lunge พร้อมใช้อีกครั้ง
+    frames: {
+      idle: "assets/characters/florentino/idle.png",
+      blossom: "assets/characters/florentino/blossom.png",
+      triple: "assets/characters/florentino/triple.png",
+      duel: "assets/characters/florentino/duel.png",
+    },
+    skills: [
+      {
+        // Passive Shuffle: ออกจากการต่อสู้แล้ว การโจมตีปกติครั้งถัดไปเป็น Lunge: ดาเมจเพิ่ม ชะลอ 70% 0.5 วินาที โดนฮีโร่ฟื้นเลือด แล้วไถลออก
+        type: "dash",
+        name: "แทง (Lunge)",
+        requires: "lunge",
+        maxRange: 280,
+        cooldown: 0.5,
+        frame: "triple",
+        duration: 0.45,
+        speedMult: 3,
+        homing: 4,
+        damage: 7,
+        knockback: 120,
+        slowDuration: 0.5,
+        slowMult: 0.3, // ชะลอ 70%
+        heal: 6,
+        shuffle: { slide: 260, ccImmune: 0.5, boost: 0.5 },
+        restAfter: 0.2,
+      },
+      {
+        // สกิล 1 Blossom: ปาลูกดอก ดาเมจ + สตัน 0.75 วินาที แล้วดอกไม้ 3 ดอกปรากฏรอบเป้าหมาย 5 วินาที (เก็บ: พลังงานเต็ม + Lunge พร้อม + รีเซ็ต Triple Threat)
+        type: "projectile",
+        name: "Blossom (ปาดอก)",
+        cooldown: 8, // เกมจริง 10 / 9.6 / 9.2 / 8.8 / 8.4 / 8 วินาที (เลเวล 1-6)
+        initialCooldown: 0.5,
+        energyCost: 20,
+        frame: "blossom",
+        duration: 0.4,
+        fireDelay: 0.12,
+        damage: 8,
+        projectileSpeed: 640,
+        projectileRadius: 8,
+        shape: "dart",
+        stun: 0.75,
+        flowers: 3,
+        sound: "shoot",
+        restAfter: 0.15,
+      },
+      {
+        // สกิล 2 Triple Threat: แทง 3 จังหวะ (ครั้งที่ 2 ส่งศัตรูลอย 0.75 วินาที ครั้งที่ 3 แทงสองที) แต่ละที + ดาเมจจริง % ของเลือดสูงสุด จบด้วย Shuffle
+        // โดนฮีโร่ = Blossom คูลดาวน์ลด 1 วินาที
+        type: "triplethreat",
+        name: "Triple Threat (รำ)",
+        cooldown: 6, // เกมจริงไม่มีตัวเลข: ตั้งเอง
+        energyCost: 100,
+        maxRange: 320,
+        frame: "triple",
+        duration: 1.2,
+        speedMult: 2.4,
+        homing: 14,
+        reach: 60, // แทงถึงเมื่อห่างจากขอบตัวศัตรูไม่เกินเท่านี้ (px)
+        truePct: 0.02, // ดาเมจจริงต่อที = 2% ของเลือดสูงสุดศัตรู (เกมจริง 4%)
+        strikes: [
+          { t: 0.2, damage: 4 },
+          { t: 0.5, damage: 4, stun: 0.75 }, // ลอย
+          { t: 0.8, damage: 3 },
+          { t: 0.95, damage: 3 },
+        ],
+        shuffle: { slide: 260, ccImmune: 0.5, boost: 0.5 },
+        restAfter: 0.3,
+      },
+      {
+        // อัลติเมท Gentleman's Duel: ชาร์จแล้วพุ่งไปหาศัตรูที่ใกล้สุด เริ่มดวล 5 วินาที: ดาเมจที่ใส่คู่ดวลเพิ่ม (duelMult)
+        // คู่ดวลตาย = พลังโจมตีถาวร +4% ต่อครั้ง (สูงสุด 10 ครั้ง)
+        type: "duel",
+        name: "Gentleman's Duel",
+        cooldown: 25, // เกมจริง 35 / 30 / 25 วินาที (เลเวล 1-3)
+        initialCooldown: 3,
+        frame: "duel",
+        duration: 1.6, // ชาร์จ + พุ่งนานสุดเท่านี้
+        charge: 0.4,
+        speedMult: 5,
+        damage: 5,
+        duelTime: 5, // ดวล 5 วินาที
+        duelMult: 1.4, // ดาเมจต่อคู่ดวล x1.4 (เกมจริง: เกราะศัตรูลด 25% + ดาเมจเพิ่ม 20%)
+        restAfter: 0.3,
+      },
+    ],
+  },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 22;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 23;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

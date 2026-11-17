@@ -315,6 +315,31 @@ function handleEvents(events) {
       floaters.push({ x: e.x, y: e.y - 36, text: "สะท้อน!", life: 0.9, color: "#fff3b0", size: 30 });
       shake = Math.max(shake, 6);
       sfx.deflect();
+    } else if (e.type === "flowers") {
+      spawnParticles(e.x, e.y, "#ff8fb8", 16, 260);
+      floaters.push({ x: e.x, y: e.y - 50, text: "ดอกไม้!", life: 0.9, color: "#ff9fc4", size: 26 });
+    } else if (e.type === "flower") {
+      spawnParticles(e.x, e.y, "#ff8fb8", 14, 240);
+      floaters.push({ x: e.x, y: e.y - 30, text: "พลังงานเต็ม!", life: 0.9, color: "#8fe0ff", size: 24 });
+      sfx.note();
+    } else if (e.type === "dartStun") {
+      floaters.push({ x: e.x, y: e.y - 56, text: "สตัน!", life: 0.8, color: "#ffe27a", size: 26 });
+    } else if (e.type === "triple") {
+      floaters.push({ x: e.x, y: e.y - 62, text: "Triple Threat!", life: 1.0, color: "#ffd65a", size: 28 });
+    } else if (e.type === "airborne") {
+      spawnParticles(e.x, e.y, "#ffffff", 10, 200);
+      floaters.push({ x: e.x, y: e.y - 56, text: "ลอย!", life: 0.8, color: "#ffffff", size: 26 });
+    } else if (e.type === "duelCharge") {
+      screenFlash = 0.15;
+      floaters.push({ x: e.x, y: e.y - 62, text: "Gentleman's Duel!", life: 1.2, color: "#ffd65a", size: 30 });
+      sfx.dash();
+    } else if (e.type === "duel") {
+      spawnParticles(e.x, e.y, "#ffd65a", 26, 340);
+      shake = Math.max(shake, 8);
+    } else if (e.type === "heal") {
+      floaters.push({ x: e.x, y: e.y - 50, text: "+" + e.amount, life: 0.8, color: "#6bff9e", size: 24 });
+    } else if (e.type === "adStack") {
+      floaters.push({ x: e.x, y: e.y - 56, text: "พลังโจมตี +" + e.stacks, life: 1.1, color: "#ffb35a", size: 26 });
     } else if (e.type === "bounce") {
       spawnParticles(e.x, e.y, "#ffffff", 8, 200);
     } else if (e.type === "rewind") {
@@ -740,6 +765,93 @@ function drawTeamMark(f, color, num) {
   ctx.restore();
 }
 
+// ---------- Florentino: ลูกดอก ดอกไม้ และเส้นดวล ----------
+function drawDart(p) {
+  const a = Math.atan2(p.dy, p.dx);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(a);
+  ctx.strokeStyle = "rgba(255,150,190,0.5)"; // รอยหางสีชมพู
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-34, 0);
+  ctx.lineTo(-8, 0);
+  ctx.stroke();
+  ctx.fillStyle = "#ff8fb8"; // หางขนนก
+  ctx.beginPath();
+  ctx.moveTo(-18, 0); ctx.lineTo(-26, -6); ctx.lineTo(-22, 0); ctx.lineTo(-26, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "#dfe6f2"; // ก้าน
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-20, 0);
+  ctx.lineTo(10, 0);
+  ctx.stroke();
+  ctx.fillStyle = "#ffffff"; // ปลายแหลม
+  ctx.beginPath();
+  ctx.moveTo(10, -4); ctx.lineTo(20, 0); ctx.lineTo(10, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFlower(fl) {
+  const t = performance.now() / 1000;
+  const fade = fl.t < 1 ? 0.35 + 0.65 * Math.abs(Math.sin(t * 14)) : 1; // ใกล้หมดเวลากะพริบ
+  const bob = Math.sin(t * 3 + fl.bob) * 2.5;
+  ctx.save();
+  ctx.translate(fl.x, fl.y + bob);
+  ctx.globalAlpha = fade;
+  ctx.shadowColor = "#ff8fb8";
+  ctx.shadowBlur = 16;
+  ctx.rotate(t * 0.8 + fl.bob);
+  ctx.fillStyle = "#ff7aa8";
+  for (let i = 0; i < 5; i++) {
+    ctx.beginPath();
+    ctx.ellipse(0, -9, 6.5, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.rotate((Math.PI * 2) / 5);
+  }
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#ffe27a";
+  ctx.beginPath();
+  ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// เส้นดวล: เส้นประทองระหว่างคู่ดวล + ป้ายเวลาเหนือหัวคู่ดวล
+function drawDuelLink(f) {
+  const d = f.duel;
+  if (!d || d.target.hp <= 0) return;
+  const t = performance.now() / 1000;
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,214,90,0.85)";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([10, 8]);
+  ctx.lineDashOffset = -t * 60;
+  ctx.beginPath();
+  ctx.moveTo(f.x, f.y);
+  ctx.lineTo(d.target.x, d.target.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = "#ffd65a";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(d.target.x, d.target.y, d.target.r + 10 + Math.sin(t * 8) * 2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "#ffd65a";
+  ctx.font = "700 16px " + FONT;
+  ctx.textAlign = "center";
+  ctx.strokeStyle = "rgba(0,0,0,0.7)";
+  ctx.lineWidth = 4;
+  const txt = "⚔ ดวล " + Math.max(0, d.t).toFixed(1);
+  ctx.strokeText(txt, d.target.x, d.target.y - d.target.r - 18);
+  ctx.fillText(txt, d.target.x, d.target.y - d.target.r - 18);
+  ctx.restore();
+}
+
 // ---------- ลูกฟุตบอล (กระสุนของ Isagi) ----------
 function drawSoccer(p) {
   const r = p.r;
@@ -1012,6 +1124,7 @@ function buildHudPanels() {
       '<div class="pname"><span class="pnum"></span><span class="pnm">-</span></div>' +
       '<div class="bar hp"><div class="trail"></div><div class="fill"></div><span class="val">-</span></div>' +
       '<div class="mindbar" title="สติ/ความมั่นใจที่ถูกบั่นทอน"><div class="fill"></div></div>' +
+      '<div class="ebar" title="พลังงาน"><div class="fill"></div></div>' +
       '<div class="skills"></div>';
     box.appendChild(panel);
     const q = (sel) => panel.querySelector(sel);
@@ -1030,6 +1143,8 @@ function buildHudPanels() {
       hpVal: q(".bar.hp .val"),
       skillBox: q(".skills"),
       mind: q(".mindbar .fill"),
+      ebar: q(".ebar"),
+      energy: q(".ebar .fill"),
       rows: [],
       builtFor: null,
     };
@@ -1092,6 +1207,7 @@ function setIdleHud() {
     h.fill.style.background = hpColor(1);
     h.hpVal.textContent = def.hp + " / " + def.hp;
     if (h.mind) h.mind.style.width = "0%";
+    if (h.ebar) { h.ebar.style.display = def.energyMax ? "" : "none"; h.energy.style.width = "100%"; }
     skillsOf(def).forEach((sk, j) => {
       const row = h.rows[j];
       row.bar.className = "bar cd";
@@ -1123,6 +1239,10 @@ function updateHud(b) {
     h.trail.style.width = trail * 100 + "%";
     h.hpVal.textContent = Math.ceil(f.hp) + " / " + f.maxHp;
     if (h.mind) h.mind.style.width = Math.min(100, f.mind) + "%";
+    if (h.ebar) {
+      h.ebar.style.display = f.def.energyMax ? "" : "none";
+      if (f.def.energyMax) h.energy.style.width = Math.max(0, Math.min(100, (f.energy / f.def.energyMax) * 100)) + "%";
+    }
 
     f.skills.forEach((sk, j) => {
       const row = h.rows[j];
@@ -1368,13 +1488,16 @@ function render() {
     }
     drawShards();
     for (const f of battle.fighters) if (f.hp > 0 && f.cast && f.cast.sk.type === "metavision") drawMetaThreats(f);
+    for (const f of battle.fighters) if (f.hp > 0) drawDuelLink(f);
 
+    for (const fl of battle.flowers) drawFlower(fl);
     for (const b of battle.balls) drawBall(b);
     for (const p of battle.projectiles) {
       gray(battle.isDazed(p.owner));
       if (p.shape === "note") { drawNote(p); gray(false); continue; }
       if (p.shape === "text") { drawWord(p); gray(false); continue; }
       if (p.shape === "soccer") { drawSoccer(p); gray(false); continue; }
+      if (p.shape === "dart") { drawDart(p); gray(false); continue; }
       ctx.fillStyle = "#fff6c2";
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -1473,7 +1596,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 22;
+const EXPECTED_VERSION = 23;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

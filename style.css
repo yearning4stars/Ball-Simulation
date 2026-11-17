@@ -206,3 +206,8 @@ label[hidden] { display: none; }
 .hud.many .bar.cd { height: 13px; }
 .hud.many .skname { flex-basis: 40%; font-size: 0.62rem; }
 .hud.many .bar.cd .val { font-size: 0.6rem; }
+
+/* แถบพลังงาน (Florentino) */
+.ebar { height: 5px; margin: 3px 0 4px; background: #1d2231; border-radius: 3px; overflow: hidden; }
+.ebar .fill { height: 100%; width: 0; background: linear-gradient(90deg, #3fa9ff, #8fe0ff); transition: width 0.1s linear; }
+.panel.right .ebar .fill { margin-left: auto; }

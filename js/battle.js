@@ -48,6 +48,7 @@ class Battle {
 
     // บอลบนสนาม: สร้างเมื่อมีตัวละครที่มีสกิล ballkick (Isagi)
     this.balls = [];
+    this.flowers = []; // ดอกไม้ของ Florentino (จาก Blossom): เก็บแล้วเติมพลังงานและรีเซ็ต Triple Threat
     const ks = this.fighters.map((f) => f.skills.find((k) => k.type === "ballkick")).find(Boolean);
     if (ks) {
       this.balls.push({
@@ -91,6 +92,7 @@ class Battle {
 
   // เป้าหมายหลักของ f = ศัตรูที่อยู่ใกล้ที่สุด
   _target(f) {
+    if (f.duel && f.duel.target.hp > 0) return f.duel.target; // ดวลอยู่: เล็งแต่คู่ดวล
     let best = null;
     let bd = Infinity;
     for (const g of this._foes(f)) {
@@ -135,6 +137,15 @@ class Battle {
         sk.initialCooldown !== undefined ? sk.initialCooldown : 0.8 + this.rng() * 0.6 + i * 0.9
       ),
       kickCd: 0, // พักก่อนเตะบอลซ้ำระหว่าง Meta Vision
+      energy: def.energyMax || 0, // พลังงาน (Florentino): สกิลที่มี energyCost ต้องมีพลังงานพอ
+      combatT: 99, // วินาทีนับจากที่ตัวเองโดน/ทำดาเมจครั้งล่าสุด (ออกจากการต่อสู้นานพอ = Lunge พร้อมใช้อีกครั้ง)
+      lunge: true, // การโจมตีปกติครั้งถัดไปเป็นท่าแทง (Lunge) พร้อมใช้หรือยัง
+      slowT: 0, // ถูกชะลอความเร็ว (วินาทีที่เหลือ) ตัวคูณอยู่ที่ slowMult
+      slowMult: 1,
+      boostT: 0, // วิ่งเร็วขึ้น +50% หลัง Shuffle
+      ccT: 0, // กันสถานะ (สตัน/ใบ้) หลัง Shuffle
+      duel: null, // กำลังดวลกับใคร {target, t, mult}
+      adStacks: 0, // พลังโจมตีถาวรจากการชนะดวล (สูงสุด 10)
       gcd: 0, // พักสั้นๆ หลังใช้สกิลจบ ก่อนใช้สกิลถัดไป
       frame: "idle",
       cast: null, // {i, sk, t, shots, fired, hit}
@@ -203,6 +214,16 @@ class Battle {
       if (f.mindHold > 0) f.mindHold -= fdt; // ค้างไว้ก่อน ยังไม่ฟื้น
       else f.mind = Math.max(0, f.mind - 7 * fdt);
       f.silence = Math.max(0, f.silence - fdt);
+      f.combatT += fdt;
+      if (f.def.energyMax) f.energy = Math.min(f.def.energyMax, f.energy + (f.def.energyRegen || 0) * fdt);
+      f.slowT = Math.max(0, f.slowT - fdt);
+      f.boostT = Math.max(0, f.boostT - fdt);
+      if (f.ccT > 0) { f.ccT -= fdt; f.stun = 0; f.silence = 0; } // Shuffle: กันสถานะ
+      if (f.duel) {
+        f.duel.t -= fdt;
+        if (f.duel.t <= 0 || f.duel.target.hp <= 0) f.duel = null;
+      }
+      if (!f.lunge && f.combatT >= (f.def.lungeRearm || 3) && f.skills.some((k) => k.requires === "lunge")) f.lunge = true;
       if (m > 0) this._rotate(f, (this.rng() - 0.5) * 8 * m * fdt);
       const slow = 1 - 0.4 * m;
       f.gcd = Math.max(0, f.gcd - fdt * slow);
@@ -224,6 +245,7 @@ class Battle {
         f.frame = "idle";
         f.dashTimer = 0;
       } else {
+        if (!f.cast) this._chaseFlowers(f, fdt); // วิ่งไปเก็บดอกไม้ของตัวเอง
         this._updateSkill(f, enemy, cdt);
       }
       this._move(f, fdt);
@@ -244,6 +266,7 @@ class Battle {
     }
     this._updateProjectiles(dt);
     this._updateBalls(dt);
+    this._updateFlowers(dt);
     this._updateWaves(dt);
     // ตัดเวลาอาจจบกลางก้าวนี้ (cast ถูกเคลียร์) ให้สถานะที่ตัววาดอ่านตรงกับความจริงเสมอ
     // (นับจากสถานะจริงตอนนี้ ไม่ใช่ตัวที่จำไว้ตอนต้นก้าว เพราะอีกคนอาจเพิ่งเริ่มตัดเวลาต่อจากคนที่เพิ่งจบในก้าวเดียวกัน)
@@ -298,6 +321,10 @@ class Battle {
           c.fired = true;
           this._fireWave(f, enemy, sk);
         }
+      } else if (sk.type === "triplethreat") {
+        this._tripleRun(f, enemy, sk, c, dt); // รำ 3 ท่าติดกัน
+      } else if (sk.type === "duel") {
+        this._duelRun(f, enemy, sk, c, dt); // พุ่งเข้าหาแล้วประกาศดวล
       } else if (sk.type === "ballkick") {
         // พุ่งไปที่บอลแล้วเตะใส่ศัตรู (เตะเสร็จค้างท่าเตะนิดหนึ่งแล้วจบ)
         if (!c.kicked) {
@@ -329,6 +356,8 @@ class Battle {
           this._endTimeErase(f, enemy, false);
         } else {
           if (sk.type === "ballkick" && !c.kicked) f.cds[c.i] = 1; // ไปไม่ถึงบอล: ลองใหม่เร็วๆ
+          if (sk.type === "duel" && !f.duel) f.cds[c.i] = Math.min(f.cds[c.i], 3); // พุ่งไม่ถึงคู่ดวล: ลองใหม่เร็วๆ
+          if (sk.shuffle) this._shuffle(f, enemy, sk.shuffle); // หลังท่า: ไถลออก + กันสถานะ + วิ่งเร็วขึ้นชั่วครู่
           if (sk.type === "metavision" && sk.counterKick) {
             // จบ Meta Vision: เห็นช่องว่างของศัตรูแล้ว พุ่งเตะบอลสวนทันที
             for (let i = 0; i < f.skills.length; i++) if (f.skills[i].type === "ballkick") f.cds[i] = Math.min(f.cds[i], 0.15);
@@ -354,6 +383,9 @@ class Battle {
       if (timeBusy && TIME_SKILLS.includes(s2.type)) continue; // เวลาถูกแตะอยู่แล้ว
       // ย้อนเวลาจะใช้ก็ต่อเมื่อเสียเลือดไปพอสมควรในช่วงที่ย้อนกลับได้ (ไม่งั้นย้อนไปก็เปล่าประโยชน์)
       if (s2.type === "rewind" && !this._rewindWorthIt(f, s2)) continue;
+      if (s2.requires === "lunge" && !f.lunge) continue; // Lunge ใช้ได้เมื่อการโจมตีปกติครั้งถัดไปพร้อม
+      if (s2.energyCost && f.energy < s2.energyCost) continue; // พลังงานไม่พอ
+      if (s2.maxRange && Math.hypot(enemy.x - f.x, enemy.y - f.y) > s2.maxRange) continue; // ศัตรูไกลเกินระยะ
       // เตะบอลได้เมื่อมีบอลเปล่าให้เตะ (ถ้าบอลกำลังลอยเป็นอันตรายอยู่ ต้องรอ)
       if (s2.type === "ballkick" && (!this.balls.length || this.balls[0].hot)) continue;
       if (pick === -1 || f.cds[i] < f.cds[pick]) pick = i;
@@ -362,6 +394,8 @@ class Battle {
 
     const sk = f.skills[pick];
     f.cds[pick] = sk.cooldown;
+    if (sk.energyCost) f.energy -= sk.energyCost;
+    if (sk.requires === "lunge") f.lunge = false;
     f.cast = { i: pick, sk, t: 0, shots: 0, fired: false, hit: false };
     f.frame = sk.frame || "idle";
 
@@ -396,6 +430,10 @@ class Battle {
     } else if (sk.type === "timeaccel") {
       // เร่งเวลาตัวเอง: ความเร็วเดินจริงถูกคูณ rate ในลูปหลัก (ดู fdt) ที่นี่แค่ประกาศเริ่ม
       this.events.push({ type: "accel", x: f.x, y: f.y, rate: sk.rate || 2 });
+    } else if (sk.type === "triplethreat") {
+      this.events.push({ type: "triple", x: f.x, y: f.y });
+    } else if (sk.type === "duel") {
+      this.events.push({ type: "duelCharge", x: f.x, y: f.y });
     } else if (sk.type === "metavision") {
       f.cast.dodges = 0;
       f.cast.dodgeCd = 0.1;
@@ -407,6 +445,114 @@ class Battle {
 
   // ---------- อาวุธชนอาวุธ (clash) ----------
   // รูปทรงของอาวุธเป็นแคปซูลหลายชิ้น: ก้าน (จากจุดจับถึงปลาย) และหัวเข็มทิศ (วงกลม ถ้ามี)
+  // ---------- Florentino ----------
+  // ตัวคูณดาเมจ: พลังโจมตีถาวรสะสม (+4% ต่อสแต็ก) x โบนัสตอนดวลกับเป้าหมายนั้น
+  _dmgMult(f, target) {
+    return (1 + 0.04 * (f.adStacks || 0)) * (f.duel && f.duel.target === target ? f.duel.mult : 1);
+  }
+
+  // ดาเมจของท่า Triple Threat / ประกาศดวล: ดาเมจกายภาพ + ดาเมจจริง truePct ของเลือดสูงสุดศัตรู
+  _florHit(f, target, dmg, truePct) {
+    let amt = this._out(f, dmg * this._dmgMult(f, target));
+    if (truePct) amt += Math.max(1, Math.round(target.maxHp * truePct));
+    const d = Math.hypot(target.x - f.x, target.y - f.y) || 1;
+    this._damage(target, amt, target.x - ((target.x - f.x) / d) * target.r, target.y - ((target.y - f.y) / d) * target.r);
+    this._knock(target, target.x - f.x, target.y - f.y, 90);
+    f.combatT = 0;
+    this.events.push({ type: "slash", x: target.x, y: target.y, ang: Math.atan2(target.y - f.y, target.x - f.x) });
+  }
+
+  // Triple Threat: พุ่งเข้าหาแล้วแทง 3 จังหวะ (ครั้งที่ 2 ส่งศัตรูลอย ครั้งที่ 3 แทงสองที) โดนฮีโร่ = Blossom คูลดาวน์ลด 1 วินาที
+  _tripleRun(f, enemy, sk, c, dt) {
+    this._steer(f, enemy, (sk.homing || 14) * dt);
+    f.dashTimer = 0.2;
+    f.dashMult = sk.speedMult || 2.4;
+    const list = sk.strikes || [];
+    c.next = c.next || 0;
+    while (c.next < list.length && c.t >= list[c.next].t) {
+      const st = list[c.next++];
+      const reach = f.r + enemy.r + (sk.reach || 60);
+      if (enemy === this.phantom || enemy === this.eraser || enemy.hp <= 0) continue;
+      if (Math.hypot(enemy.x - f.x, enemy.y - f.y) > reach) continue; // แทงไม่ถึง
+      this._florHit(f, enemy, st.damage, sk.truePct || 0);
+      if (st.stun) {
+        enemy.stun = Math.max(enemy.stun, st.stun); // ลอยกลางอากาศ = ขยับ/ร่ายไม่ได้
+        this.events.push({ type: "airborne", x: enemy.x, y: enemy.y });
+      }
+      if (!c.cutDone) {
+        c.cutDone = true;
+        f.skills.forEach((k, i) => { if (k.flowers) f.cds[i] = Math.max(0, f.cds[i] - 1); });
+      }
+    }
+  }
+
+  // Gentleman's Duel: ชาร์จสั้นๆ แล้วพุ่งเข้าหาศัตรูที่ใกล้ที่สุด ชนแล้วเริ่มดวล duelTime วินาที
+  _duelRun(f, enemy, sk, c, dt) {
+    f.dashTimer = 0.2;
+    if (c.t < (sk.charge || 0.4)) { f.dashMult = 0.05; return; } // ชาร์จ: แทบหยุดนิ่ง
+    this._steer(f, enemy, 14 * dt);
+    f.dashMult = sk.speedMult || 5;
+    if (f.duel || enemy === this.phantom || enemy === this.eraser || enemy.hp <= 0) return;
+    if (Math.hypot(enemy.x - f.x, enemy.y - f.y) <= f.r + enemy.r + 10) {
+      f.duel = { target: enemy, t: sk.duelTime || 5, mult: sk.duelMult || 1.4 };
+      this._florHit(f, enemy, sk.damage || 5, 0);
+      this.events.push({ type: "duel", x: enemy.x, y: enemy.y });
+      c.t = sk.duration; // จบการพุ่ง
+    }
+  }
+
+  // Shuffle: ไถลออกจากศัตรูเล็กน้อย กันสถานะ และวิ่งเร็วขึ้นชั่วครู่
+  _shuffle(f, enemy, sh) {
+    this._knock(f, f.x - enemy.x, f.y - enemy.y, sh.slide !== undefined ? sh.slide : 260);
+    f.ccT = sh.ccImmune !== undefined ? sh.ccImmune : 0.5;
+    f.boostT = sh.boost !== undefined ? sh.boost : 0.5;
+  }
+
+  // Blossom: ดอกไม้ปรากฏรอบเป้าหมาย (อยู่ได้ 5 วินาที) เฉพาะเจ้าของเก็บได้
+  _spawnFlowers(owner, target, n) {
+    const a0 = this.rng() * Math.PI * 2;
+    for (let k = 0; k < n; k++) {
+      const a = a0 + (k / n) * Math.PI * 2;
+      const x = Math.max(20, Math.min(this.w - 20, target.x + Math.cos(a) * 95));
+      const y = Math.max(20, Math.min(this.h - 20, target.y + Math.sin(a) * 95));
+      this.flowers.push({ x, y, r: 16, t: 5, life: 5, owner, bob: this.rng() * 6 });
+    }
+    this.events.push({ type: "flowers", x: target.x, y: target.y });
+  }
+
+  _updateFlowers(dt) {
+    for (const fl of this.flowers) {
+      fl.t -= dt;
+      const o = fl.owner;
+      if (fl.t <= 0 || o.hp <= 0) { fl.gone = true; continue; }
+      if (Math.hypot(o.x - fl.x, o.y - fl.y) < o.r + fl.r) {
+        // เก็บดอกไม้: เติมพลังงานเต็ม + Lunge พร้อมใช้ + รีเซ็ตคูลดาวน์สกิลที่ใช้พลังงาน (Triple Threat)
+        fl.gone = true;
+        o.energy = o.def.energyMax || o.energy;
+        o.lunge = true;
+        o.skills.forEach((k, i) => { if (k.energyCost) o.cds[i] = 0; });
+        this.events.push({ type: "flower", x: fl.x, y: fl.y });
+      }
+    }
+    this.flowers = this.flowers.filter((fl) => !fl.gone);
+  }
+
+  // ว่างๆ ก็วิ่งไปเก็บดอกไม้ของตัวเอง (เร็วขึ้นนิดหน่อย)
+  _chaseFlowers(f, dt) {
+    if (!this.flowers.length || f.stun > 0) return;
+    let best = null;
+    let bd = Infinity;
+    for (const fl of this.flowers) {
+      if (fl.owner !== f) continue;
+      const d = Math.hypot(fl.x - f.x, fl.y - f.y);
+      if (d < bd) { bd = d; best = fl; }
+    }
+    if (!best) return;
+    this._steer(f, best, 8 * dt);
+    f.dashTimer = Math.max(f.dashTimer, 0.1);
+    f.dashMult = 1.6;
+  }
+
   // ---------- บอลบนสนาม (Isagi) ----------
   // จุดที่ควรเตะไป: ศัตรูที่กำลังเคลื่อนที่ ณ เวลาที่บอลไปถึง
   _leadPoint(from, enemy, speed) {
@@ -1051,7 +1197,9 @@ class Battle {
       dy,
       speed: sk.projectileSpeed,
       r: sk.projectileRadius,
-      damage: this._out(f, sk.damage),
+      damage: this._out(f, sk.damage * this._dmgMult(f, enemy)),
+      stunOnHit: sk.stun || 0, // โดนแล้วสตันศัตรูกี่วินาที (Blossom)
+      flowers: sk.flowers || 0, // โดนแล้วดอกไม้ปรากฏรอบเป้าหมายกี่ดอก (Blossom)
       text: sk.texts ? sk.texts[Math.floor(this.rng() * sk.texts.length)] : null, // ข้อความบนกระสุนคำพูด
       mindDamage: sk.mindDamage || 0, // บั่นทอนสติ/ความมั่นใจเท่าไรเมื่อโดน
       indestructible: !!sk.indestructible, // ปัดทิ้ง/ชนแล้วไม่แตก
@@ -1098,7 +1246,7 @@ class Battle {
   _move(f, dt) {
     const dashing = f.dashTimer > 0;
     if (dashing) f.dashTimer -= dt;
-    const target = f.def.speed * (dashing ? f.dashMult : 1) * (f.stun > 0 ? 0.25 : 1);
+    const target = f.def.speed * (dashing ? f.dashMult : 1) * (f.stun > 0 ? 0.25 : 1) * (f.slowT > 0 ? f.slowMult : 1) * (f.boostT > 0 ? 1.5 : 1);
     const cur = Math.hypot(f.vx, f.vy) || 1;
     f.vx = (f.vx / cur) * target;
     f.vy = (f.vy / cur) * target;
@@ -1184,9 +1332,18 @@ class Battle {
     const c = attacker.cast;
     if (!c || c.sk.type !== "dash" || c.hit) return;
     c.hit = true;
-    this._damage(target, this._out(attacker, c.sk.damage), attacker.x + nx * attacker.r, attacker.y + ny * attacker.r);
+    this._damage(target, this._out(attacker, c.sk.damage * this._dmgMult(attacker, target)), attacker.x + nx * attacker.r, attacker.y + ny * attacker.r);
     const kb = c.sk.knockback || 0;
     this._knock(target, nx, ny, kb);
+    attacker.combatT = 0;
+    if (c.sk.slowDuration) { // Lunge: ชะลอศัตรู
+      target.slowT = Math.max(target.slowT, c.sk.slowDuration);
+      target.slowMult = c.sk.slowMult !== undefined ? c.sk.slowMult : 0.3;
+    }
+    if (c.sk.heal) { // Lunge โดนฮีโร่ = ฟื้นเลือด
+      attacker.hp = Math.min(attacker.maxHp, attacker.hp + c.sk.heal);
+      this.events.push({ type: "heal", x: attacker.x, y: attacker.y, amount: c.sk.heal });
+    }
   }
 
   // ---------- กระสุน / โน้ต ----------
@@ -1226,6 +1383,12 @@ class Battle {
           target.x += p.dx * 6;
           target.y += p.dy * 6;
           this._knock(target, p.dx, p.dy, p.knockback);
+          if (p.stunOnHit) {
+            target.stun = Math.max(target.stun, p.stunOnHit);
+            this.events.push({ type: "dartStun", x: target.x, y: target.y });
+          }
+          if (p.flowers) this._spawnFlowers(p.owner, target, p.flowers);
+          p.owner.combatT = 0;
           p.dead = true;
           hit = true;
           break;
@@ -1362,10 +1525,19 @@ class Battle {
   _damage(f, amount, x, y) {
     f.hp = Math.max(0, f.hp - amount);
     f.hitFlash = 0.15;
+    f.combatT = 0;
     this.events.push({ type: "hit", x, y, amount });
     if (f.hp <= 0 && !f.dead) {
       // ตายกลางแมตช์ (โหมดหลายคน): หยุดสกิล แล้วให้ตัววาดทำให้แตกกระจาย
       f.dead = true;
+      // คู่ดวลของ Florentino ตาย = ได้พลังโจมตีถาวรเพิ่ม (สูงสุด 10 ครั้ง)
+      for (const g of this.fighters) {
+        if (g.duel && g.duel.target === f) {
+          g.adStacks = Math.min(10, g.adStacks + 1);
+          g.duel = null;
+          this.events.push({ type: "adStack", x: g.x, y: g.y, stacks: g.adStacks });
+        }
+      }
       f.cast = null;
       f.frame = "idle";
       f.dashTimer = 0;
@@ -1383,6 +1555,7 @@ class Battle {
       this.events.push({ type: "ko" });
       this.projectiles = []; // กระสุนและคลื่นที่ค้างอยู่หายไปพร้อมจบแมตช์
       this.balls = [];
+      this.flowers = [];
       this.waves = [];
       this.rewind = null;
       this.eraser = null;
@@ -1399,6 +1572,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 22;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 23;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
