@@ -330,6 +330,16 @@ function handleEvents(events) {
       screenFlash = 0.1;
       floaters.push({ x: e.x, y: e.y - 62, text: "เรียก " + e.name + "!", life: 1.0, color: e.color || "#ffd65a", size: 28 });
       sfx.dash();
+    } else if (e.type === "ego") {
+      screenFlash = 0.3;
+      shake = Math.max(shake, 14);
+      spawnParticles(e.x, e.y, "#ff2a40", 40, 420);
+      floaters.push({ x: e.x, y: e.y - 70, text: "E.G.O. ปรากฏ!", life: 1.6, color: "#ff3b4f", size: 38 });
+    } else if (e.type === "bleed") {
+      spawnParticles(e.x, e.y, "#b0001c", 8, 160);
+      floaters.push({ x: e.x, y: e.y - 56, text: "เลือดไหล!", life: 0.8, color: "#ff5468", size: 24 });
+    } else if (e.type === "cdBreak") {
+      floaters.push({ x: e.x, y: e.y - 70, text: "สกิลถูกบั่นทอน!", life: 1.0, color: "#ff9aa6", size: 26 });
     } else if (e.type === "hoop") {
       hoopFlash = e.scored ? 0.6 : 0;
       if (e.scored) {
@@ -869,6 +879,38 @@ function drawDuelLink(f) {
 }
 
 // ---------- ลูกฟุตบอล (กระสุนของ Isagi) ----------
+// The Red Mist หลัง E.G.O. ปรากฏ: หมอกแดงลุกรอบตัว
+function drawEgoAura(f) {
+  const t = performance.now() / 1000;
+  const R = f.r * 1.6;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  const g = ctx.createRadialGradient(0, 0, R * 0.3, 0, 0, R);
+  g.addColorStop(0, "rgba(255,30,60,0)");
+  g.addColorStop(0.7, "rgba(255,30,60," + (0.28 + 0.08 * Math.sin(t * 7)) + ")");
+  g.addColorStop(1, "rgba(120,0,20,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ตัวที่เลือดไหล: หยดเลือดร่วงจากตัว
+function drawBleed(f) {
+  const t = performance.now() / 1000;
+  ctx.save();
+  ctx.fillStyle = "#c4102a";
+  for (let i = 0; i < 3; i++) {
+    const ph = (t * 1.6 + i / 3) % 1;
+    ctx.globalAlpha = 1 - ph;
+    ctx.beginPath();
+    ctx.arc(f.x + (i - 1) * f.r * 0.5, f.y - f.r * 0.2 + ph * f.r * 1.1, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 let hoopFlash = 0; // แป้นวาบสีส้มตอนลง
 function drawHoop(h) {
   hoopFlash = Math.max(0, hoopFlash - 1 / 60);
@@ -1543,6 +1585,8 @@ function render() {
       if (f.weapon && !f.disarmed) (f.weapon.type === "compass" ? drawCompass(f) : drawKatana(f));
       if (f.cast && f.cast.sk.type === "timeaccel") drawAccelAura(f);
       if (f.cast && f.cast.sk.type === "metavision") drawMetaAura(f);
+      if (f.ego) drawEgoAura(f);
+      if (f.bleedT > 0) drawBleed(f);
       if (f.mind > 4 || f.stun > 0 || battle.isDazed(f)) drawMindAura(f);
     });
     gray(false);
@@ -1691,7 +1735,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 31;
+const EXPECTED_VERSION = 32;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

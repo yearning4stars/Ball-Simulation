@@ -146,6 +146,11 @@ class Battle {
       slowT: 0, // ถูกชะลอความเร็ว (วินาทีที่เหลือ) ตัวคูณอยู่ที่ slowMult
       slowMult: 1,
       boostT: 0, // วิ่งเร็วขึ้น +50% หลัง Shuffle
+      bleedT: 0, // เลือดไหล (วินาทีที่เหลือ) เสียเลือด bleedDps ต่อวินาที (Red Mist)
+      bleedDps: 0,
+      bleedAcc: 0,
+      ego: false, // E.G.O. ปรากฏแล้ว (Red Mist: เลือดต่ำกว่า egoAt ครั้งเดียวต่อแมตช์)
+      egoUsed: false,
       ccT: 0, // กันสถานะ (สตัน/ใบ้) หลัง Shuffle
       duel: null, // กำลังดวลกับใคร {target, t, mult}
       adStacks: 0, // พลังโจมตีถาวรจากการชนะดวล (สูงสุด 10)
@@ -219,6 +224,15 @@ class Battle {
       f.silence = Math.max(0, f.silence - fdt);
       f.combatT += fdt;
       if (f.def.energyMax) f.energy = Math.min(f.def.energyMax, f.energy + (f.def.energyRegen || 0) * fdt);
+      if (f.bleedT > 0) {
+        f.bleedT -= fdt;
+        f.bleedAcc += fdt;
+        if (f.bleedAcc >= 0.5) { // เลือดไหลทุก 0.5 วินาที
+          const tick = Math.max(1, Math.round(f.bleedDps * f.bleedAcc));
+          f.bleedAcc = 0;
+          this._damage(f, tick, f.x, f.y, false, true);
+        }
+      } else f.bleedAcc = 0;
       f.slowT = Math.max(0, f.slowT - fdt);
       f.boostT = Math.max(0, f.boostT - fdt);
       if (f.ccT > 0) { f.ccT -= fdt; f.stun = 0; f.silence = 0; } // Shuffle: กันสถานะ
@@ -395,6 +409,7 @@ class Battle {
       // Lunge (โจมตีปกติ) ใช้ได้เมื่อพร้อม และไม่ใช้ระหว่างวงจรรำ (ยังมีดอกไม้ให้เก็บ หรือ Triple Threat พร้อมแทง)
       if (s2.requires === "lunge" && (!f.lunge || this.flowers.some((fl) => fl.owner === f) || this._stabReady(f, enemy))) continue;
       if (s2.type === "summon" && !this._summonChoices(f, s2).length) continue; // ไม่มีเพื่อนให้เรียก (ต้องสู้กับคนนั้นอยู่)
+      if (s2.requires === "ego" && !f.ego) continue; // ท่าของ E.G.O. ใช้ได้หลังปรากฏเท่านั้น
       if (s2.energyCost && f.energy < s2.energyCost) continue; // พลังงานไม่พอ
       if (s2.maxRange && Math.hypot(enemy.x - f.x, enemy.y - f.y) > s2.maxRange) continue; // ศัตรูไกลเกินระยะ
       // เตะบอลได้เมื่อมีบอลเปล่าให้เตะ (ถ้าบอลกำลังลอยเป็นอันตรายอยู่ ต้องรอ)
@@ -465,6 +480,8 @@ class Battle {
     const list = this._summonChoices(f, sk);
     if (!list.length) { f.cds[f.cast.i] = 1; return; }
     const g = list[Math.floor(this.rng() * list.length)];
+    // เป้าหมายต้องเป็นตัวจริง (ตอน FuNx ตัดเวลา ศัตรูเล็งไปที่ภาพลวง ไม่ใช่ตัวจริง)
+    if (!enemy.def) enemy = this._foes(f).find((g2) => g2.hp > 0) || enemy;
     // เพื่อนโผล่จากขอบสนามฝั่งไกลจากศัตรู แล้วพุ่งเข้าหา
     const ang = this.rng() * Math.PI * 2;
     const gx = Math.max(30, Math.min(this.w - 30, enemy.x + Math.cos(ang) * 420));
@@ -512,7 +529,7 @@ class Battle {
   // ---------- Florentino ----------
   // ตัวคูณดาเมจ: พลังโจมตีถาวรสะสม (+4% ต่อสแต็ก) x โบนัสตอนดวลกับเป้าหมายนั้น
   _dmgMult(f, target) {
-    return (1 + 0.04 * (f.adStacks || 0)) * (f.duel && f.duel.target === target ? f.duel.mult : 1);
+    return (f.ego ? f.def.egoMult || 1 : 1) * (1 + 0.04 * (f.adStacks || 0)) * (f.duel && f.duel.target === target ? f.duel.mult : 1);
   }
 
   // ตีคู่ดวลซ้ำ = เพิ่มเวลาดวล (หลอดดวล) ให้รำต่อได้ ไม่เกิน cap
@@ -1378,6 +1395,9 @@ class Battle {
       stunRange: sk.stunRange !== undefined ? sk.stunRange : 0.35, // "ใกล้" = คลื่นเดินทางไม่เกินสัดส่วนนี้ของระยะทั้งหมด
       projectileEffect: sk.projectileEffect || "none", // "push" ผลักกระสุนศัตรู | "stop" ทำลายกระสุนศัตรู
       knockback: sk.knockback || 0,
+      bleed: sk.bleed || 0, // โดนแล้วเลือดไหลกี่วินาที (bleedDps ต่อวินาที)
+      bleedDps: sk.bleedDps || 0,
+      cdPenalty: sk.cdPenalty || 0, // โดนแล้วคูลดาวน์ทุกสกิลของศัตรูเพิ่มกี่วินาที (Greater Split: ทำลายสกิลศัตรู)
       owner: f,
       color: f.def.color,
       hits: [], // คนที่โดนคลื่นนี้ไปแล้ว (คลื่นลูกเดียวโดนคนเดียวกันได้ครั้งเดียว)
@@ -1481,6 +1501,11 @@ class Battle {
     this._knock(target, nx, ny, kb);
     attacker.combatT = 0;
     this._duelExtend(attacker, target);
+    this._applyExtras(target, c.sk);
+    if (c.sk.rechain) { // Onrush: โดนแล้วใช้ซ้ำได้ทันที
+      attacker.cds[c.i] = Math.min(attacker.cds[c.i], c.sk.rechainCd || 0.8);
+      attacker.gcd = 0;
+    }
     if (c.sk.slowDuration) { // Lunge: ชะลอศัตรู
       target.slowT = Math.max(target.slowT, c.sk.slowDuration);
       target.slowMult = c.sk.slowMult !== undefined ? c.sk.slowMult : 0.3;
@@ -1602,8 +1627,9 @@ class Battle {
             // ยิ่งคลื่นเดินทางไกล ดาเมจยิ่งลดลงเป็นเส้นตรง จากค่า damage ไปจนถึง damageFar
             const travel = Math.max(0, Math.min(1, (w.r - w.r0) / (w.maxR - w.r0)));
             const dmg = Math.max(1, Math.round(w.damage + (w.damageFar - w.damage) * travel));
-            this._damage(t, this._out(w.owner, dmg), t.x - (dx / dist) * t.r, t.y - (dy / dist) * t.r);
+            this._damage(t, this._out(w.owner, dmg * this._dmgMult(w.owner, t)), t.x - (dx / dist) * t.r, t.y - (dy / dist) * t.r);
             this._knock(t, dx, dy, w.knockback);
+            this._applyExtras(t, w);
             // โดนคลื่นในระยะใกล้ตัวผู้ปล่อย = ติดสตั้น (ขยับช้า ใช้สกิลไม่ได้)
             if (w.stunNear && travel <= w.stunRange) {
               t.stun = Math.max(t.stun, w.stunNear);
@@ -1685,13 +1711,34 @@ class Battle {
     }
   }
 
-  _damage(f, amount, x, y, melee) {
+  // ผลพ่วงของสกิล: เลือดไหล (bleed/bleedDps) และทำลายสกิลศัตรู (cdPenalty) ใช้ร่วมกันทั้งการพุ่งและคลื่น
+  _applyExtras(t, src) {
+    if (src.bleed) {
+      t.bleedT = Math.max(t.bleedT, src.bleed);
+      t.bleedDps = Math.max(t.bleedDps, src.bleedDps || 2);
+      this.events.push({ type: "bleed", x: t.x, y: t.y });
+    }
+    if (src.cdPenalty) {
+      for (let i = 0; i < t.cds.length; i++) t.cds[i] += src.cdPenalty;
+      this.events.push({ type: "cdBreak", x: t.x, y: t.y });
+    }
+  }
+
+  _damage(f, amount, x, y, melee, noEvent) {
     // Gentleman's Duel: ระหว่างดวล ดาเมจระยะใกล้ (แทง/ฟัน/พุ่งชน) ที่โดน Florentino ลดลง 50%
     if (melee && f.duel) amount *= 1 - (f.duel.resist || 0);
     f.hp = Math.max(0, f.hp - amount);
     f.hitFlash = 0.15;
     f.combatT = 0;
     this.events.push({ type: "hit", x, y, amount });
+    // The Red Mist: เลือดต่ำกว่า egoAt = E.G.O. ปรากฏ (ครั้งเดียว) ดาเมจแรงขึ้นและปลดล็อกท่าของ E.G.O.
+    if (f.def.egoAt && !f.egoUsed && f.hp > 0 && f.hp <= f.maxHp * f.def.egoAt) {
+      f.egoUsed = true;
+      f.ego = true;
+      f.stun = 0;
+      f.silence = 0;
+      this.events.push({ type: "ego", x: f.x, y: f.y });
+    }
     if (f.hp <= 0 && !f.dead) {
       // ตายกลางแมตช์ (โหมดหลายคน): หยุดสกิล แล้วให้ตัววาดทำให้แตกกระจาย
       f.dead = true;
@@ -1738,6 +1785,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 31;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 32;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

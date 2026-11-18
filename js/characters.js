@@ -557,9 +557,99 @@ const CHARACTERS = {
       },
     ],
   },
+
+  // ---------- The Red Mist (Library of Ruina: Kali / Gebura) ----------
+  // ภาพ: assets/characters/redmist/idle.png, slash.png (ท่าฟัน/แทง), ego.png (ท่า E.G.O. ปรากฏ)
+  // กติกาพิเศษ: egoAt = เลือดต่ำกว่าสัดส่วนนี้ครั้งเดียวต่อแมตช์ "E.G.O. ปรากฏ" -> ดาเมจ x egoMult ตลอดแมตช์ + ปลดล็อกท่าที่มี requires: "ego"
+  //   bleed/bleedDps (พุ่ง/คลื่น) = โดนแล้วเลือดไหล, rechain (พุ่ง) = โดนแล้วใช้ท่าเดิมซ้ำได้เร็ว, cdPenalty = โดนแล้วคูลดาวน์ทุกสกิลศัตรูเพิ่ม
+  redmist: {
+    name: "The Red Mist",
+    color: "#c8102e",
+    hp: 120, // The Strongest
+    speed: 205,
+    radius: 40,
+    egoAt: 0.5, // เลือดเหลือครึ่งเดียว = E.G.O. ปรากฏ
+    egoMult: 1.2, // E.G.O.: ดาเมจ x1.2
+    frames: {
+      idle: "assets/characters/redmist/idle.png",
+      slash: "assets/characters/redmist/slash.png",
+      ego: "assets/characters/redmist/ego.png",
+    },
+    skills: [
+      {
+        // Spear: พุ่งแทงทะลวง
+        type: "dash",
+        name: "Spear (พุ่งแทง)",
+        cooldown: 3.2,
+        initialCooldown: 0.5,
+        frame: "slash",
+        duration: 0.5,
+        speedMult: 3.2,
+        homing: 6,
+        damage: 9,
+        knockback: 170,
+        restAfter: 0.2,
+      },
+      {
+        // Level Slash: ฟันเป็นแนวกว้าง โดนแล้วเลือดไหล
+        type: "shockwave",
+        name: "Level Slash (ฟันเลือดไหล)",
+        cooldown: 4.8,
+        initialCooldown: 1.4,
+        frame: "slash",
+        duration: 0.6,
+        fireDelay: 0.25,
+        damage: 8,
+        damageFar: 6,
+        waveSpeed: 560,
+        waveRange: 320,
+        waveArcDeg: 75,
+        knockback: 90,
+        bleed: 4, // เลือดไหล 4 วินาที
+        bleedDps: 3,
+        sound: "wave",
+      },
+      {
+        // Onrush: พุ่งกระชาก ถ้าโดนศัตรูจะใช้ซ้ำได้เกือบทันที
+        type: "dash",
+        name: "Onrush (กระชากต่อเนื่อง)",
+        cooldown: 6,
+        initialCooldown: 2.4,
+        frame: "slash",
+        duration: 0.55,
+        speedMult: 4.5,
+        homing: 8,
+        damage: 7,
+        knockback: 210,
+        rechain: true,
+        rechainCd: 0.8,
+        restAfter: 0.15,
+      },
+      {
+        // Greater Split: Horizontal (E.G.O. เท่านั้น): ฟันรอบตัว ทำลายกระสุนและบั่นทอนสกิลของศัตรู (คูลดาวน์เพิ่ม)
+        type: "shockwave",
+        name: "Greater Split: Horizontal (E.G.O.)",
+        requires: "ego",
+        cooldown: 9,
+        initialCooldown: 0.5,
+        frame: "ego",
+        duration: 0.8,
+        fireDelay: 0.35,
+        damage: 20,
+        damageFar: 12,
+        waveSpeed: 640,
+        waveRange: 340,
+        waveArcDeg: 360,
+        knockback: 260,
+        cdPenalty: 3,
+        projectileEffect: "stop",
+        sound: "wave",
+      },
+    ],
+  },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 31;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 32;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };
