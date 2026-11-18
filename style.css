@@ -12,7 +12,7 @@ body {
 
 main {
   width: 100%;
-  max-width: 940px;
+  max-width: 1200px;
   padding: 6px 8px;
   text-align: center;
 }
@@ -74,74 +74,92 @@ button.secondary {
 canvas {
   display: block;
   margin: 0 auto;
-  width: 100%; /* ความกว้างตามกล่อง #stage ซึ่ง main.js คำนวณให้พอดีจอ */
-  aspect-ratio: 1 / 1; /* สนามเป็นสี่เหลี่ยมจัตุรัสเสมอ */
-  height: auto;
+  /* ขนาดสนามคงที่ main.js คำนวณจากขนาดหน้าต่างเท่านั้น (ไม่เปลี่ยนตามตัวละคร/แผงข้อมูล) */
+  width: var(--arena, 480px);
+  height: var(--arena, 480px);
+  flex: none;
   border-radius: 12px;
   border: 2px solid #232844;
   background: #10131d;
   touch-action: manipulation;
 }
 
-/* ---------- กล่องสนาม + แผงข้อมูลผู้เล่น ---------- */
+/* ช่องเลือกตัวละครกว้างคงที่ กันแถบปุ่มด้านบนขยับ (ซึ่งจะดันสนามให้เปลี่ยนขนาด) */
+#players select { width: 9em; }
+
+/* ---------- กล่องสนาม + แผงผู้เล่นรอบสนาม ---------- */
 #stage {
   margin: 0 auto;
-  /* ค่าสำรองกรณี JS ยังไม่ทำงาน (ตอนเกมรัน main.js จะคำนวณขนาดจากพื้นที่ว่างจริงทับค่านี้) */
-  width: min(100%, 720px, calc(100vh - 330px));
-}
-
-.hud {
+  --ph: 66px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-bottom: 4px;
+  gap: 4px 10px;
+  justify-content: center;
 }
+/* จอกว้าง: [แผงซ้าย] [สนาม] [แผงขวา] */
+#stage.wide { grid-template-columns: 210px var(--arena) 210px; align-items: start; }
+#stage.wide #hudL { grid-column: 1; grid-row: 1; }
+#stage.wide canvas { grid-column: 2; grid-row: 1; }
+#stage.wide #hudR { grid-column: 3; grid-row: 1; }
+/* จอแคบ: แผงสองฝั่งอยู่เหนือสนาม */
+#stage.narrow { grid-template-columns: 1fr 1fr; }
+#stage.narrow #hudL { grid-column: 1; grid-row: 1; }
+#stage.narrow #hudR { grid-column: 2; grid-row: 1; }
+#stage.narrow canvas { grid-column: 1 / 3; grid-row: 2; justify-self: center; }
+
+.hud { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 
 .panel {
+  height: var(--ph);
+  overflow: hidden;
   background: #141829;
   border: 1px solid #232844;
   border-radius: 10px;
-  padding: 3px 6px 4px;
+  padding: 3px 6px;
   text-align: left;
   min-width: 0;
   transition: opacity 0.3s, border-color 0.3s;
 }
-
 .panel.right { text-align: right; }
 .panel.dead { opacity: 0.45; }
 .panel.winner { border-color: #ffd54a; box-shadow: 0 0 0 1px rgba(255, 213, 74, 0.35); }
 
 .pname {
   font-weight: 700;
-  font-size: clamp(0.75rem, 2.4vw, 0.85rem);
-  margin-bottom: 1px;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  display: flex;
+  align-items: center;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
+.pnm { overflow: hidden; text-overflow: ellipsis; }
+.panel.right .pname { justify-content: flex-end; }
+
+.pnum {
+  display: inline-block;
+  flex: none;
+  min-width: 14px;
+  height: 14px;
+  line-height: 14px;
+  margin-right: 5px;
+  border-radius: 7px;
+  text-align: center;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: #10131d;
+}
+.panel.right .pnum { margin-right: 0; margin-left: 5px; order: 2; }
 
 .bar {
   position: relative;
-  height: 13px;
+  height: 12px;
   background: #2a2f3f;
   border-radius: 4px;
   overflow: hidden;
 }
-
-.bar .fill,
-.bar .trail {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 0;
-}
-
-.panel.right .bar .fill,
-.panel.right .bar .trail { left: auto; right: 0; }
-
+.bar .fill, .bar .trail { position: absolute; top: 0; bottom: 0; left: 0; width: 0; }
+.panel.right .bar .fill, .panel.right .bar .trail { left: auto; right: 0; }
 .bar .trail { background: rgba(255, 255, 255, 0.55); } /* แถบเลือดที่ไหลลดตามหลัง */
-
 .bar .val {
   position: relative;
   z-index: 1;
@@ -150,65 +168,61 @@ canvas {
   justify-content: center;
   height: 100%;
   font-weight: 700;
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   color: #fff;
   text-shadow: 0 0 3px #000, 0 1px 2px #000;
   white-space: nowrap;
 }
 
-.skill { margin-top: 2px; display: flex; align-items: center; gap: 6px; }
-.panel.right .skill { flex-direction: row-reverse; }
-
-.skname {
-  flex: 0 1 42%;
-  min-width: 0;
-  font-size: 0.6rem;
-  color: #aab2d0;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.skill .bar.cd { flex: 1; min-width: 0; }
-.bar.cd { height: 9px; border-radius: 3px; }
-.bar.cd .fill { background: #4a8fe0; }
-.bar.cd.ready .fill { background: #3fbf5a; }
-.bar.cd.casting .fill { background: #f0a020; }
-.bar.cd .val { font-size: 0.52rem; }
-
-/* แถบบางๆ ใต้หลอดเลือด: สติ/ความมั่นใจที่ถูกบั่นทอน (เต็ม = สติแตก) */
-.mindbar { height: 3px; margin-top: 2px; background: #2a2f3f; border-radius: 2px; overflow: hidden; }
+/* แถบบางๆ: สติ (ม่วง) + พลังงาน (ฟ้า) จองที่ไว้เสมอ แผงจะได้สูงเท่าเดิมทุกตัวละคร */
+.thin { margin: 2px 0; }
+.mindbar { height: 3px; background: #2a2f3f; border-radius: 2px; overflow: hidden; }
 .mindbar .fill { height: 100%; width: 0; background: #b38cff; transition: width 0.12s; }
 .panel.right .mindbar .fill { margin-left: auto; }
-
-/* ---------- หลายผู้เล่น (2v2 / ffa) ---------- */
-.controls label { display: inline-flex; align-items: center; gap: 4px; }
-label[hidden] { display: none; }
-.pnum {
-  display: inline-block;
-  min-width: 15px;
-  height: 15px;
-  line-height: 15px;
-  margin-right: 6px;
-  border-radius: 9px;
-  text-align: center;
-  font-size: 0.62rem;
-  font-weight: 700;
-  color: #10131d;
-}
-.panel.right .pname { display: flex; justify-content: flex-end; }
-.panel.right .pnum { margin-right: 0; margin-left: 6px; order: 2; }
-.hud.many { gap: 6px; }
-.hud.many .panel { padding: 4px 6px 5px; }
-.hud.many .pname { font-size: 0.7rem; }
-.hud.many .bar { height: 11px; }
-.hud.many .bar .val { font-size: 0.56rem; }
-.hud.many .bar.cd { height: 8px; }
-.hud.many .skname { flex-basis: 40%; font-size: 0.54rem; }
-.hud.many .bar.cd .val { font-size: 0.48rem; }
-
-/* แถบพลังงาน (Florentino) */
-.ebar { height: 4px; margin: 2px 0 2px; background: #1d2231; border-radius: 3px; overflow: hidden; }
+.ebar { height: 4px; margin-top: 2px; background: #1d2231; border-radius: 3px; overflow: hidden; }
 .ebar .fill { height: 100%; width: 0; background: linear-gradient(90deg, #3fa9ff, #8fe0ff); transition: width 0.1s linear; }
 .panel.right .ebar .fill { margin-left: auto; }
+
+/* ---------- ไอคอนสกิล + วงคูลดาวน์ ---------- */
+.skills { display: flex; flex-wrap: nowrap; gap: 4px; }
+.panel.right .skills { justify-content: flex-end; flex-direction: row-reverse; }
+.skw { display: flex; flex-direction: column; align-items: center; width: 34px; min-width: 0; }
+.sk {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #222844;
+  border: 2px solid #3a4268;
+  overflow: hidden;
+}
+.sk .gl {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-style: normal; font-size: 15px; line-height: 1;
+}
+/* ส่วนที่ยังไม่หมดคูลดาวน์ มืดไล่เป็นวงกลมตามเข็มนาฬิกา */
+.sk .ov {
+  position: absolute; inset: 0;
+  --r: 0%;
+  background: conic-gradient(rgba(8, 10, 18, 0.78) 0 var(--r), transparent 0);
+}
+.sk .cdn {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.6rem; font-weight: 700; color: #fff;
+  text-shadow: 0 0 3px #000, 0 1px 2px #000;
+}
+.sk.ready { border-color: #3fbf5a; box-shadow: 0 0 6px rgba(63, 191, 90, 0.7); }
+.sk.casting { border-color: #f0a020; box-shadow: 0 0 6px rgba(240, 160, 32, 0.8); }
+.sk.silenced { border-color: #ff453a; }
+.skn { display: none; width: 100%; margin-top: 1px; font-size: 0.5rem; line-height: 1.1; color: #aab2d0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+/* จอกว้าง: ไอคอนใหญ่ขึ้น + มีชื่อสกิลใต้ไอคอน */
+#stage.wide .skw { width: 44px; }
+#stage.wide .sk { width: 38px; height: 38px; border-radius: 9px; }
+#stage.wide .sk .gl { font-size: 20px; }
+#stage.wide .sk .cdn { font-size: 0.72rem; }
+#stage.wide .skn { display: block; }
+#stage.wide .pname { font-size: 0.82rem; }
+#stage.wide .bar { height: 14px; }
+#stage.wide .bar .val { font-size: 0.64rem; }

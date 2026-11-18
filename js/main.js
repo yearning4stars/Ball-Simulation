@@ -1317,34 +1317,42 @@ function drawWaves(b) {
 // ---------- แผงข้อมูลผู้เล่น (HTML อยู่นอกสนาม) ----------
 let hud = []; // แผงของผู้เล่นแต่ละคน (สร้างใหม่ตามโหมดที่เลือก)
 
-// side ของแผง: 1v1 ซ้าย/ขวา, 2v2 ทีมแดงซ้าย ทีมฟ้าขวา, ffa ชิดซ้ายหมด
+// side ของแผง: 1v1 ซ้าย/ขวา, 2v2 ทีมแดงซ้าย ทีมฟ้าขวา, ffa สลับซ้าย/ขวา (แผงอยู่รอบสนาม)
 function panelSide(i) {
   if (!layout || layout.mode === "1v1") return i === 0 ? "left" : "right";
   if (layout.mode === "2v2") return layout.teams[i] === 0 ? "left" : "right";
-  return "left";
+  return i % 2 === 0 ? "left" : "right";
+}
+
+// ไอคอนสกิล: ใส่ icon: "🔥" ในสกิลใน characters.js เพื่อกำหนดเอง ไม่ใส่ = เลือกตามชนิดสกิล
+const SKILL_ICONS = {
+  projectile: "🎯", dash: "💨", shockwave: "🌊", timeerase: "⏳", rewind: "⏪",
+  timeaccel: "⚡", timeslow: "🐌", ballkick: "⚽",
+};
+function skillIcon(sk) {
+  if (sk.icon) return sk.icon;
+  if (sk.type === "projectile") return sk.shape === "note" ? "🎵" : sk.shape === "text" ? "💬" : "🎯";
+  return SKILL_ICONS[sk.type] || "✨";
 }
 
 function buildHudPanels() {
-  const box = document.getElementById("hud");
-  if (!box || !layout) return;
-  box.innerHTML = "";
+  const boxL = document.getElementById("hudL");
+  const boxR = document.getElementById("hudR");
+  if (!boxL || !boxR || !layout) return;
+  boxL.innerHTML = "";
+  boxR.innerHTML = "";
   const n = layout.n;
-  const cols = n <= 2 ? 2 : n === 3 ? 3 : n === 4 ? 2 : 3;
-  box.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
-  box.classList.toggle("many", n > 2);
-  // 2v2: เรียงให้ทีมแดงอยู่คอลัมน์ซ้าย ทีมฟ้าอยู่คอลัมน์ขวา
-  const order = layout.mode === "2v2" ? [0, 2, 1, 3] : Array.from({ length: n }, (_, i) => i);
   hud = new Array(n);
-  for (const i of order) {
+  for (let i = 0; i < n; i++) {
     const panel = document.createElement("div");
     panel.className = "panel " + panelSide(i);
     panel.innerHTML =
       '<div class="pname"><span class="pnum"></span><span class="pnm">-</span></div>' +
       '<div class="bar hp"><div class="trail"></div><div class="fill"></div><span class="val">-</span></div>' +
-      '<div class="mindbar" title="สติ/ความมั่นใจที่ถูกบั่นทอน"><div class="fill"></div></div>' +
-      '<div class="ebar" title="พลังงาน"><div class="fill"></div></div>' +
+      '<div class="thin"><div class="mindbar" title="สติ/ความมั่นใจที่ถูกบั่นทอน"><div class="fill"></div></div>' +
+      '<div class="ebar" title="พลังงาน"><div class="fill"></div></div></div>' +
       '<div class="skills"></div>';
-    box.appendChild(panel);
+    (panelSide(i) === "left" ? boxL : boxR).appendChild(panel);
     const q = (sel) => panel.querySelector(sel);
     const num = q(".pnum");
     if (layout.colors) {
@@ -1373,49 +1381,53 @@ function hpColor(ratio) {
   return ratio > 0.5 ? "#4cd964" : ratio > 0.25 ? "#ffcc00" : "#ff453a";
 }
 
-// สร้างแถวสกิล (ชื่อ + แถบคูลดาวน์) ให้ตรงกับจำนวนสกิลของตัวละคร
+// สร้างไอคอนสกิลให้ตรงกับสกิลของตัวละคร (ขนาดช่องคงที่ ไม่ทำให้แผงสูงขึ้น)
 function buildSkillRows(h, def) {
   if (h.builtFor === def) return false;
   h.builtFor = def;
   h.rows = [];
   h.skillBox.innerHTML = "";
-  const skills = skillsOf(def);
-  for (const sk of skills) {
+  for (const sk of skillsOf(def)) {
     const wrap = document.createElement("div");
-    wrap.className = "skill";
-    const name = document.createElement("span");
-    name.className = "skname";
-    name.textContent = "สกิล: " + (sk.name || sk.type);
+    wrap.className = "skw";
+    wrap.title = (sk.name || sk.type) + " (คูลดาวน์ " + sk.cooldown + " วิ)";
     const bar = document.createElement("div");
-    bar.className = "bar cd";
-    const fill = document.createElement("div");
-    fill.className = "fill";
+    bar.className = "sk";
+    const gl = document.createElement("i");
+    gl.className = "gl";
+    gl.textContent = skillIcon(sk);
+    const fill = document.createElement("b");
+    fill.className = "ov";
     const val = document.createElement("span");
-    val.className = "val";
+    val.className = "cdn";
+    bar.appendChild(gl);
     bar.appendChild(fill);
     bar.appendChild(val);
-    wrap.appendChild(name);
+    const nm = document.createElement("span");
+    nm.className = "skn";
+    nm.textContent = sk.name || sk.type;
     wrap.appendChild(bar);
+    wrap.appendChild(nm);
     h.skillBox.appendChild(wrap);
     h.rows.push({ bar, fill, val });
-  }
-  if (!skills.length) {
-    const none = document.createElement("span");
-    none.className = "skname";
-    none.textContent = "ไม่มีสกิล";
-    h.skillBox.appendChild(none);
   }
   return true;
 }
 
+// ตั้งความมืดของไอคอน: pct = ความคืบหน้าคูลดาวน์ 0-100 (ส่วนที่ยังไม่หมดจะมืดไล่เป็นวงกลม)
+function setSkillRow(row, cls, pct, txt) {
+  row.bar.className = "sk" + cls;
+  row.fill.style.setProperty("--r", 100 - pct + "%");
+  row.val.textContent = txt;
+}
+
 // ก่อนเริ่มสู้: โชว์ข้อมูลของตัวละครที่เลือกไว้ในช่อง
 function setIdleHud() {
-  let rebuilt = false;
   playerSels.forEach((sel, i) => {
     const def = CHARACTERS[sel.value];
     const h = hud[i];
     if (!def || !h || !h.panel) return;
-    if (buildSkillRows(h, def)) rebuilt = true;
+    buildSkillRows(h, def);
     h.panel.className = "panel " + panelSide(i);
     h.panel.style.borderColor = layout && layout.colors ? layout.colors[i] : "";
     h.name.textContent = def.name;
@@ -1425,24 +1437,20 @@ function setIdleHud() {
     h.fill.style.background = hpColor(1);
     h.hpVal.textContent = def.hp + " / " + def.hp;
     if (h.mind) h.mind.style.width = "0%";
-    if (h.ebar) { h.ebar.style.display = def.energyMax ? "" : "none"; h.energy.style.width = "100%"; }
+    if (h.ebar) { h.ebar.style.visibility = def.energyMax ? "visible" : "hidden"; h.energy.style.width = "100%"; }
     skillsOf(def).forEach((sk, j) => {
       const row = h.rows[j];
-      row.bar.className = "bar cd";
-      row.fill.style.width = "0%";
-      row.val.textContent = "คูลดาวน์ " + sk.cooldown + " วิ";
+      if (row) setSkillRow(row, "", 0, sk.cooldown);
     });
   });
-  if (rebuilt) fitCanvas(); // ความสูงแผงเปลี่ยนตามจำนวนสกิล คำนวณขนาดสนามใหม่
 }
 
 // ระหว่างสู้: อัปเดตเลือดและคูลดาวน์ทุกเฟรม
 function updateHud(b) {
-  let rebuilt = false;
   b.fighters.forEach((f, i) => {
     const h = hud[i];
     if (!h || !h.panel) return;
-    if (buildSkillRows(h, f.def)) rebuilt = true;
+    buildSkillRows(h, f.def);
     const alive = f.hp > 0;
     const won = b.winner === f.team;
     h.panel.className = "panel " + panelSide(i) + (alive ? "" : " dead") + (won ? " winner" : "");
@@ -1458,42 +1466,39 @@ function updateHud(b) {
     h.hpVal.textContent = Math.ceil(f.hp) + " / " + f.maxHp;
     if (h.mind) h.mind.style.width = Math.min(100, f.mind) + "%";
     if (h.ebar) {
-      h.ebar.style.display = f.def.energyMax ? "" : "none";
+      h.ebar.style.visibility = f.def.energyMax ? "visible" : "hidden";
       if (f.def.energyMax) h.energy.style.width = Math.max(0, Math.min(100, (f.energy / f.def.energyMax) * 100)) + "%";
     }
 
     f.skills.forEach((sk, j) => {
       const row = h.rows[j];
       if (!row) return;
-      let cls = "bar cd";
+      let cls = "";
       let pct = 0;
-      let txt = "-";
+      let txt = "";
       if (alive && b.winner === null) {
         if (f.cast && f.cast.i === j) {
-          cls += " casting";
+          cls = " casting";
           pct = 100;
-          txt = "กำลังใช้สกิล!";
+          txt = "!";
         } else {
           const remain = Math.max(0, f.cds[j]);
           if (remain <= 0.05 && f.silence > 0) {
+            cls = " silenced";
             pct = 100;
-            txt = "ถูกใบ้!";
+            txt = "🔇";
           } else if (remain <= 0.05) {
-            cls += " ready";
+            cls = " ready";
             pct = 100;
-            txt = "พร้อมใช้!";
           } else {
             pct = Math.max(0, Math.min(1, 1 - remain / sk.cooldown)) * 100;
-            txt = remain.toFixed(1) + " วิ";
+            txt = remain >= 10 ? String(Math.ceil(remain)) : remain.toFixed(1);
           }
         }
       }
-      row.bar.className = cls;
-      row.fill.style.width = pct + "%";
-      row.val.textContent = txt;
+      setSkillRow(row, cls, pct, txt);
     });
   });
-  if (rebuilt) fitCanvas();
 }
 
 // ป้ายผู้ชนะ วาดไว้ "หลัง" ตัวละคร เพื่อให้คนชนะที่ยังเด้งอยู่วิ่งผ่านหน้าป้ายได้
@@ -1795,28 +1800,43 @@ function loadFonts() {
   return Promise.race([jobs, new Promise((r) => setTimeout(r, 2000))]);
 }
 
-// ---------- ปรับขนาดสนามให้พอดีจอ (ยังเป็นสี่เหลี่ยมจัตุรัส) ----------
-// ขนาดคำนวณจากพื้นที่ว่างจริง โดยหักความสูงของแผงข้อมูลผู้เล่นที่อยู่เหนือสนามออกไปด้วย
+// ---------- ปรับขนาดสนามให้พอดีจอ (สี่เหลี่ยมจัตุรัส ขนาดคงที่) ----------
+// ขนาดสนามคำนวณจาก "ขนาดหน้าต่าง + โหมด" เท่านั้น ไม่ขึ้นกับตัวละครที่เลือกหรือเนื้อหาในแผง
+// จอกว้าง: แผงผู้เล่นอยู่ซ้าย/ขวาของสนาม | จอแคบ (มือถือ): แผงอยู่เหนือสนาม สูงคงที่
+const SIDE_W = 210;   // ความกว้างแผงข้างสนาม (จอกว้าง)
+const GAP = 10;
+const PANEL_H_WIDE = 96;   // ความสูงแผงต่อผู้เล่น (จอกว้าง ไอคอนมีชื่อสกิลใต้ไอคอน)
+const PANEL_H_NARROW = 66; // ความสูงแผงต่อผู้เล่น (จอแคบ ไอคอนอย่างเดียว)
 function fitCanvas() {
   if (typeof window === "undefined" || !window.innerHeight) return;
   const stage = document.getElementById("stage");
   if (!stage || !stage.getBoundingClientRect) return;
-  const hudBox = document.getElementById("hud");
   const parent = stage.parentElement;
-  const availW = (parent && parent.clientWidth ? parent.clientWidth : window.innerWidth) - 16;
+  const pageW = (parent && parent.clientWidth ? parent.clientWidth : window.innerWidth);
   const top = stage.getBoundingClientRect().top + (window.scrollY || 0);
+  const availH = window.innerHeight - top - 28; // เผื่อบรรทัดเวอร์ชันด้านล่าง
+  const nL = hud.filter((_, i) => panelSide(i) === "left").length;
+  const nR = hud.length - nL;
+  const rows = Math.max(1, nL, nR);
 
-  let size = Math.floor(Math.max(240, Math.min(W, availW)));
-  for (let pass = 0; pass < 3; pass++) {
+  // จอกว้างพอวางแผงสองข้างได้ไหม (ต้องเหลือสนามอย่างน้อย 380px)
+  const wideSize = Math.floor(Math.min(W, pageW - 2 * SIDE_W - 2 * GAP - 4, availH));
+  const wide = wideSize >= 380;
+  stage.classList.toggle("wide", wide);
+  stage.classList.toggle("narrow", !wide);
+
+  let size;
+  if (wide) {
+    size = wideSize;
+    stage.style.setProperty("--ph", PANEL_H_WIDE + "px");
+    stage.style.width = size + 2 * SIDE_W + 2 * GAP + "px";
+  } else {
+    const hudH = rows * PANEL_H_NARROW + (rows - 1) * 4 + 6;
+    size = Math.floor(Math.max(240, Math.min(W, pageW - 8, availH - hudH)));
+    stage.style.setProperty("--ph", PANEL_H_NARROW + "px");
     stage.style.width = size + "px";
-    // ความสูงแผงเปลี่ยนตามความกว้าง จึงวัดซ้ำจนนิ่ง
-    const hudH = hudBox && hudBox.offsetHeight ? hudBox.offsetHeight + 10 : 0;
-    const availH = window.innerHeight - top - hudH - 26; // 26 = เผื่อบรรทัดเวอร์ชันด้านล่าง
-    const next = Math.floor(Math.max(240, Math.min(W, availW, availH)));
-    if (next === size) break;
-    size = next;
   }
-  stage.style.width = size + "px";
+  stage.style.setProperty("--arena", size + "px");
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
@@ -1832,7 +1852,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION;
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 36";
   }
 }
 

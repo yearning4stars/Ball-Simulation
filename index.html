@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=35" />
+  <link rel="stylesheet" href="style.css?v=36" />
 </head>
 <body>
   <main>
@@ -36,10 +36,10 @@
     <div class="controls" id="players"></div>
 
     <div id="stage">
-      <!-- แผงข้อมูลผู้เล่น: อยู่นอกสนาม (main.js สร้างแผงให้ตามจำนวนผู้เล่นของโหมด) -->
-      <section id="hud" class="hud"></section>
-
+      <!-- แผงผู้เล่นอยู่รอบสนาม (main.js สร้างให้ตามโหมด): ซ้าย/ขวาบนจอกว้าง, เหนือสนามบนมือถือ -->
+      <section id="hudL" class="hud"></section>
       <canvas id="arena" width="720" height="720"></canvas>
+      <section id="hudR" class="hud"></section>
     </div>
 
     <p id="ver" class="ver">เวอร์ชัน 35</p>
@@ -49,6 +49,6 @@
   <script src="js/characters.js?v=35"></script>
   <script src="js/battle.js?v=35"></script>
   <script src="js/audio.js?v=35"></script>
-  <script src="js/main.js?v=35"></script>
+  <script src="js/main.js?v=36"></script>
 </body>
 </html>
