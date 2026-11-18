@@ -514,28 +514,28 @@ const CHARACTERS = {
     },
     skills: [
       {
-        // สกิล 1: ชู้ตบาสแสกหน้า "ช็อต 3 แต้ม": ยิงจากไกลตั้งแต่ threeRange px แล้วลูกลงเป้า = ข่มขวัญศัตรูหนัก (mindDamage)
-        // ยิงใกล้กว่านั้นเป็นแค่ 2 แต้ม ข่มขวัญเบา (mindNear) ถ้าลูกพลาดเป้า = ไม่ได้อะไรเลย
+        // สกิล 1: ชู้ตบาสเข้าแป้น (toHoop) แป้นตั้งอยู่กลางขอบบนของสนาม ยิงจากห่างแป้น >= threeRange px = ช็อต 3 แต้ม
+        // ลงแป้น = ข่มขวัญศัตรูทุกคน (3 แต้ม mindDamage / 2 แต้มครึ่งเดียว) พลาด = ไม่ได้อะไร
+        // ถ้ามีศัตรูอยู่ในเส้นทางลูก ลูกจะโดนหน้าศัตรูแทน (แสกหน้า: ดาเมจ damageNear + ข่มขวัญเบา mindNear)
         type: "projectile",
-        name: "ชู้ต 3 แต้ม",
+        name: "ชู้ตเข้าแป้น",
+        toHoop: true,
         cooldown: 4,
         initialCooldown: 0.6,
         frame: "shoot",
         duration: 0.5,
         fireDelay: 0.15,
-        damage: 6, // ดาเมจเลือดตอน 3 แต้ม
-        damageNear: 3, // ดาเมจเลือดตอนยิงใกล้ (2 แต้ม)
+        damage: 6, // ดาเมจเลือดตอนลง 3 แต้ม
+        damageNear: 3, // ดาเมจเลือดตอน 2 แต้ม / ตอนลูกโดนหน้าศัตรูระหว่างทาง
         threeRange: 300, // ยิงห่างอย่างน้อยเท่านี้ (px) = 3 แต้ม
         mindDamage: 50, // 3 แต้มลง = ข่มขวัญหนัก (สติ -50) โดน 2 ลูกสติแตก ดูคำอธิบาย mindDamage ด้านบน
-        mindNear: 15, // 2 แต้ม = ข่มขวัญเบา
+        mindNear: 20, // ลูกโดนหน้าศัตรูระหว่างทาง = ข่มขวัญเบา
         projectileSpeed: 560,
         projectileRadius: 20,
         shape: "basketball",
         lead: true, // เล็งนำหน้า
         knockback: 90,
         sound: "shoot",
-        bounces: 1,
-        maxRange: 480,
       },
       {
         // สกิล 2: เรียกเพื่อน FuNx หรือ Johan มาโจมตีให้ 1 ครั้ง (ใช้สกิลของเขาให้แบบย่อ)
@@ -560,6 +560,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 30;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 31;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

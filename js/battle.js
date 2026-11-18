@@ -50,6 +50,8 @@ class Battle {
     this.balls = [];
     this.guests = []; // เพื่อนที่ Solar เรียกมาโจมตี {name, owner, target, x, y, phase, t, g}
     this.flowers = []; // ดอกไม้ของ Florentino (จาก Blossom): เก็บแล้วเติมพลังงานและรีเซ็ต Triple Threat
+    // แป้นบาส: สร้างเมื่อมีตัวละครที่มีสกิลที่ตั้ง toHoop (Solar) ตั้งอยู่กลางขอบบนของสนาม
+    this.hoop = this.fighters.some((f) => f.skills.some((k) => k.toHoop)) ? { x: width * 0.5, y: 100, r: 24 } : null;
     const ks = this.fighters.map((f) => f.skills.find((k) => k.type === "ballkick")).find(Boolean);
     if (ks) {
       this.balls.push({
@@ -1295,9 +1297,10 @@ class Battle {
 
   _fireProjectile(f, enemy, sk) {
     const spread = (sk.spread || 0) + 0.9 * (f.mind / 100); // สติเสีย -> เล็งเพี้ยน
-    let tx = enemy.x;
-    let ty = enemy.y;
-    if (sk.lead && f.def.speed) {
+    const hoopShot = !!(sk.toHoop && this.hoop); // ยิงเข้าแป้น (ไม่ได้เล็งศัตรูตรงๆ)
+    let tx = hoopShot ? this.hoop.x : enemy.x;
+    let ty = hoopShot ? this.hoop.y : enemy.y;
+    if (sk.lead && f.def.speed && !hoopShot) {
       // เล็งนำหน้า: หาจุดที่ลูกบอลไปเจอศัตรูที่กำลังเคลื่อนที่ (วนคำนวณ 3 รอบพอ)
       const evx = (enemy.vx || 0) + (enemy.knockX || 0);
       const evy = (enemy.vy || 0) + (enemy.knockY || 0);
@@ -1311,7 +1314,7 @@ class Battle {
       ty = Math.max(10, Math.min(this.h - 10, ty));
     }
     const base = Math.atan2(ty - f.y, tx - f.x);
-    const shotDist = Math.hypot(enemy.x - f.x, enemy.y - f.y); // ระยะยิง (ใช้ตัดสินว่าเป็นช็อต 3 แต้มหรือไม่)
+    const shotDist = Math.hypot(tx - f.x, ty - f.y); // ระยะยิง (ถึงแป้น/ศัตรู) ใช้ตัดสินว่าเป็นช็อต 3 แต้มหรือไม่
     const three = !!sk.threeRange && shotDist >= sk.threeRange;
     const ang = base + (this.rng() - 0.5) * spread;
     const dx = Math.cos(ang);
@@ -1328,15 +1331,18 @@ class Battle {
       dy,
       speed: sk.projectileSpeed,
       r: sk.projectileRadius,
-      damage: this._out(f, (sk.threeRange && !three && sk.damageNear !== undefined ? sk.damageNear : sk.damage) * this._dmgMult(f, enemy)),
+      damage: this._out(f, (sk.threeRange && (hoopShot || !three) && sk.damageNear !== undefined ? sk.damageNear : sk.damage) * this._dmgMult(f, enemy)),
       stunOnHit: sk.stun || 0, // โดนแล้วสตันศัตรูกี่วินาที (Blossom)
       flowers: sk.flowers || 0, // โดนแล้วดอกไม้ปรากฏรอบเป้าหมายกี่ดอก (Blossom)
       energyRefill: !!sk.energyRefill,
       flowerDist: sk.flowerDist || 64, // ดอกไม้อยู่ห่างจากจุดกึ่งกลางเป้าหมายกี่ px (ใกล้ตัวมาก ให้แทงทะลุไปเก็บได้)
       text: sk.texts ? sk.texts[Math.floor(this.rng() * sk.texts.length)] : null, // ข้อความบนกระสุนคำพูด
-      mindDamage: sk.threeRange ? (three ? sk.mindDamage : sk.mindNear || 0) : sk.mindDamage || 0, // บั่นทอนสติ/ความมั่นใจเท่าไรเมื่อโดน
+      mindDamage: sk.threeRange ? (hoopShot || !three ? sk.mindNear || 0 : sk.mindDamage) : sk.mindDamage || 0, // บั่นทอน (ลูกที่ไปโดนหน้าศัตรูระหว่างทาง = เบา)สติ/ความมั่นใจเท่าไรเมื่อโดน
       unblockable: !!sk.unblockable, // ปัดไม่ได้เลย: ดาบ/คลื่น/กระสุนอื่นไม่มีผล (Blossom)
       indestructible: !!sk.indestructible || !!sk.unblockable, // ปัดทิ้ง/ชนแล้วไม่แตก
+      hoop: hoopShot ? this.hoop : null,
+      scoreMind: sk.mindDamage || 0, // ลงแป้น: ข่มขวัญศัตรูทุกคนเท่านี้ (3 แต้ม) / ครึ่งเดียวถ้า 2 แต้ม
+      scoreDamage: three ? sk.damage || 0 : sk.damageNear || 0,
       shotT: shotDist / (sk.projectileSpeed || 400), // เวลาลอยถึงเป้า (ใช้วาดวิถีโค้งของลูกบาส)
       three, // ช็อต 3 แต้ม (ยิงจากไกล): ลงแล้วข่มขวัญหนัก
       shotNear: !!sk.threeRange && !three,
@@ -1512,13 +1518,28 @@ class Battle {
         }
       }
       let hit = false;
+      if (p.hoop && !p.dead && Math.hypot(p.hoop.x - p.x, p.hoop.y - p.y) < p.hoop.r + p.r * 0.6) {
+        // ถึงแป้นแล้ว: ลงหรือไม่ (ไกลกว่า = ลงยากกว่า สติเสียก็ยิ่งพลาด) ลง = ข่มขวัญศัตรูทุกคน
+        p.dead = true;
+        hit = true;
+        const chance = (p.three ? 0.7 : 0.9) * (1 - 0.6 * (p.owner.mind / 100));
+        const scored = this.rng() < chance;
+        this.events.push({ type: "hoop", scored, three: p.three, x: p.hoop.x, y: p.hoop.y });
+        if (scored) {
+          for (const foe of this._foes(p.owner)) {
+            if (foe.hp <= 0) continue;
+            this._hurtMind(foe, p.scoreMind * (p.three ? 1 : 0.5), foe.x, foe.y);
+            if (p.scoreDamage) this._damage(foe, p.scoreDamage, foe.x, foe.y);
+          }
+        }
+        continue;
+      }
       for (const target of this._foes(p.owner)) {
         // หลบไปแล้ว (Meta Vision) / อยู่นอกความจริง (ตัดเวลา): กระสุนบินทะลุผ่านไป
         if (this._evaded(p, target) || target === this.eraser) continue;
         if (Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
           this._damage(target, p.damage, p.x, p.y);
           if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
-          if (p.three || p.shotNear) this.events.push({ type: "hoop", three: p.three, x: target.x, y: target.y });
           // ถีบเบาๆ ตามทิศกระสุน
           target.x += p.dx * 6;
           target.y += p.dy * 6;
@@ -1717,6 +1738,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 30;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 31;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

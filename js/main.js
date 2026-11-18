@@ -331,10 +331,13 @@ function handleEvents(events) {
       floaters.push({ x: e.x, y: e.y - 62, text: "เรียก " + e.name + "!", life: 1.0, color: e.color || "#ffd65a", size: 28 });
       sfx.dash();
     } else if (e.type === "hoop") {
-      screenFlash = e.three ? 0.12 : 0;
-      shake = Math.max(shake, e.three ? 9 : 3);
-      floaters.push({ x: e.x, y: e.y - 64, text: e.three ? "ลง! 3 แต้ม!" : "2 แต้ม", life: 1.1, color: e.three ? "#ffb347" : "#ffe0b0", size: e.three ? 34 : 24 });
-      if (e.three) spawnParticles(e.x, e.y, "#ff8a1f", 24, 340);
+      hoopFlash = e.scored ? 0.6 : 0;
+      if (e.scored) {
+        screenFlash = e.three ? 0.12 : 0.05;
+        shake = Math.max(shake, e.three ? 9 : 4);
+        spawnParticles(e.x, e.y + 20, "#ff8a1f", e.three ? 26 : 14, 320);
+      }
+      floaters.push({ x: e.x, y: e.y + 60, text: e.scored ? (e.three ? "ลง! 3 แต้ม!" : "ลง! 2 แต้ม") : "พลาด!", life: 1.1, color: e.scored ? "#ffb347" : "#b8c0d8", size: e.scored ? 34 : 26 });
     } else if (e.type === "guestStrike") {
       spawnParticles(e.x, e.y, e.color || "#fff", 22, 320);
       shake = Math.max(shake, 7);
@@ -866,6 +869,41 @@ function drawDuelLink(f) {
 }
 
 // ---------- ลูกฟุตบอล (กระสุนของ Isagi) ----------
+let hoopFlash = 0; // แป้นวาบสีส้มตอนลง
+function drawHoop(h) {
+  hoopFlash = Math.max(0, hoopFlash - 1 / 60);
+  ctx.save();
+  ctx.translate(h.x, h.y);
+  // เสา + แป้น
+  ctx.fillStyle = "#2a3047";
+  ctx.fillRect(-4, -h.r - 34, 8, 34);
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.strokeStyle = hoopFlash > 0 ? "#ffb347" : "#8d97b8";
+  ctx.lineWidth = 3;
+  ctx.fillRect(-h.r * 1.7, -h.r - 52, h.r * 3.4, 34);
+  ctx.strokeRect(-h.r * 1.7, -h.r - 52, h.r * 3.4, 34);
+  ctx.strokeStyle = "#d94a2a";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(-h.r * 0.5, -h.r - 36, h.r, 16);
+  // ตาข่าย
+  ctx.strokeStyle = "rgba(255,255,255,0.6)";
+  ctx.lineWidth = 1.5;
+  for (let i = -3; i <= 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * h.r * 0.28, 0);
+    ctx.lineTo(i * h.r * 0.16, h.r * 0.9);
+    ctx.stroke();
+  }
+  // ห่วง
+  ctx.strokeStyle = hoopFlash > 0 ? "#ffd27a" : "#ff6a2a";
+  ctx.lineWidth = 5;
+  if (hoopFlash > 0) { ctx.shadowColor = "#ffb347"; ctx.shadowBlur = 22; }
+  ctx.beginPath();
+  ctx.ellipse(0, 0, h.r, h.r * 0.38, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawBasketball(p) {
   const r = p.r;
   // วิถีโค้งแบบยิงบาส: ลูกลอยสูงตอนกลางทางแล้วลงที่เป้า (วาดอย่างเดียว การชนยังเป็นพื้นราบ)
@@ -1544,6 +1582,7 @@ function render() {
     for (const f of battle.fighters) if (f.hp > 0 && f.cast && f.cast.sk.type === "metavision") drawMetaThreats(f);
     for (const f of battle.fighters) if (f.hp > 0) drawDuelLink(f);
 
+    if (battle.hoop) drawHoop(battle.hoop);
     for (const gu of battle.guests || []) drawGuest(gu);
     for (const fl of battle.flowers) drawFlower(fl);
     for (const b of battle.balls) drawBall(b);
@@ -1652,7 +1691,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 30;
+const EXPECTED_VERSION = 31;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
