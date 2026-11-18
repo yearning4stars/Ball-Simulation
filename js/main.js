@@ -330,6 +330,11 @@ function handleEvents(events) {
       screenFlash = 0.1;
       floaters.push({ x: e.x, y: e.y - 62, text: "เรียก " + e.name + "!", life: 1.0, color: e.color || "#ffd65a", size: 28 });
       sfx.dash();
+    } else if (e.type === "hoop") {
+      screenFlash = e.three ? 0.12 : 0;
+      shake = Math.max(shake, e.three ? 9 : 3);
+      floaters.push({ x: e.x, y: e.y - 64, text: e.three ? "ลง! 3 แต้ม!" : "2 แต้ม", life: 1.1, color: e.three ? "#ffb347" : "#ffe0b0", size: e.three ? 34 : 24 });
+      if (e.three) spawnParticles(e.x, e.y, "#ff8a1f", 24, 340);
     } else if (e.type === "guestStrike") {
       spawnParticles(e.x, e.y, e.color || "#fff", 22, 320);
       shake = Math.max(shake, 7);
@@ -863,8 +868,16 @@ function drawDuelLink(f) {
 // ---------- ลูกฟุตบอล (กระสุนของ Isagi) ----------
 function drawBasketball(p) {
   const r = p.r;
+  // วิถีโค้งแบบยิงบาส: ลูกลอยสูงตอนกลางทางแล้วลงที่เป้า (วาดอย่างเดียว การชนยังเป็นพื้นราบ)
+  const prog = p.shotT ? Math.min(1, p.t / p.shotT) : 1;
+  const lift = Math.sin(prog * Math.PI) * (p.three ? 46 : 22);
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.beginPath();
+  ctx.ellipse(p.x, p.y + r * 0.9, r * (0.9 - lift / 140), r * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.save();
-  ctx.translate(p.x, p.y);
+  ctx.translate(p.x, p.y - lift);
+  if (p.three) { ctx.shadowColor = "#ffb347"; ctx.shadowBlur = 16; }
   ctx.rotate(p.t * 10 * (p.spin >= 0 ? 1 : -1));
   ctx.fillStyle = "#e8731f";
   ctx.beginPath();
@@ -1639,7 +1652,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 29;
+const EXPECTED_VERSION = 30;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

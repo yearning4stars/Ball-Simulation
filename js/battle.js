@@ -1311,6 +1311,8 @@ class Battle {
       ty = Math.max(10, Math.min(this.h - 10, ty));
     }
     const base = Math.atan2(ty - f.y, tx - f.x);
+    const shotDist = Math.hypot(enemy.x - f.x, enemy.y - f.y); // ระยะยิง (ใช้ตัดสินว่าเป็นช็อต 3 แต้มหรือไม่)
+    const three = !!sk.threeRange && shotDist >= sk.threeRange;
     const ang = base + (this.rng() - 0.5) * spread;
     const dx = Math.cos(ang);
     const dy = Math.sin(ang);
@@ -1326,15 +1328,18 @@ class Battle {
       dy,
       speed: sk.projectileSpeed,
       r: sk.projectileRadius,
-      damage: this._out(f, sk.damage * this._dmgMult(f, enemy)),
+      damage: this._out(f, (sk.threeRange && !three && sk.damageNear !== undefined ? sk.damageNear : sk.damage) * this._dmgMult(f, enemy)),
       stunOnHit: sk.stun || 0, // โดนแล้วสตันศัตรูกี่วินาที (Blossom)
       flowers: sk.flowers || 0, // โดนแล้วดอกไม้ปรากฏรอบเป้าหมายกี่ดอก (Blossom)
       energyRefill: !!sk.energyRefill,
       flowerDist: sk.flowerDist || 64, // ดอกไม้อยู่ห่างจากจุดกึ่งกลางเป้าหมายกี่ px (ใกล้ตัวมาก ให้แทงทะลุไปเก็บได้)
       text: sk.texts ? sk.texts[Math.floor(this.rng() * sk.texts.length)] : null, // ข้อความบนกระสุนคำพูด
-      mindDamage: sk.mindDamage || 0, // บั่นทอนสติ/ความมั่นใจเท่าไรเมื่อโดน
+      mindDamage: sk.threeRange ? (three ? sk.mindDamage : sk.mindNear || 0) : sk.mindDamage || 0, // บั่นทอนสติ/ความมั่นใจเท่าไรเมื่อโดน
       unblockable: !!sk.unblockable, // ปัดไม่ได้เลย: ดาบ/คลื่น/กระสุนอื่นไม่มีผล (Blossom)
       indestructible: !!sk.indestructible || !!sk.unblockable, // ปัดทิ้ง/ชนแล้วไม่แตก
+      shotT: shotDist / (sk.projectileSpeed || 400), // เวลาลอยถึงเป้า (ใช้วาดวิถีโค้งของลูกบาส)
+      three, // ช็อต 3 แต้ม (ยิงจากไกล): ลงแล้วข่มขวัญหนัก
+      shotNear: !!sk.threeRange && !three,
       owner: f,
       color: f.def.color,
       shape: sk.shape || "ball", // "ball" หรือ "note"
@@ -1513,6 +1518,7 @@ class Battle {
         if (Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
           this._damage(target, p.damage, p.x, p.y);
           if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
+          if (p.three || p.shotNear) this.events.push({ type: "hoop", three: p.three, x: target.x, y: target.y });
           // ถีบเบาๆ ตามทิศกระสุน
           target.x += p.dx * 6;
           target.y += p.dy * 6;
@@ -1711,6 +1717,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 29;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 30;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

@@ -514,16 +514,20 @@ const CHARACTERS = {
     },
     skills: [
       {
-        // สกิล 1: ชู้ตบาสแสกหน้า ดาเมจเลือดนิดเดียว ตัวจริงคือทำลายสติ/ความมั่นใจ (mindDamage เหมือนคำพูดของ Luka)
+        // สกิล 1: ชู้ตบาสแสกหน้า "ช็อต 3 แต้ม": ยิงจากไกลตั้งแต่ threeRange px แล้วลูกลงเป้า = ข่มขวัญศัตรูหนัก (mindDamage)
+        // ยิงใกล้กว่านั้นเป็นแค่ 2 แต้ม ข่มขวัญเบา (mindNear) ถ้าลูกพลาดเป้า = ไม่ได้อะไรเลย
         type: "projectile",
-        name: "ชู้ตแสกหน้า",
+        name: "ชู้ต 3 แต้ม",
         cooldown: 4,
         initialCooldown: 0.6,
         frame: "shoot",
         duration: 0.5,
         fireDelay: 0.15,
-        damage: 6,
-        mindDamage: 35, // โดน 3 ลูก = สติแตก (เกือบ) ดูคำอธิบาย mindDamage ด้านบน
+        damage: 6, // ดาเมจเลือดตอน 3 แต้ม
+        damageNear: 3, // ดาเมจเลือดตอนยิงใกล้ (2 แต้ม)
+        threeRange: 300, // ยิงห่างอย่างน้อยเท่านี้ (px) = 3 แต้ม
+        mindDamage: 50, // 3 แต้มลง = ข่มขวัญหนัก (สติ -50) โดน 2 ลูกสติแตก ดูคำอธิบาย mindDamage ด้านบน
+        mindNear: 15, // 2 แต้ม = ข่มขวัญเบา
         projectileSpeed: 560,
         projectileRadius: 20,
         shape: "basketball",
@@ -531,6 +535,7 @@ const CHARACTERS = {
         knockback: 90,
         sound: "shoot",
         bounces: 1,
+        maxRange: 480,
       },
       {
         // สกิล 2: เรียกเพื่อน FuNx หรือ Johan มาโจมตีให้ 1 ครั้ง (ใช้สกิลของเขาให้แบบย่อ)
@@ -555,6 +560,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 29;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 30;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };
