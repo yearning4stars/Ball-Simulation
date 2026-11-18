@@ -67,6 +67,9 @@
 //        duration (เวลาพุ่งหาบอลสูงสุด), chaseSpeed, kickSpeed, ballRadius
 //        ใส่ใน metavision: kickCd, kickSpeedMult, kickDamageMult, kickKnockMult = เตะบอลระหว่าง Meta Vision ได้ แรงกว่าปกติ
 //        projectile เพิ่ม: lead (เล็งนำหน้าศัตรูที่กำลังเคลื่อนที่), bounces (กระสุนสะท้อนกำแพงได้กี่ครั้ง), shape: "soccer" (ลูกฟุตบอล)
+//   "summon"      เรียกเพื่อน (Solar): ถึง fireDelay แล้วสุ่ม 1 คนจาก guests [{name (ตรงกับ name ใน CHARACTERS), say, damage, silence, slow, slowMult, knockback}]
+//        เพื่อนพุ่งมาหาศัตรูโจมตี 1 ครั้งแล้วหายไป  เรียกคนที่ศัตรูฝั่งตรงข้ามเป็นตัวนั้นอยู่ไม่ได้ (ไม่มีใครให้เรียก = ไม่ใช้สกิล)
+//        projectile เพิ่ม: shape "basketball" (ลูกบาส)
 //   "triplethreat" Triple Threat (Florentino): พุ่งเข้าหาแล้วแทงตามรายการ strikes [{t (วินาทีที่แทง), damage, stun (ส่งลอยกี่วินาที)}]
 //        truePct = ดาเมจจริงต่อที (เศษส่วนของเลือดสูงสุดศัตรู) reach, speedMult, homing, shuffle  โดนฮีโร่ = สกิลที่มี flowers คูลดาวน์ลด 1 วินาที
 //   "duel"        Gentleman's Duel (Florentino): ชาร์จ charge วินาทีแล้วพุ่งหาศัตรูที่ใกล้สุด ชนแล้วดวล duelTime วินาที (ดาเมจต่อคู่ดวล x duelMult)
@@ -495,9 +498,63 @@ const CHARACTERS = {
       },
     ],
   },
+
+  // ---------- Solar: ใช้บาสเกตบอลเป็นอาวุธ ----------
+  // ภาพ: assets/characters/solar/idle.png, shoot.png (ท่าชู้ต), call.png (ท่าเรียกเพื่อน)
+  solar: {
+    name: "Solar",
+    color: "#ff8a1f",
+    hp: 100,
+    speed: 185,
+    radius: 36,
+    frames: {
+      idle: "assets/characters/solar/idle.png",
+      shoot: "assets/characters/solar/shoot.png",
+      call: "assets/characters/solar/call.png",
+    },
+    skills: [
+      {
+        // สกิล 1: ชู้ตบาสแสกหน้า ดาเมจเลือดนิดเดียว ตัวจริงคือทำลายสติ/ความมั่นใจ (mindDamage เหมือนคำพูดของ Luka)
+        type: "projectile",
+        name: "ชู้ตแสกหน้า",
+        cooldown: 4,
+        initialCooldown: 0.6,
+        frame: "shoot",
+        duration: 0.5,
+        fireDelay: 0.15,
+        damage: 6,
+        mindDamage: 35, // โดน 3 ลูก = สติแตก (เกือบ) ดูคำอธิบาย mindDamage ด้านบน
+        projectileSpeed: 560,
+        projectileRadius: 20,
+        shape: "basketball",
+        lead: true, // เล็งนำหน้า
+        knockback: 90,
+        sound: "shoot",
+        bounces: 1,
+      },
+      {
+        // สกิล 2: เรียกเพื่อน FuNx หรือ Johan มาโจมตีให้ 1 ครั้ง (ใช้สกิลของเขาให้แบบย่อ)
+        // เรียกคนที่ "ต้องสู้ด้วยอยู่" ไม่ได้ (ถ้าศัตรูคนไหนชื่อเดียวกับเพื่อน จะเรียกคนนั้นไม่ได้)
+        type: "summon",
+        name: "เรียกเพื่อน",
+        cooldown: 7,
+        initialCooldown: 2.5,
+        frame: "call",
+        duration: 0.7,
+        fireDelay: 0.35,
+        restAfter: 0.2,
+        guests: [
+          // FuNx: ตัดเวลาแล้วฟันจากด้านหลัง = ดาเมจ + ใบ้สกิลศัตรู
+          { name: "FuNx", say: "ตัดเวลา!", damage: 16, silence: 2.2, knockback: 140, color: "#ff2a55" },
+          // Johan: เข็มทิศ + ชะลอเวลา = ดาเมจ + ศัตรูช้าลง
+          { name: "Johan", say: "ชะลอเวลา!", damage: 10, slow: 3, slowMult: 0.4, knockback: 100, color: "#7ff5dc" },
+        ],
+      },
+    ],
+  },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 28;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 29;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

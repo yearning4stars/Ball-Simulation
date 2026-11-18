@@ -48,6 +48,7 @@ class Battle {
 
     // บอลบนสนาม: สร้างเมื่อมีตัวละครที่มีสกิล ballkick (Isagi)
     this.balls = [];
+    this.guests = []; // เพื่อนที่ Solar เรียกมาโจมตี {name, owner, target, x, y, phase, t, g}
     this.flowers = []; // ดอกไม้ของ Florentino (จาก Blossom): เก็บแล้วเติมพลังงานและรีเซ็ต Triple Threat
     const ks = this.fighters.map((f) => f.skills.find((k) => k.type === "ballkick")).find(Boolean);
     if (ks) {
@@ -267,6 +268,7 @@ class Battle {
     this._updateProjectiles(dt);
     this._updateBalls(dt);
     this._updateFlowers(dt);
+    this._updateGuests(dt);
     this._updateWaves(dt);
     // ตัดเวลาอาจจบกลางก้าวนี้ (cast ถูกเคลียร์) ให้สถานะที่ตัววาดอ่านตรงกับความจริงเสมอ
     // (นับจากสถานะจริงตอนนี้ ไม่ใช่ตัวที่จำไว้ตอนต้นก้าว เพราะอีกคนอาจเพิ่งเริ่มตัดเวลาต่อจากคนที่เพิ่งจบในก้าวเดียวกัน)
@@ -320,6 +322,11 @@ class Battle {
         if (!c.fired && c.t >= (sk.fireDelay || 0)) {
           c.fired = true;
           this._fireWave(f, enemy, sk);
+        }
+      } else if (sk.type === "summon") {
+        if (!c.fired && c.t >= (sk.fireDelay || 0)) {
+          c.fired = true;
+          this._summon(f, enemy, sk);
         }
       } else if (sk.type === "triplethreat") {
         this._tripleRun(f, enemy, sk, c, dt); // รำ 3 ท่าติดกัน
@@ -385,6 +392,7 @@ class Battle {
       if (s2.type === "rewind" && !this._rewindWorthIt(f, s2)) continue;
       // Lunge (โจมตีปกติ) ใช้ได้เมื่อพร้อม และไม่ใช้ระหว่างวงจรรำ (ยังมีดอกไม้ให้เก็บ หรือ Triple Threat พร้อมแทง)
       if (s2.requires === "lunge" && (!f.lunge || this.flowers.some((fl) => fl.owner === f) || this._stabReady(f, enemy))) continue;
+      if (s2.type === "summon" && !this._summonChoices(f, s2).length) continue; // ไม่มีเพื่อนให้เรียก (ต้องสู้กับคนนั้นอยู่)
       if (s2.energyCost && f.energy < s2.energyCost) continue; // พลังงานไม่พอ
       if (s2.maxRange && Math.hypot(enemy.x - f.x, enemy.y - f.y) > s2.maxRange) continue; // ศัตรูไกลเกินระยะ
       // เตะบอลได้เมื่อมีบอลเปล่าให้เตะ (ถ้าบอลกำลังลอยเป็นอันตรายอยู่ ต้องรอ)
@@ -442,6 +450,59 @@ class Battle {
     } else if (sk.type === "timeslow") {
       this.events.push({ type: "slow", x: f.x, y: f.y, radius: sk.radius || 300 });
     }
+  }
+
+  // ---------- Solar: เรียกเพื่อน ----------
+  // เรียกได้เฉพาะเพื่อนที่ไม่ได้เป็นศัตรูของตัวเอง (ถ้าต้องสู้กับ FuNx อยู่ก็เรียก FuNx ไม่ได้)
+  _summonChoices(f, sk) {
+    const foes = this._foes(f);
+    return (sk.guests || []).filter((g) => !foes.some((o) => o.hp > 0 && o.def.name === g.name));
+  }
+
+  _summon(f, enemy, sk) {
+    const list = this._summonChoices(f, sk);
+    if (!list.length) { f.cds[f.cast.i] = 1; return; }
+    const g = list[Math.floor(this.rng() * list.length)];
+    // เพื่อนโผล่จากขอบสนามฝั่งไกลจากศัตรู แล้วพุ่งเข้าหา
+    const ang = this.rng() * Math.PI * 2;
+    const gx = Math.max(30, Math.min(this.w - 30, enemy.x + Math.cos(ang) * 420));
+    const gy = Math.max(30, Math.min(this.h - 30, enemy.y + Math.sin(ang) * 420));
+    this.guests.push({ g, name: g.name, owner: f, target: enemy, x: gx, y: gy, phase: "in", t: 0, facing: enemy.x >= gx ? 1 : -1 });
+    this.events.push({ type: "summon", x: f.x, y: f.y, name: g.name, say: g.say, color: g.color });
+  }
+
+  _updateGuests(dt) {
+    for (const gu of this.guests) {
+      gu.t += dt;
+      if (gu.owner.hp <= 0) { gu.phase = "dead"; continue; }
+      const t = gu.target;
+      if (gu.phase === "in") {
+        const dx = t.x - gu.x;
+        const dy = t.y - gu.y;
+        const d = Math.hypot(dx, dy) || 1;
+        gu.facing = dx >= 0 ? 1 : -1;
+        const step = 1100 * dt;
+        if (t.hp <= 0 || t === this.eraser || gu.t > 1.5) { gu.phase = "out"; gu.t = 0; continue; } // เป้าหมายตาย/อยู่นอกความจริง: เพื่อนกลับไป
+        if (d <= t.r + 26) {
+          gu.phase = "out";
+          gu.t = 0;
+          const g = gu.g;
+          const hx = t.x - (dx / d) * t.r;
+          const hy = t.y - (dy / d) * t.r;
+          this._damage(t, this._out(gu.owner, g.damage), hx, hy, true);
+          this._knock(t, dx, dy, g.knockback || 0);
+          if (g.silence && t.ccT <= 0) t.silence = Math.max(t.silence, g.silence);
+          if (g.slow && t.ccT <= 0) { t.slowT = Math.max(t.slowT, g.slow); t.slowMult = g.slowMult || 0.5; }
+          this.events.push({ type: "guestStrike", x: hx, y: hy, name: g.name, color: g.color, silence: g.silence || 0, slow: g.slow || 0 });
+        } else {
+          gu.x += (dx / d) * Math.min(step, d);
+          gu.y += (dy / d) * Math.min(step, d);
+        }
+      } else if (gu.t > 0.45) {
+        gu.phase = "dead";
+      }
+    }
+    this.guests = this.guests.filter((gu) => gu.phase !== "dead");
   }
 
   // ---------- อาวุธชนอาวุธ (clash) ----------
@@ -1633,6 +1694,7 @@ class Battle {
       this.projectiles = []; // กระสุนและคลื่นที่ค้างอยู่หายไปพร้อมจบแมตช์
       this.balls = [];
       this.flowers = [];
+      this.guests = [];
       this.waves = [];
       this.rewind = null;
       this.eraser = null;
@@ -1649,6 +1711,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 28;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 29;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

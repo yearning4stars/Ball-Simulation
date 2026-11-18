@@ -326,6 +326,14 @@ function handleEvents(events) {
       floaters.push({ x: e.x, y: e.y - 56, text: "สตัน!", life: 0.8, color: "#ffe27a", size: 26 });
     } else if (e.type === "triple") {
       floaters.push({ x: e.x, y: e.y - 62, text: "Triple Threat!", life: 1.0, color: "#ffd65a", size: 28 });
+    } else if (e.type === "summon") {
+      screenFlash = 0.1;
+      floaters.push({ x: e.x, y: e.y - 62, text: "เรียก " + e.name + "!", life: 1.0, color: e.color || "#ffd65a", size: 28 });
+      sfx.dash();
+    } else if (e.type === "guestStrike") {
+      spawnParticles(e.x, e.y, e.color || "#fff", 22, 320);
+      shake = Math.max(shake, 7);
+      floaters.push({ x: e.x, y: e.y - 40, text: e.silence ? "ใบ้สกิล!" : e.slow ? "ช้าลง!" : "โจมตี!", life: 0.9, color: e.color || "#fff", size: 26 });
     } else if (e.type === "airborne") {
       spawnParticles(e.x, e.y, "#ffffff", 10, 200);
       floaters.push({ x: e.x, y: e.y - 56, text: "ลอย!", life: 0.8, color: "#ffffff", size: 26 });
@@ -853,6 +861,39 @@ function drawDuelLink(f) {
 }
 
 // ---------- ลูกฟุตบอล (กระสุนของ Isagi) ----------
+function drawBasketball(p) {
+  const r = p.r;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.t * 10 * (p.spin >= 0 ? 1 : -1));
+  ctx.fillStyle = "#e8731f";
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#3a1c08";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.moveTo(-r, 0); ctx.lineTo(r, 0);
+  ctx.moveTo(0, -r); ctx.lineTo(0, r);
+  ctx.moveTo(-r * 0.7, -r * 0.7); ctx.quadraticCurveTo(0, 0, -r * 0.7, r * 0.7);
+  ctx.moveTo(r * 0.7, -r * 0.7); ctx.quadraticCurveTo(0, 0, r * 0.7, r * 0.7);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// เพื่อนที่ Solar เรียกมา: วาดเป็นตัวละครโปร่งแสงเรืองสีประจำตัว พุ่งเข้าหาเป้า แล้วจางหาย
+function drawGuest(gu) {
+  const key = Object.keys(CHARACTERS).find((k) => CHARACTERS[k].name === gu.name);
+  if (!key) return;
+  const def = CHARACTERS[key];
+  ctx.save();
+  ctx.globalAlpha = gu.phase === "out" ? Math.max(0, 1 - gu.t / 0.45) * 0.9 : 0.9;
+  ctx.filter = "drop-shadow(0 0 12px " + (gu.g.color || "#fff") + ")";
+  drawFighter({ x: gu.x, y: gu.y, r: def.radius, vy: 0, facing: gu.facing, frame: "idle", hitFlash: 0, def }, key);
+  ctx.restore();
+}
+
 function drawSoccer(p) {
   const r = p.r;
   ctx.save();
@@ -1490,6 +1531,7 @@ function render() {
     for (const f of battle.fighters) if (f.hp > 0 && f.cast && f.cast.sk.type === "metavision") drawMetaThreats(f);
     for (const f of battle.fighters) if (f.hp > 0) drawDuelLink(f);
 
+    for (const gu of battle.guests || []) drawGuest(gu);
     for (const fl of battle.flowers) drawFlower(fl);
     for (const b of battle.balls) drawBall(b);
     for (const p of battle.projectiles) {
@@ -1498,6 +1540,7 @@ function render() {
       if (p.shape === "text") { drawWord(p); gray(false); continue; }
       if (p.shape === "soccer") { drawSoccer(p); gray(false); continue; }
       if (p.shape === "dart") { drawDart(p); gray(false); continue; }
+      if (p.shape === "basketball") { drawBasketball(p); gray(false); continue; }
       ctx.fillStyle = "#fff6c2";
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -1596,7 +1639,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 28;
+const EXPECTED_VERSION = 29;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
