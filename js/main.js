@@ -92,6 +92,129 @@ function currentLayout() {
   return { mode: "1v1", n: 2, teams: [0, 1], labels: ["ผู้เล่น 1", "ผู้เล่น 2"], colors: null };
 }
 
+// ---------- จำตัวที่เลือกไว้ (เปิดหน้าเว็บใหม่แล้วยังอยู่) ----------
+function savedPick(i) {
+  try {
+    const arr = JSON.parse(localStorage.getItem("bb_picks") || "[]");
+    return arr[i] && CHARACTERS[arr[i]] ? arr[i] : null;
+  } catch (e) { return null; }
+}
+function savePicks() {
+  try {
+    const prev = JSON.parse(localStorage.getItem("bb_picks") || "[]");
+    playerSels.forEach((sel, i) => { prev[i] = sel.value; });
+    localStorage.setItem("bb_picks", JSON.stringify(prev));
+  } catch (e) { /* ใช้ไม่ได้ก็ไม่เป็นไร */ }
+}
+
+// ---------- หน้าต่างเลือกตัวละคร ----------
+let pickerEl = null;
+let pickerFor = -1;
+
+function closePicker() {
+  if (pickerEl) pickerEl.remove();
+  pickerEl = null;
+  pickerFor = -1;
+  document.removeEventListener("keydown", pickerKey);
+}
+function pickerKey(e) {
+  if (e.key === "Escape") closePicker();
+}
+function choose(i, key) {
+  const sel = playerSels[i];
+  if (!sel) return;
+  sel.value = key;
+  sel.dispatchEvent(new Event("change"));
+  sfx.click();
+}
+function randomizeAll() {
+  const keys = Object.keys(CHARACTERS);
+  playerSels.forEach((_, i) => choose(i, keys[Math.floor(Math.random() * keys.length)]));
+}
+
+function openPicker(i) {
+  closePicker();
+  pickerFor = i;
+  const keys = Object.keys(CHARACTERS);
+  const ov = document.createElement("div");
+  ov.className = "pk-overlay";
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) closePicker(); });
+  const box = document.createElement("div");
+  box.className = "pk-box";
+  box.setAttribute("role", "dialog");
+
+  const head = document.createElement("div");
+  head.className = "pk-head";
+  const title = document.createElement("div");
+  title.className = "pk-title";
+  title.textContent = "เลือกตัวละคร — " + layout.labels[i];
+  if (layout.colors) title.style.color = layout.colors[i];
+  const rnd = document.createElement("button");
+  rnd.type = "button";
+  rnd.className = "secondary";
+  rnd.textContent = "🎲 สุ่ม";
+  rnd.addEventListener("click", () => { choose(i, keys[Math.floor(Math.random() * keys.length)]); closePicker(); });
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "secondary";
+  x.textContent = "✕";
+  x.title = "ปิด (Esc)";
+  x.addEventListener("click", closePicker);
+  head.appendChild(title);
+  head.appendChild(rnd);
+  head.appendChild(x);
+
+  const grid = document.createElement("div");
+  grid.className = "pk-grid";
+  const cur = playerSels[i].value;
+  for (const k of keys) {
+    const d = CHARACTERS[k];
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "pk-card" + (k === cur ? " cur" : "");
+    card.style.setProperty("--c", d.color);
+    const img = document.createElement("img");
+    img.src = d.frames.idle;
+    img.alt = d.name;
+    const nm = document.createElement("div");
+    nm.className = "pk-name";
+    nm.textContent = d.name;
+    const st = document.createElement("div");
+    st.className = "pk-stat";
+    st.textContent = "HP " + d.hp + " · เร็ว " + d.speed;
+    const sks = document.createElement("div");
+    sks.className = "pk-skills";
+    for (const sk of skillsOf(d)) {
+      const it = document.createElement("div");
+      it.className = "pk-sk";
+      it.textContent = skillIcon(sk) + " " + (sk.name || sk.type) + " · " + sk.cooldown + " วิ";
+      sks.appendChild(it);
+    }
+    card.appendChild(img);
+    card.appendChild(nm);
+    card.appendChild(st);
+    card.appendChild(sks);
+    // ป้ายบอกว่าผู้เล่นคนอื่นเลือกตัวนี้อยู่
+    const others = playerSels.map((sl, j) => (j !== i && sl.value === k ? j + 1 : null)).filter(Boolean);
+    if (others.length && layout.n > 2) {
+      const tag = document.createElement("div");
+      tag.className = "pk-tag";
+      tag.textContent = "ผู้เล่น " + others.join(", ");
+      card.appendChild(tag);
+    }
+    card.addEventListener("click", () => { choose(i, k); closePicker(); });
+    grid.appendChild(card);
+  }
+  box.appendChild(head);
+  box.appendChild(grid);
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  pickerEl = ov;
+  document.addEventListener("keydown", pickerKey);
+  const curCard = grid.querySelector(".cur");
+  if (curCard) curCard.focus();
+}
+
 // สร้างช่องเลือกตัวละครตามจำนวนผู้เล่นของโหมด (เก็บค่าที่เลือกไว้เดิมตามลำดับ)
 function rebuildPlayers() {
   const keys = Object.keys(CHARACTERS);
@@ -101,23 +224,51 @@ function rebuildPlayers() {
   playersBox.innerHTML = "";
   playerSels = [];
   for (let i = 0; i < layout.n; i++) {
-    const label = document.createElement("label");
-    label.textContent = layout.labels[i] + " ";
-    if (layout.colors) label.style.color = layout.colors[i];
+    const label = document.createElement("div");
+    label.className = "pslot";
+    const lt = document.createElement("span");
+    lt.className = "plabel";
+    lt.textContent = layout.labels[i];
+    if (layout.colors) lt.style.color = layout.colors[i];
+    // select ถูกซ่อนไว้เก็บค่าที่เลือก (โค้ดส่วนอื่นอ่านค่าจากตรงนี้) ผู้เล่นเลือกผ่านปุ่ม/หน้าต่างเลือกตัวละครแทน
     const sel = document.createElement("select");
+    sel.hidden = true;
     for (const k of keys) {
       const opt = document.createElement("option");
       opt.value = k;
       opt.textContent = CHARACTERS[k].name;
       sel.appendChild(opt);
     }
-    sel.value = old[i] && CHARACTERS[old[i]] ? old[i] : keys[i % keys.length];
+    sel.value = old[i] && CHARACTERS[old[i]] ? old[i] : savedPick(i) || keys[i % keys.length];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "pick";
+    btn.title = "กดเพื่อเลือกตัวละคร";
+    const thumb = document.createElement("img");
+    thumb.alt = "";
+    const nm = document.createElement("span");
+    btn.appendChild(thumb);
+    btn.appendChild(nm);
+    const refresh = () => {
+      const d = CHARACTERS[sel.value];
+      thumb.src = d.frames.idle;
+      nm.textContent = d.name;
+      btn.style.borderColor = d.color;
+    };
+    refresh();
     sel.addEventListener("change", () => {
-      sfx.unlock();
-      sfx.click();
+      refresh();
+      savePicks();
       if (!battle || battle.winner !== null) setIdleHud();
     });
+    btn.addEventListener("click", () => {
+      sfx.unlock();
+      sfx.click();
+      openPicker(i);
+    });
+    label.appendChild(lt);
     label.appendChild(sel);
+    label.appendChild(btn);
     playersBox.appendChild(label);
     if ((layout.mode === "1v1" && i === 0) || (layout.mode === "2v2" && i === 1)) {
       const vs = document.createElement("span");
@@ -151,7 +302,9 @@ function updateMuteLabel() {
   btnMute.textContent = sfx.muted ? "🔇 เสียง: ปิด" : "🔊 เสียง: เปิด";
 }
 
-btnFight.addEventListener("click", startBattle);
+btnFight.addEventListener("click", () => { closePicker(); startBattle(); });
+const btnRandom = document.getElementById("randomAll");
+if (btnRandom) btnRandom.addEventListener("click", () => { sfx.unlock(); randomizeAll(); });
 btnSpeed.addEventListener("click", () => {
   sfx.unlock();
   sfx.click();
@@ -1852,7 +2005,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 36";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 37";
   }
 }
 
