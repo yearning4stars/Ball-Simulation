@@ -32,12 +32,25 @@ let ghostAcc = 0;
 const charKey = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def);
 
 // ---------- โหลดภาพ ----------
+const fxImages = {}; // fxImages[charKey][fxName] = สไปรต์เอฟเฟกต์ฟัน | null (ไม่มีไฟล์ = วาดรอยฟันด้วยโค้ด)
+let slashFxList = []; // รอยฟันที่กำลังแสดง
 const images = {}; // images[charKey][frameName] = HTMLImageElement | null
 
 function loadAllImages() {
   const jobs = [];
   for (const [key, def] of Object.entries(CHARACTERS)) {
     images[key] = {};
+    fxImages[key] = {};
+    for (const [name, src] of Object.entries(def.effects || {})) {
+      jobs.push(
+        new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => { fxImages[key][name] = img; resolve(); };
+          img.onerror = () => { fxImages[key][name] = null; resolve(); };
+          img.src = src;
+        })
+      );
+    }
     for (const [frame, src] of Object.entries(def.frames)) {
       jobs.push(
         new Promise((resolve) => {
@@ -129,6 +142,7 @@ function startBattle() {
   particles = [];
   shards = [];
   floaters = [];
+  slashFxList = [];
   ghosts = [];
   shake = 0;
 }
@@ -330,11 +344,20 @@ function handleEvents(events) {
       screenFlash = 0.1;
       floaters.push({ x: e.x, y: e.y - 62, text: "เรียก " + e.name + "!", life: 1.0, color: e.color || "#ffd65a", size: 28 });
       sfx.dash();
+    } else if (e.type === "slashFx") {
+      const key = Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === e.owner.def);
+      slashFxList.push({ x: e.x, y: e.y, ang: e.ang, arc: e.arc, reach: e.reach, color: e.color, owner: e.owner, img: key && fxImages[key] ? fxImages[key][e.fx] || null : null, t: 0 });
+      shake = Math.max(shake, e.arc >= 360 ? 10 : 6);
+      sfx.slash();
     } else if (e.type === "ego") {
       screenFlash = 0.3;
       shake = Math.max(shake, 14);
       spawnParticles(e.x, e.y, "#ff2a40", 40, 420);
       floaters.push({ x: e.x, y: e.y - 70, text: "E.G.O. ปรากฏ!", life: 1.6, color: "#ff3b4f", size: 38 });
+    } else if (e.type === "evade") {
+      floaters.push({ x: e.x, y: e.y - 60, text: "หลบ!", life: 0.7, color: "#9fe8ff", size: 26 });
+    } else if (e.type === "block") {
+      floaters.push({ x: e.x, y: e.y - 48, text: "ป้องกัน!", life: 0.7, color: "#c3c9dc", size: 24 });
     } else if (e.type === "bleed") {
       spawnParticles(e.x, e.y, "#b0001c", 8, 160);
       floaters.push({ x: e.x, y: e.y - 56, text: "เลือดไหล!", life: 0.8, color: "#ff5468", size: 24 });
@@ -464,9 +487,25 @@ function drawArena() {
 const flashCv = document.createElement("canvas");
 const flashCtx = flashCv.getContext("2d");
 
+// เลือกภาพตามสถานะ (เฉพาะตัวละครที่ตั้ง autoPose): ท่าสกิล > หลบ > ป้องกัน > โดนตี > เคลื่อนที่/ยืนนิ่ง และใช้ชุด ego* เมื่อ E.G.O. ปรากฏ
+function poseFrame(f, key) {
+  const imgs = images[key];
+  if (!imgs || !f.def.autoPose) return f.frame;
+  let base;
+  if (f.cast && f.frame && f.frame !== "idle") base = f.frame;
+  else if (f.evadeT > 0) base = "evade";
+  else if (f.blockT > 0) base = "block";
+  else if (f.hurtT > 0) base = "damaged";
+  else base = Math.hypot(f.vx || 0, f.vy || 0) > 60 && !(f.stun > 0) ? "move" : "idle";
+  if (f.ego && !base.startsWith("ego") && imgs["ego" + base]) base = "ego" + base;
+  if (imgs[base]) return base;
+  const plain = base.replace(/^ego/, "");
+  return imgs[plain] ? plain : "idle";
+}
+
 function drawFighter(f, key) {
   const size = f.r * 2.6;
-  const img = images[key] && (images[key][f.frame] || images[key].idle);
+  const img = images[key] && (images[key][poseFrame(f, key)] || images[key].idle);
 
   ctx.save();
   ctx.translate(f.x, f.y);
@@ -1208,6 +1247,51 @@ function drawNote(p) {
   ctx.restore();
 }
 
+// ---------- รอยฟัน: ใช้สไปรต์เอฟเฟกต์ของตัวละคร (ถ้ามี) ไม่งั้นวาดรอยโค้งด้วยโค้ด ----------
+function drawSlashFx(dt) {
+  const LIFE = 0.28;
+  for (const s of slashFxList) {
+    s.t += dt;
+    const k = Math.min(1, s.t / LIFE); // 0 -> 1
+    const o = s.owner;
+    const full = s.arc >= 360;
+    ctx.save();
+    ctx.translate(o.x, o.y); // รอยฟันตามตัวคนฟัน
+    ctx.globalAlpha = Math.max(0, 1 - Math.max(0, k - 0.35) / 0.65);
+    if (s.img) {
+      if (full) {
+        ctx.rotate(k * Math.PI * 1.2);
+        const d = s.reach * 2 * (0.8 + 0.3 * k);
+        ctx.drawImage(s.img, -d / 2, -d / 2, d, d);
+      } else {
+        ctx.rotate(s.ang);
+        const w = s.reach * (0.85 + 0.25 * k);
+        const h = w * (s.img.height / s.img.width);
+        ctx.drawImage(s.img, 0, -h / 2, w, h); // รอยฟันหันขวา: ขอบซ้ายของรูป = กลางตัวคนฟัน
+      }
+    } else {
+      // ไม่มีสไปรต์: ฟันเป็นรอยโค้งขาว-แดง กวาดตามมุมฟัน
+      const half = (s.arc * Math.PI) / 360;
+      const a0 = full ? s.ang - Math.PI : s.ang - half;
+      const a1 = full ? s.ang + Math.PI : s.ang + half;
+      const sweep = a0 + (a1 - a0) * Math.min(1, k * 2.2);
+      const rr = s.reach * 0.82;
+      ctx.lineCap = "round";
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.shadowColor = s.color;
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = pass === 0 ? s.color : "#ffffff";
+        ctx.lineWidth = pass === 0 ? 20 : 8;
+        ctx.beginPath();
+        ctx.arc(0, 0, rr, a0 + (sweep - a0) * 0.35, sweep);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  slashFxList = slashFxList.filter((s) => s.t < LIFE);
+}
+
 // ---------- คลื่นเสียง: ส่วนโค้งหลายชั้นแผ่ออกไปทางศัตรู ----------
 function drawWaves(b) {
   for (const w of b.waves) {
@@ -1571,6 +1655,7 @@ function render() {
     const gray = (on) => { ctx.filter = on ? "grayscale(0.85) brightness(0.85)" : "none"; };
     if (battle.phantom) drawPhantom(battle);
     drawWaves(battle);
+    drawSlashFx(1 / 60);
     battle.fighters.forEach((f) => {
       if (f.hp <= 0) return;
       gray(battle.isDazed(f));
@@ -1735,7 +1820,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 32;
+const EXPECTED_VERSION = 35;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;

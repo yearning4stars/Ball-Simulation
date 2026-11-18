@@ -570,10 +570,37 @@ const CHARACTERS = {
     radius: 40,
     egoAt: 0.5, // เลือดเหลือครึ่งเดียว = E.G.O. ปรากฏ
     egoMult: 1.2, // E.G.O.: ดาเมจ x1.2
+    // ภาพตัวละครตามสถานะ/ท่า (autoPose): idle ยืนนิ่ง/ติดสถานะ, move เคลื่อนที่, slash/pierce/blunt ตอนใช้สกิล, block ป้องกัน,
+    // evade หลบ, damaged โดนตี ส่วนชุด ego* ใช้แทนเมื่อ E.G.O. ปรากฏ (ถ้าไม่มีไฟล์ของ ego* จะใช้ชุดปกติแทน) egosplit = ท่า Greater Split
+    autoPose: true,
+    // Block: โดนตีตอนไม่ได้ใช้สกิล = ยกการ์ดลดดาเมจ (reduce) นาน dur วินาที พักการ์ด cd วินาที
+    block: { reduce: 0.5, dur: 0.45, cd: 3 },
+    // Evade: โดนตีตอนไม่ได้ใช้สกิล มีโอกาส chance ที่จะหลบพ้น (ไม่เสียเลือด) สไลด์หนี slide px พักหลบ cd วินาที
+    evade: { chance: 0.25, dur: 0.4, cd: 3, slide: 300 },
     frames: {
       idle: "assets/characters/redmist/idle.png",
+      move: "assets/characters/redmist/move.png",
       slash: "assets/characters/redmist/slash.png",
-      ego: "assets/characters/redmist/ego.png",
+      pierce: "assets/characters/redmist/pierce.png",
+      blunt: "assets/characters/redmist/blunt.png",
+      block: "assets/characters/redmist/block.png",
+      evade: "assets/characters/redmist/evade.png",
+      damaged: "assets/characters/redmist/damaged.png",
+      egoidle: "assets/characters/redmist/egoidle.png",
+      egomove: "assets/characters/redmist/egomove.png",
+      egoslash: "assets/characters/redmist/egoslash.png",
+      egopierce: "assets/characters/redmist/egopierce.png",
+      egoblunt: "assets/characters/redmist/egoblunt.png",
+      egoblock: "assets/characters/redmist/egoblock.png",
+      egoevade: "assets/characters/redmist/egoevade.png",
+      egodamaged: "assets/characters/redmist/egodamaged.png",
+      egosplit: "assets/characters/redmist/egosplit.png",
+    },
+    // เอฟเฟกต์ฟัน (สไปรต์ที่ใช้กับสกิล type "slash" ผ่าน fx ของสกิล) ถ้าไม่มีไฟล์จะวาดรอยฟันด้วยโค้ดแทน
+    // รูปแบบไฟล์: PNG รอยฟันหันไปทาง "ขวา" (ศูนย์กลางแนวตั้งของรูป = กึ่งกลางแนวฟัน) ระบบหมุนตามทิศศัตรูและย่อ/ขยายให้พอดีระยะฟัน (reach)
+    effects: {
+      levelslash: "assets/effects/redmist/levelslash.png",
+      split: "assets/effects/redmist/split.png",
     },
     skills: [
       {
@@ -582,7 +609,7 @@ const CHARACTERS = {
         name: "Spear (พุ่งแทง)",
         cooldown: 3.2,
         initialCooldown: 0.5,
-        frame: "slash",
+        frame: "pierce",
         duration: 0.5,
         speedMult: 3.2,
         homing: 6,
@@ -591,23 +618,23 @@ const CHARACTERS = {
         restAfter: 0.2,
       },
       {
-        // Level Slash: ฟันเป็นแนวกว้าง โดนแล้วเลือดไหล
-        type: "shockwave",
+        // Level Slash: ก้าวเข้าไปฟันเป็นส่วนโค้งกว้างตรงหน้า (ฟันจริง ไม่ใช่คลื่น) โดนแล้วเลือดไหล
+        type: "slash",
         name: "Level Slash (ฟันเลือดไหล)",
         cooldown: 4.8,
         initialCooldown: 1.4,
         frame: "slash",
-        duration: 0.6,
-        fireDelay: 0.25,
-        damage: 8,
-        damageFar: 6,
-        waveSpeed: 560,
-        waveRange: 320,
-        waveArcDeg: 75,
-        knockback: 90,
+        fx: "levelslash", // สไปรต์เอฟเฟกต์ฟัน (ดู effects ด้านบน)
+        duration: 0.55,
+        fireDelay: 0.22,
+        reach: 150, // ระยะฟันจากกลางตัว (px)
+        arcDeg: 120, // ฟันกว้างกี่องศา
+        step: 650, // ก้าวเข้าหาศัตรูก่อนฟัน (px/วิ)
+        maxRange: 260, // ถ้าศัตรูไกลกว่านี้จะเดินเข้าไปก่อนค่อยฟัน
+        damage: 10,
+        knockback: 110,
         bleed: 4, // เลือดไหล 4 วินาที
         bleedDps: 3,
-        sound: "wave",
       },
       {
         // Onrush: พุ่งกระชาก ถ้าโดนศัตรูจะใช้ซ้ำได้เกือบทันที
@@ -615,7 +642,7 @@ const CHARACTERS = {
         name: "Onrush (กระชากต่อเนื่อง)",
         cooldown: 6,
         initialCooldown: 2.4,
-        frame: "slash",
+        frame: "blunt",
         duration: 0.55,
         speedMult: 4.5,
         homing: 8,
@@ -626,30 +653,31 @@ const CHARACTERS = {
         restAfter: 0.15,
       },
       {
-        // Greater Split: Horizontal (E.G.O. เท่านั้น): ฟันรอบตัว ทำลายกระสุนและบั่นทอนสกิลของศัตรู (คูลดาวน์เพิ่ม)
-        type: "shockwave",
+        // Greater Split: Horizontal: ฟันกวาด 180 องศาตรงหน้า ระยะไกลมาก ทำลายกระสุนและบั่นทอนสกิลของศัตรู (คูลดาวน์เพิ่ม)
+        // grantsEgo: ใช้ท่านี้ = E.G.O. ปรากฏทันที (ถ้ายังไม่ปรากฏ) ดาเมจจึงได้ x egoMult เสมอ ใช้ได้ตั้งแต่ต้นแมตช์
+        type: "slash",
         name: "Greater Split: Horizontal (E.G.O.)",
-        requires: "ego",
+        grantsEgo: true,
         cooldown: 9,
         initialCooldown: 0.5,
-        frame: "ego",
+        frame: "egosplit",
+        fx: "split",
         duration: 0.8,
         fireDelay: 0.35,
-        damage: 20,
-        damageFar: 12,
-        waveSpeed: 640,
-        waveRange: 340,
-        waveArcDeg: 360,
+        reach: 420, // ระยะฟันกว้างใหญ่มาก (สนาม 720 px)
+        arcDeg: 180,
+        step: 700,
+        maxRange: 460,
+        damage: 24,
         knockback: 260,
         cdPenalty: 3,
         projectileEffect: "stop",
-        sound: "wave",
       },
     ],
   },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 32;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 35;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

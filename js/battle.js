@@ -149,6 +149,11 @@ class Battle {
       bleedT: 0, // เลือดไหล (วินาทีที่เหลือ) เสียเลือด bleedDps ต่อวินาที (Red Mist)
       bleedDps: 0,
       bleedAcc: 0,
+      blockT: 0, // กำลังยกการ์ด (วินาทีที่เหลือ) / พักการ์ด
+      blockCd: 0,
+      evadeT: 0, // กำลังหลบ / พักหลบ
+      evadeCd: 0,
+      hurtT: 0, // เพิ่งโดนตี (ใช้เลือกภาพ damaged)
       ego: false, // E.G.O. ปรากฏแล้ว (Red Mist: เลือดต่ำกว่า egoAt ครั้งเดียวต่อแมตช์)
       egoUsed: false,
       ccT: 0, // กันสถานะ (สตัน/ใบ้) หลัง Shuffle
@@ -233,6 +238,11 @@ class Battle {
           this._damage(f, tick, f.x, f.y, false, true);
         }
       } else f.bleedAcc = 0;
+      f.blockT = Math.max(0, f.blockT - fdt);
+      f.blockCd = Math.max(0, f.blockCd - fdt);
+      f.evadeT = Math.max(0, f.evadeT - fdt);
+      f.evadeCd = Math.max(0, f.evadeCd - fdt);
+      f.hurtT = Math.max(0, f.hurtT - fdt);
       f.slowT = Math.max(0, f.slowT - fdt);
       f.boostT = Math.max(0, f.boostT - fdt);
       if (f.ccT > 0) { f.ccT -= fdt; f.stun = 0; f.silence = 0; } // Shuffle: กันสถานะ
@@ -339,6 +349,8 @@ class Battle {
           c.fired = true;
           this._fireWave(f, enemy, sk);
         }
+      } else if (sk.type === "slash") {
+        this._slashRun(f, enemy, sk, c, dt);
       } else if (sk.type === "summon") {
         if (!c.fired && c.t >= (sk.fireDelay || 0)) {
           c.fired = true;
@@ -466,6 +478,64 @@ class Battle {
       this.events.push({ type: "metaStart", x: f.x, y: f.y });
     } else if (sk.type === "timeslow") {
       this.events.push({ type: "slow", x: f.x, y: f.y, radius: sk.radius || 300 });
+    }
+  }
+
+  // ---------- ฟัน (slash): ก้าวเข้าหา แล้วฟันครั้งเดียวเป็นส่วนโค้งหน้าตัว ไม่ใช่คลื่นที่แผ่ออกไป ----------
+  // reach = ระยะฟันจากกลางตัว, arcDeg = มุมกว้าง (360 = ฟันรอบตัว), step = ความเร็วก้าวเข้าหา (px/วิ) ก่อนฟัน
+  _slashRun(f, enemy, sk, c, dt) {
+    if (c.fired) return;
+    const dx = enemy.x - f.x;
+    const dy = enemy.y - f.y;
+    const d = Math.hypot(dx, dy) || 1;
+    c.ang = Math.atan2(dy, dx); // เล็งตามศัตรูจนถึงจังหวะฟัน
+    const stand = f.r + enemy.r + (sk.reach || 100) * 0.55;
+    if (sk.step && d > stand) {
+      const mv = Math.min(sk.step * dt, d - stand);
+      f.x = Math.max(f.r, Math.min(this.w - f.r, f.x + (dx / d) * mv));
+      f.y = Math.max(f.r, Math.min(this.h - f.r, f.y + (dy / d) * mv));
+    }
+    if (c.t >= (sk.fireDelay || 0)) {
+      c.fired = true;
+      this._slashStrike(f, sk, c);
+    }
+  }
+
+  _slashStrike(f, sk, c) {
+    if (sk.grantsEgo && !f.ego) { // ท่านี้รวม E.G.O. ไว้ในตัว: ใช้แล้ว E.G.O. ปรากฏ
+      f.ego = true;
+      f.egoUsed = true;
+      this.events.push({ type: "ego", x: f.x, y: f.y });
+    }
+    const reach = sk.reach || 100;
+    const full = (sk.arcDeg || 100) >= 360;
+    const half = ((sk.arcDeg || 100) * Math.PI) / 360;
+    this.events.push({ type: "slashFx", x: f.x, y: f.y, ang: c.ang, arc: sk.arcDeg || 100, reach, fx: sk.fx || "slash", color: f.def.color, owner: f });
+    for (const t of this._foes(f)) {
+      if (t.hp <= 0 || t === this.eraser || this._evaded(c, t)) continue; // ตัดเวลาอยู่ / หลบ (Meta Vision) ไปแล้ว
+      const dx = t.x - f.x;
+      const dy = t.y - f.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+      if (dist - t.r > reach) continue;
+      if (!full) {
+        let da = Math.atan2(dy, dx) - c.ang;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        if (Math.abs(da) > half + Math.asin(Math.min(1, t.r / dist))) continue;
+      }
+      const hx = t.x - (dx / dist) * t.r;
+      const hy = t.y - (dy / dist) * t.r;
+      this._damage(t, this._out(f, sk.damage * this._dmgMult(f, t)), hx, hy, true);
+      this._knock(t, dx, dy, sk.knockback || 0);
+      this._applyExtras(t, sk);
+      this._duelExtend(f, t);
+      f.combatT = 0;
+      this.events.push({ type: "slash", x: hx, y: hy, ang: Math.atan2(dy, dx) });
+    }
+    if (sk.projectileEffect === "stop") { // ฟันรอบตัวทำลายกระสุนศัตรูที่อยู่ในระยะ
+      for (const p of this.projectiles) {
+        if (p.owner.team !== f.team && !p.dead && !p.indestructible && Math.hypot(p.x - f.x, p.y - f.y) <= reach + p.r) p.dead = true;
+      }
     }
   }
 
@@ -884,6 +954,18 @@ class Battle {
       if (tt > look || dist - f.r > w.maxR) continue;
       threats.push({ kind: "w", ref: w, t: tt, dx: Math.cos(w.ang), dy: Math.sin(w.ang), side: da >= 0 ? 1 : -1 });
       c.threats.push({ x: w.x + Math.cos(w.ang) * w.r, y: w.y + Math.sin(w.ang) * w.r, ex: f.x, ey: f.y });
+    }
+    // ศัตรูกำลังง้างฟัน (slash) ที่ฟันถึงตัวเรา: เห็นอนาคตว่าจะโดนฟันภายใน lookahead
+    for (const enemy of this._foes(f)) {
+      const ec = enemy.cast;
+      if (!ec || ec.sk.type !== "slash" || ec.fired || this._evaded(ec, f)) continue;
+      const tt = Math.max(0, (ec.sk.fireDelay || 0) - ec.t);
+      const dx = f.x - enemy.x;
+      const dy = f.y - enemy.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+      if (tt > look || dist - f.r > (ec.sk.reach || 100) + (ec.sk.step || 0) * tt) continue;
+      threats.push({ kind: "s", ref: ec, t: tt, dx: dx / dist, dy: dy / dist, side: 1 });
+      c.threats.push({ x: enemy.x, y: enemy.y, ex: f.x, ey: f.y });
     }
     // ศัตรูกำลังพุ่งชน: ยังไม่ชนและกำลังพุ่งมาทางนี้
     for (const enemy of this._foes(f)) {
@@ -1727,6 +1809,26 @@ class Battle {
   _damage(f, amount, x, y, melee, noEvent) {
     // Gentleman's Duel: ระหว่างดวล ดาเมจระยะใกล้ (แทง/ฟัน/พุ่งชน) ที่โดน Florentino ลดลง 50%
     if (melee && f.duel) amount *= 1 - (f.duel.resist || 0);
+    // ป้องกันตัว (def.evade / def.block): ทำได้ตอนไม่ได้ใช้สกิล และไม่ใช้กับเลือดไหล
+    if (!noEvent && !f.cast && !f.dead) {
+      const ev = f.def.evade;
+      if (ev && f.evadeCd <= 0 && this.rng() < ev.chance) { // หลบพ้น: ไม่เสียเลือด สไลด์หนี
+        f.evadeT = ev.dur;
+        f.evadeCd = ev.cd;
+        const a = this.rng() * Math.PI * 2;
+        this._knock(f, Math.cos(a), Math.sin(a), ev.slide || 0);
+        this.events.push({ type: "evade", x: f.x, y: f.y });
+        return;
+      }
+      const bl = f.def.block;
+      if (bl && f.blockCd <= 0) { // ยกการ์ด: ลดดาเมจ
+        amount *= 1 - bl.reduce;
+        f.blockT = bl.dur;
+        f.blockCd = bl.cd;
+        this.events.push({ type: "block", x, y });
+      }
+    }
+    if (!noEvent) f.hurtT = 0.3;
     f.hp = Math.max(0, f.hp - amount);
     f.hitFlash = 0.15;
     f.combatT = 0;
@@ -1785,6 +1887,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 32;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 35;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
