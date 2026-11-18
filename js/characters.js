@@ -395,8 +395,8 @@ const CHARACTERS = {
   florentino: {
     name: "Florentino",
     color: "#d4382f",
-    hp: 100,
-    speed: 190,
+    hp: 90,
+    speed: 150,
     radius: 36,
     energyMax: 100, // พลังงาน (Triple Threat ใช้ 100, Blossom ใช้ 20)
     energyRegen: 25, // พลังงานฟื้นเองวินาทีละเท่านี้ (เก็บดอกไม้ = เต็มทันที) ตั้งเอง ให้ปา -> แทง ต่อกันได้หลังแทงครั้งที่ 4
@@ -483,7 +483,7 @@ const CHARACTERS = {
         type: "duel",
         name: "Gentleman's Duel",
         cooldown: 25, // เกมจริง 35 / 30 / 25 วินาที (เลเวล 1-3)
-        initialCooldown: 1,
+        initialCooldown: 5,
         frame: "duel",
         duration: 1.6, // ชาร์จ + พุ่งนานสุดเท่านี้
         charge: 0.4,
