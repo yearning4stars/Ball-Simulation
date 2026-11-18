@@ -569,7 +569,7 @@ const CHARACTERS = {
     speed: 205,
     radius: 40,
     egoAt: 0.5, // เลือดเหลือครึ่งเดียว = E.G.O. ปรากฏ
-    egoMult: 1.2, // E.G.O.: ดาเมจ x1.2
+    egoMult: 1.75, // E.G.O.: ดาเมจ x1.2
     // ภาพตัวละครตามสถานะ/ท่า (autoPose): idle ยืนนิ่ง/ติดสถานะ, move เคลื่อนที่, slash/pierce/blunt ตอนใช้สกิล, block ป้องกัน,
     // evade หลบ, damaged โดนตี ส่วนชุด ego* ใช้แทนเมื่อ E.G.O. ปรากฏ (ถ้าไม่มีไฟล์ของ ego* จะใช้ชุดปกติแทน) egosplit = ท่า Greater Split
     autoPose: true,
@@ -659,7 +659,7 @@ const CHARACTERS = {
         name: "Greater Split: Horizontal (E.G.O.)",
         grantsEgo: true,
         cooldown: 9,
-        initialCooldown: 0.5,
+        initialCooldown: 9,
         frame: "egosplit",
         fx: "split",
         duration: 0.8,
