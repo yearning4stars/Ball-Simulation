@@ -11,7 +11,7 @@
 // ============================================================
 const SOUND_CONFIG = {
   sfx: {
-    shoot: "assets/sfx/shoot.mp3
+    shoot: "assets/sfx/shoot.mp3"
     // shoot: "assets/sfx/shoot.mp3",
     // hit: ["assets/sfx/hit1.mp3", "assets/sfx/hit2.mp3"],
     // slash: "assets/sfx/slash.ogg",
