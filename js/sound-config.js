@@ -27,6 +27,7 @@ const SOUND_CONFIG = {
 
     // ธีมประจำตัวละคร: เล่นตอนตัวละครนั้นนำอยู่ (ชื่อตัวละครคือชื่อ key ใน js/characters.js)
     characters: {
+      redmist: "assets/music/redmist.mp3",
       // funx: "assets/music/funx.mp3",
       // florentino: "assets/music/florentino.mp3",
     },
