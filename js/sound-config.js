@@ -11,7 +11,11 @@
 // ============================================================
 const SOUND_CONFIG = {
   sfx: {
-    shoot: "assets/sfx/shoot.mp3"
+    erase: "assets/sfx/erase.mp3",
+    meta: "assets/sfx/meta.mp3",
+    rewind: "assets/sfx/rewind.mp3",
+    slow: "assets/sfx/slow.mp3",
+    accel: "assets/sfx/accel.mp3"
     // shoot: "assets/sfx/shoot.mp3",
     // hit: ["assets/sfx/hit1.mp3", "assets/sfx/hit2.mp3"],
     // slash: "assets/sfx/slash.ogg",
