@@ -92,6 +92,202 @@ function currentLayout() {
   return { mode: "1v1", n: 2, teams: [0, 1], labels: ["ผู้เล่น 1", "ผู้เล่น 2"], colors: null };
 }
 
+// ---------- เพลงธีมตอนได้เปรียบ (วัดจากเลือดรวมของแต่ละฝั่ง) ----------
+let musicState = { team: null, since: 0 };
+function teamRatios(b) {
+  const sum = {};
+  for (const f of b.fighters) {
+    const t = sum[f.team] || (sum[f.team] = { hp: 0, max: 0 });
+    t.hp += Math.max(0, f.hp);
+    t.max += f.maxHp;
+  }
+  return Object.entries(sum)
+    .map(([team, v]) => ({ team: isNaN(+team) ? team : +team, r: v.max ? (v.hp / v.max) * 100 : 0 }))
+    .sort((a, c) => c.r - a.r);
+}
+function updateMusic(b) {
+  if (b.winner !== null) { musicState.team = null; return; }
+  const cfg = (window.SOUND_CONFIG && SOUND_CONFIG.advantage) || {};
+  const lead = cfg.lead !== undefined ? cfg.lead : 25;
+  const release = cfg.release !== undefined ? cfg.release : 10;
+  const hold = (cfg.minHold !== undefined ? cfg.minHold : 4) * 1000;
+  const rs = teamRatios(b);
+  if (rs.length < 2) return;
+  const gap = rs[0].r - rs[1].r;
+  const now = performance.now();
+  const ms = musicState;
+  if (ms.team !== null) {
+    const mine = rs.find((x) => x.team === ms.team);
+    const other = rs.filter((x) => x.team !== ms.team)[0];
+    const still = mine && other && mine.r - other.r >= release;
+    if (!still && now - ms.since >= hold) {
+      ms.team = null;
+      ms.since = now;
+      sfx.musicStop(1.5);
+    } else if (!still) {
+      return; // ยังไม่ครบเวลาขั้นต่ำ
+    }
+  }
+  if (ms.team === null && gap >= lead && now - ms.since >= 600) {
+    ms.team = rs[0].team;
+    ms.since = now;
+  }
+  if (ms.team === null) return;
+  // เลือกธีม: ตัวที่เลือดมากที่สุดของฝั่งที่นำ (ถ้ามีธีมของตัวเอง) ไม่งั้นใช้เพลงทั่วไป
+  const mates = b.fighters.filter((f) => f.team === ms.team && f.hp > 0).sort((x, y) => y.hp / y.maxHp - x.hp / x.maxHp);
+  let pick = null;
+  for (const f of mates) {
+    const k = "char:" + charKey(f.def);
+    if (sfx.hasMusic(k)) { pick = k; break; }
+  }
+  if (!pick && sfx.hasMusic("advantage")) pick = "advantage";
+  if (pick) sfx.musicPlay(pick, 1.2);
+}
+
+// ---------- ตั้งค่าเสียง: โหลดไฟล์จาก js/sound-config.js แล้วทับด้วยไฟล์ที่อัปโหลดในเกม ----------
+function loadSoundConfig() {
+  const cfg = window.SOUND_CONFIG;
+  if (cfg) {
+    for (const [n, v] of Object.entries(cfg.sfx || {})) if (v && (!Array.isArray(v) || v.length)) sfx.setCustom("sfx:" + n, v, "config");
+    const m = cfg.music || {};
+    if (m.advantage) sfx.setCustom("music:advantage", m.advantage, "config");
+    for (const [k, v] of Object.entries(m.characters || {})) if (v) sfx.setCustom("music:char:" + k, v, "config");
+  }
+  CustomStore.all().then((rows) => {
+    for (const r of rows) sfx.setCustom(r.key, r.blob, "upload", r.name);
+  });
+}
+
+let soundEl = null;
+function closeSoundSettings() {
+  if (soundEl) soundEl.remove();
+  soundEl = null;
+  document.removeEventListener("keydown", soundKey);
+}
+function soundKey(e) { if (e.key === "Escape") closeSoundSettings(); }
+
+function openSoundSettings() {
+  closeSoundSettings();
+  const ov = document.createElement("div");
+  ov.className = "pk-overlay";
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) closeSoundSettings(); });
+  const box = document.createElement("div");
+  box.className = "pk-box";
+  const head = document.createElement("div");
+  head.className = "pk-head";
+  head.innerHTML = '<div class="pk-title">🎵 ตั้งค่าเสียงและเพลงธีม</div>';
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "secondary";
+  x.textContent = "✕";
+  x.addEventListener("click", closeSoundSettings);
+  head.appendChild(x);
+  const body = document.createElement("div");
+  body.className = "snd-body";
+
+  const note = document.createElement("p");
+  note.className = "snd-note";
+  note.textContent = "เลือกไฟล์เสียง (mp3 / ogg / wav) จากเครื่องเพื่อใช้แทนเสียงเดิม ไฟล์จะถูกเก็บไว้ในเบราว์เซอร์นี้ " +
+    "ถ้าอยากให้ติดไปกับเกมบน GitHub ให้ใส่ไฟล์ในโฟลเดอร์ assets แล้วตั้งค่าใน js/sound-config.js";
+  body.appendChild(note);
+
+  const slider = (label, which) => {
+    const row = document.createElement("label");
+    row.className = "snd-vol";
+    const input = document.createElement("input");
+    input.type = "range"; input.min = "0"; input.max = "100";
+    input.value = String(Math.round((which === "sfx" ? sfx.sfxVol : sfx.musicVol) * 100));
+    input.addEventListener("input", () => sfx.setVolume(which, input.value / 100));
+    row.append(label + " ", input);
+    return row;
+  };
+  body.appendChild(slider("ความดังเอฟเฟกต์", "sfx"));
+  body.appendChild(slider("ความดังเพลงธีม", "music"));
+
+  const file = document.createElement("input");
+  file.type = "file"; file.accept = "audio/*"; file.hidden = true;
+  document.body.appendChild(file);
+  const refreshers = [];
+
+  const addRow = (parent, key, label) => {
+    const row = document.createElement("div");
+    row.className = "snd-row";
+    const nm = document.createElement("span");
+    nm.className = "snd-name";
+    nm.textContent = label;
+    const st = document.createElement("span");
+    st.className = "snd-st";
+    const pick = document.createElement("button");
+    pick.type = "button"; pick.className = "secondary"; pick.textContent = "เลือกไฟล์";
+    const play = document.createElement("button");
+    play.type = "button"; play.className = "secondary"; play.textContent = "▶"; play.title = "ลองฟัง";
+    const clr = document.createElement("button");
+    clr.type = "button"; clr.className = "secondary"; clr.textContent = "ล้าง"; clr.title = "กลับไปใช้ค่าเริ่มต้น";
+    const refresh = () => {
+      const src = sfx.sources[key];
+      st.textContent = src ? (src === "upload" ? "📁 " : "📄 ") + (sfx.names[key] || "") : "ค่าเริ่มต้น";
+      st.classList.toggle("on", !!src);
+      play.disabled = !src;
+      clr.disabled = !src;
+    };
+    refreshers.push(refresh);
+    pick.addEventListener("click", () => {
+      file.value = "";
+      file.onchange = () => {
+        const f = file.files && file.files[0];
+        if (!f) return;
+        sfx.unlock();
+        sfx.setCustom(key, f, "upload", f.name);
+        CustomStore.put(key, f, f.name);
+        refresh();
+        setTimeout(() => sfx.preview(key), 50);
+      };
+      file.click();
+    });
+    play.addEventListener("click", () => { sfx.preview(key); });
+    clr.addEventListener("click", () => {
+      sfx.removeCustom(key);
+      CustomStore.del(key);
+      // ถ้า sound-config.js มีไฟล์สำหรับชื่อนี้ ให้กลับไปใช้ไฟล์นั้น
+      const cfg = window.SOUND_CONFIG || {};
+      const n = key.split(":").slice(1).join(":");
+      const fromCfg = key.startsWith("sfx:") ? (cfg.sfx || {})[n]
+        : n === "advantage" ? (cfg.music || {}).advantage : ((cfg.music || {}).characters || {})[n.replace("char:", "")];
+      if (fromCfg) sfx.setCustom(key, fromCfg, "config");
+      refresh();
+    });
+    row.append(nm, st, pick, play, clr);
+    parent.appendChild(row);
+    refresh();
+  };
+
+  const h1 = document.createElement("h3");
+  h1.textContent = "เพลงธีมตอนได้เปรียบ (เลือดนำ)";
+  body.appendChild(h1);
+  const adv = (window.SOUND_CONFIG && SOUND_CONFIG.advantage) || {};
+  const hint = document.createElement("p");
+  hint.className = "snd-note";
+  hint.textContent = "เพลงจะเล่นเมื่อฝั่งใดฝั่งหนึ่งมีเลือดรวมนำอีกฝั่งตั้งแต่ " + (adv.lead !== undefined ? adv.lead : 25) +
+    "% ขึ้นไป และเฟดออกเมื่อนำน้อยกว่า " + (adv.release !== undefined ? adv.release : 10) +
+    "% (ปรับได้ใน js/sound-config.js) ถ้าตัวละครที่นำอยู่มีธีมของตัวเอง จะเล่นธีมนั้น ไม่งั้นเล่นเพลงทั่วไป";
+  body.appendChild(hint);
+  addRow(body, "music:advantage", "เพลงทั่วไป (ทุกตัวละคร)");
+  for (const k of Object.keys(CHARACTERS)) addRow(body, "music:char:" + k, "ธีม " + CHARACTERS[k].name);
+
+  const h2 = document.createElement("h3");
+  h2.textContent = "เสียงเอฟเฟกต์";
+  body.appendChild(h2);
+  for (const [n, label] of Object.entries(SFX_LABELS)) addRow(body, "sfx:" + n, label);
+
+  box.append(head, body);
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  soundEl = ov;
+  document.addEventListener("keydown", soundKey);
+  // ไฟล์จาก IndexedDB อาจโหลดเสร็จทีหลัง: รีเฟรชสถานะสั้นๆ
+  setTimeout(() => refreshers.forEach((r) => r()), 400);
+}
+
 // ---------- จำตัวที่เลือกไว้ (เปิดหน้าเว็บใหม่แล้วยังอยู่) ----------
 function savedPick(i) {
   try {
@@ -285,6 +481,8 @@ function rebuildPlayers() {
 
 function startBattle() {
   sfx.unlock();
+  sfx.musicReset();
+  musicState = { team: null, since: 0 };
   sfx.start();
   const defs = playerSels.map((sel) => CHARACTERS[sel.value]);
   battle = new Battle(W, H, defs, Math.random, layout.teams);
@@ -303,6 +501,9 @@ function updateMuteLabel() {
 }
 
 btnFight.addEventListener("click", () => { closePicker(); startBattle(); });
+const btnSound = document.getElementById("soundSettings");
+if (btnSound) btnSound.addEventListener("click", () => { sfx.unlock(); sfx.click(); openSoundSettings(); });
+loadSoundConfig();
 const btnRandom = document.getElementById("randomAll");
 if (btnRandom) btnRandom.addEventListener("click", () => { sfx.unlock(); randomizeAll(); });
 btnSpeed.addEventListener("click", () => {
@@ -556,6 +757,7 @@ function handleEvents(events) {
       sfx.breakdown();
     } else if (e.type === "ko") {
       shake = 16;
+      sfx.musicStop(1.0);
       sfx.ko();
       if (battle.winner === "draw") sfx.draw();
       else sfx.win();
@@ -1939,7 +2141,7 @@ function loop(ts) {
   }
   updateEffects(dt);
   render();
-  if (battle) updateHud(battle);
+  if (battle) { updateHud(battle); updateMusic(battle); }
   requestAnimationFrame(loop);
 }
 
@@ -2005,7 +2207,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 37";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 38";
   }
 }
 

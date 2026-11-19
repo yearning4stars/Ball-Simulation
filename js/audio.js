@@ -1,6 +1,7 @@
 // ============================================================
 //  เสียงทั้งหมดสร้างจากโค้ดด้วย Web Audio (ไม่ต้องมีไฟล์เสียง)
-//  อยากใช้ไฟล์เสียงของตัวเองแทน: แก้เมธอดด้านล่างให้ใช้ new Audio("assets/sfx/xxx.mp3")
+//  อยากใช้ไฟล์เสียง/เพลงของตัวเอง: ใส่ใน js/sound-config.js หรือกดปุ่ม "🎵 ตั้งค่าเสียง" ในเกม (ไม่ต้องแก้ไฟล์นี้)
+//  เสียงที่ไม่ได้ตั้งไว้จะใช้เสียงสังเคราะห์ในไฟล์นี้เหมือนเดิม
 //
 //  เบราว์เซอร์จะอนุญาตให้มีเสียงหลังผู้ใช้กดอะไรสักอย่างเท่านั้น
 //  เกมนี้เริ่มเสียงตอนกดปุ่มครั้งแรก
@@ -12,6 +13,21 @@ class SoundFX {
     this.noiseBuf = null;
     this.lastPlay = {}; // กันเสียงเดียวกันรัวเกินไป
     this.muted = false;
+    this.sfxBus = null;
+    this.musicBus = null;
+    this.pending = {};   // key -> { src: URL | Blob, name } ไฟล์ที่รอแปลงเสียง
+    this.buffers = {};   // key -> [AudioBuffer]
+    this.sources = {};   // key -> "config" | "upload" (ไว้โชว์ในหน้าตั้งค่า)
+    this.names = {};     // key -> ชื่อไฟล์
+    this.music = null;   // เพลงที่เล่นอยู่ { key, src, g, ... }
+    this.resume = {};    // key -> ตำแหน่งที่เล่นค้างไว้ (วินาที)
+    this.sfxVol = 1;
+    this.musicVol = 0.7;
+    try {
+      const v = JSON.parse(localStorage.getItem("bb_vol") || "{}");
+      if (typeof v.sfx === "number") this.sfxVol = v.sfx;
+      if (typeof v.music === "number") this.musicVol = v.music;
+    } catch (e) { /* ข้าม */ }
     try {
       this.muted = localStorage.getItem("bb_muted") === "1";
     } catch (e) { /* ไม่มี localStorage ก็ข้าม */ }
@@ -29,12 +45,19 @@ class SoundFX {
     this.master = this.ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 0.5;
     this.master.connect(this.ctx.destination);
+    this.sfxBus = this.ctx.createGain();
+    this.sfxBus.gain.value = this.sfxVol;
+    this.sfxBus.connect(this.master);
+    this.musicBus = this.ctx.createGain();
+    this.musicBus.gain.value = this.musicVol;
+    this.musicBus.connect(this.master);
 
     // บัฟเฟอร์เสียงซ่า ใช้ซ้ำทุกเสียงที่ต้องการ noise
     const len = this.ctx.sampleRate;
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const data = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    this.decodePending();
   }
 
   setMuted(m) {
@@ -59,7 +82,7 @@ class SoundFX {
     if (endFreq !== freq) osc.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), t + dur);
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(g).connect(this.master);
+    osc.connect(g).connect(this.sfxBus);
     osc.start(t);
     osc.stop(t + dur + 0.02);
   }
@@ -76,7 +99,7 @@ class SoundFX {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(filter).connect(g).connect(this.master);
+    src.connect(filter).connect(g).connect(this.sfxBus);
     src.start(t);
     src.stop(t + dur + 0.02);
   }
@@ -212,9 +235,184 @@ class SoundFX {
     this._tone(330, 247, 0.4, "triangle", 0.14, 0.55);
     this._tone(247, 196, 0.5, "triangle", 0.14, 0.95);
   }
+  // ---------- เสียง/เพลงที่ผู้เล่นใส่เอง ----------
+  // key: "sfx:<ชื่อเสียง>" | "music:advantage" | "music:char:<ชื่อตัวละคร>"
+  // src: URL (string) หรือ Blob  แปลงเป็นเสียงตอนปลดล็อกเสียงแล้ว (ถ้ายังไม่ปลดล็อกจะรอไว้)
+  setCustom(key, src, kind, name) {
+    this.pending[key] = { src };
+    delete this.buffers[key];
+    this.sources[key] = kind || "config";
+    this.names[key] = name || (typeof src === "string" ? src.split("/").pop() : "ไฟล์ของคุณ");
+    if (this.ctx) this.decodePending();
+  }
+
+  removeCustom(key) {
+    delete this.pending[key];
+    delete this.buffers[key];
+    delete this.sources[key];
+    delete this.names[key];
+    if (this.music && this.music.key === key.replace(/^music:/, "")) this.musicStop(0.3);
+  }
+
+  hasCustom(key) {
+    return !!(this.buffers[key] && this.buffers[key].length) || !!this.pending[key];
+  }
+
+  async decodePending() {
+    if (!this.ctx) return;
+    const keys = Object.keys(this.pending);
+    for (const key of keys) {
+      const items = [].concat(this.pending[key].src);
+      delete this.pending[key];
+      const out = [];
+      for (const it of items) {
+        try {
+          const ab = typeof it === "string" ? await (await fetch(it)).arrayBuffer() : await it.arrayBuffer();
+          out.push(await this.ctx.decodeAudioData(ab));
+        } catch (e) { /* ไฟล์หาย/เปิดไม่ได้: ใช้เสียงสังเคราะห์แทน */ }
+      }
+      if (out.length) this.buffers[key] = out;
+      else { delete this.sources[key]; delete this.names[key]; }
+    }
+  }
+
+  _playCustom(name, vol) {
+    const list = this.buffers["sfx:" + name];
+    if (!this.ctx || !list || !list.length) return false;
+    if (!this._throttle("c:" + name, 35)) return true;
+    const src = this.ctx.createBufferSource();
+    src.buffer = list[Math.floor(Math.random() * list.length)];
+    src.playbackRate.value = 0.96 + Math.random() * 0.08; // ไม่ซ้ำกันเป๊ะ
+    const g = this.ctx.createGain();
+    g.gain.value = vol === undefined ? 1 : vol;
+    src.connect(g).connect(this.sfxBus);
+    src.start();
+    return true;
+  }
+
+  preview(key) {
+    this.unlock();
+    if (!this.ctx) return;
+    const go = () => {
+      const list = this.buffers[key];
+      if (!list || !list.length) return;
+      if (key.startsWith("sfx:")) this._playCustom(key.slice(4));
+      else {
+        const src = this.ctx.createBufferSource();
+        src.buffer = list[0];
+        const g = this.ctx.createGain();
+        const t = this.ctx.currentTime;
+        g.gain.setValueAtTime(1, t);
+        g.gain.linearRampToValueAtTime(0, t + 6);
+        src.connect(g).connect(this.musicBus);
+        src.start();
+        src.stop(t + 6);
+      }
+    };
+    this.decodePending().then(go);
+  }
+
+  setVolume(which, v) {
+    v = Math.max(0, Math.min(1, v));
+    if (which === "sfx") { this.sfxVol = v; if (this.sfxBus) this.sfxBus.gain.value = v; }
+    else { this.musicVol = v; if (this.musicBus) this.musicBus.gain.value = v; }
+    try { localStorage.setItem("bb_vol", JSON.stringify({ sfx: this.sfxVol, music: this.musicVol })); } catch (e) { /* ข้าม */ }
+  }
+
+  // ---------- เพลงธีม (เล่นวนซ้ำ ค่อยๆ เฟดเข้า/ออก) ----------
+  hasMusic(name) { return !!(this.buffers["music:" + name] && this.buffers["music:" + name].length); }
+
+  musicPlay(name, fade = 1.2) {
+    if (!this.ctx) return;
+    if (this.music && this.music.key === name) return;
+    const bufs = this.buffers["music:" + name];
+    if (!bufs || !bufs.length) return;
+    this.musicStop(fade);
+    const t = this.ctx.currentTime;
+    const buf = bufs[0];
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(1, t + fade);
+    src.connect(g).connect(this.musicBus);
+    const offset = (this.resume[name] || 0) % buf.duration;
+    src.start(0, offset);
+    this.music = { key: name, src, g, buf, t0: t, offset };
+  }
+
+  musicStop(fade = 1) {
+    const m = this.music;
+    if (!m || !this.ctx) return;
+    this.music = null;
+    const t = this.ctx.currentTime;
+    this.resume[m.key] = (m.offset + (t - m.t0)) % m.buf.duration; // กลับมาเล่นต่อจากเดิม
+    m.g.gain.cancelScheduledValues(t);
+    m.g.gain.setValueAtTime(m.g.gain.value, t);
+    m.g.gain.linearRampToValueAtTime(0, t + fade);
+    try { m.src.stop(t + fade + 0.05); } catch (e) { /* หยุดไปแล้ว */ }
+  }
+
+  musicReset() { this.musicStop(0.4); this.resume = {}; }
 }
+
+// ชื่อเสียงที่ปรับแต่งได้ (ชื่อเมธอด -> คำอธิบายภาษาไทย) ใช้ในหน้า "ตั้งค่าเสียง" และ js/sound-config.js
+const SFX_LABELS = {
+  click: "กดปุ่ม", start: "เริ่มสู้", shoot: "ยิงปืน", kick: "เตะบอล", meta: "Meta Vision", dodge: "หลบ",
+  hit: "โดนตี", dash: "พุ่ง", note: "โน้ตดนตรี", wave: "คลื่นเสียง", deflect: "ปัดกระสุน/ผลักกระสุน",
+  slash: "ฟันดาบ", erase: "ตัดเวลา", rewind: "ย้อนเวลา", accel: "เร่งเวลา", slow: "ชะลอเวลา",
+  word: "คำพูดบั่นทอนใจ", breakdown: "สติแตก", ko: "น็อก", win: "ชนะ", draw: "เสมอ",
+};
+// ครอบทุกเสียง: ถ้ามีไฟล์ของผู้เล่นให้เล่นไฟล์นั้น ไม่มีก็ใช้เสียงสังเคราะห์เดิม
+for (const n of Object.keys(SFX_LABELS)) {
+  const orig = SoundFX.prototype[n];
+  SoundFX.prototype[n] = function (...a) {
+    if (this._playCustom(n)) return;
+    return orig.apply(this, a);
+  };
+}
+
+// เก็บไฟล์ที่ผู้เล่นอัปโหลดในเบราว์เซอร์ (IndexedDB) เปิดหน้าใหม่แล้วยังอยู่
+const CustomStore = {
+  _db() {
+    return new Promise((res, rej) => {
+      if (typeof indexedDB === "undefined") return rej(new Error("no idb"));
+      const r = indexedDB.open("bb_sounds", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("files");
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  },
+  async all() {
+    try {
+      const db = await this._db();
+      return await new Promise((res) => {
+        const out = [];
+        const rq = db.transaction("files").objectStore("files").openCursor();
+        rq.onsuccess = () => {
+          const c = rq.result;
+          if (c) { out.push({ key: c.key, blob: c.value.blob, name: c.value.name }); c.continue(); } else res(out);
+        };
+        rq.onerror = () => res(out);
+      });
+    } catch (e) { return []; }
+  },
+  async put(key, blob, name) {
+    try {
+      const db = await this._db();
+      db.transaction("files", "readwrite").objectStore("files").put({ blob, name }, key);
+    } catch (e) { /* ใช้ไม่ได้ (เช่นโหมดไม่ระบุตัวตน) ก็ข้าม */ }
+  },
+  async del(key) {
+    try {
+      const db = await this._db();
+      db.transaction("files", "readwrite").objectStore("files").delete(key);
+    } catch (e) { /* ข้าม */ }
+  },
+};
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
 if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 35;
 
-if (typeof module !== "undefined") module.exports = { SoundFX };
+if (typeof module !== "undefined") module.exports = { SoundFX, SFX_LABELS, CustomStore };
