@@ -14,8 +14,6 @@ const playersBox = document.getElementById("players");
 let playerSels = []; // select เลือกตัวละครของผู้เล่นแต่ละคน (จำนวนเปลี่ยนตามโหมด)
 let layout = null; // รายละเอียดโหมดที่เลือกอยู่ {mode, n, teams, labels, colors}
 const btnFight = document.getElementById("fight");
-const btnSpeed = document.getElementById("speed");
-const btnMute = document.getElementById("mute");
 
 const sfx = new SoundFX();
 
@@ -24,6 +22,8 @@ let particles = [];
 let shards = []; // เศษภาพของตัวที่แพ้
 let floaters = [];
 let speedMult = 1;
+try { const v = parseFloat(localStorage.getItem("bb_speed")); if ([0.5, 1, 2].includes(v)) speedMult = v; } catch (e) { /* ข้าม */ }
+let paused = false; // หยุดเกมชั่วคราวตอนเปิดหน้าต่างตั้งค่าระหว่างสู้
 let lastTs = 0;
 let shake = 0;
 let screenFlash = 0; // วาบขาวทั้งจอ (ตอนเริ่มตัดเวลา)
@@ -558,28 +558,136 @@ function startBattle() {
   shake = 0;
 }
 
-function updateMuteLabel() {
-  btnMute.textContent = sfx.muted ? "🔇 เสียง: ปิด" : "🔊 เสียง: เปิด";
+// ---------- หน้าจอ: เมนู / เตรียมสู้ / ในเกม ----------
+let view = "menu";
+function setView(v) {
+  view = v;
+  document.body.dataset.view = v;
+  closePicker();
+  paused = false;
+  requestAnimationFrame(() => { fitCanvas(); fitCanvas(); });
+  fitCanvas();
 }
 
-btnFight.addEventListener("click", () => { closePicker(); startBattle(); });
-const btnSound = document.getElementById("soundSettings");
-if (btnSound) btnSound.addEventListener("click", () => { sfx.unlock(); sfx.click(); openSoundSettings(); });
+function goBattle() {
+  closePicker();
+  setView("game");
+  startBattle();
+}
+function goSetup() {
+  battle = null;
+  setIdleHud();
+  setView("setup");
+}
+
+// ---------- หน้าต่างตั้งค่า (ความเร็ว / เสียง / เพลงธีม) ----------
+let settingsEl = null;
+function closeSettings() {
+  if (settingsEl) settingsEl.remove();
+  settingsEl = null;
+  document.removeEventListener("keydown", settingsKey);
+  paused = false;
+}
+function settingsKey(e) { if (e.key === "Escape" && !soundEl) closeSettings(); }
+
+function openSettings() {
+  closeSettings();
+  const ov = document.createElement("div");
+  ov.className = "pk-overlay";
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) closeSettings(); });
+  const box = document.createElement("div");
+  box.className = "pk-box set-box";
+  box.setAttribute("role", "dialog");
+  const head = document.createElement("div");
+  head.className = "pk-head";
+  head.innerHTML = '<div class="pk-title">⚙️ ตั้งค่า</div>';
+  const x = document.createElement("button");
+  x.type = "button"; x.className = "secondary"; x.textContent = "✕"; x.title = "ปิด (Esc)";
+  x.addEventListener("click", closeSettings);
+  head.appendChild(x);
+  const body = document.createElement("div");
+  body.className = "set-body";
+
+  // ความเร็วเกม
+  const spRow = document.createElement("div");
+  spRow.className = "set-row";
+  spRow.innerHTML = '<span class="set-label">ความเร็วเกม</span>';
+  const seg = document.createElement("div");
+  seg.className = "seg";
+  const spBtns = [[0.5, "ช้า x0.5"], [1, "ปกติ x1"], [2, "เร็ว x2"]].map(([v, label]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "secondary"; b.textContent = label;
+    b.addEventListener("click", () => {
+      sfx.unlock(); sfx.click();
+      speedMult = v;
+      try { localStorage.setItem("bb_speed", String(v)); } catch (e) { /* ข้าม */ }
+      refreshSp();
+    });
+    seg.appendChild(b);
+    return [v, b];
+  });
+  const refreshSp = () => spBtns.forEach(([v, b]) => b.classList.toggle("on", v === speedMult));
+  refreshSp();
+  spRow.appendChild(seg);
+  body.appendChild(spRow);
+
+  // เสียงเปิด/ปิด
+  const mRow = document.createElement("div");
+  mRow.className = "set-row";
+  mRow.innerHTML = '<span class="set-label">เสียง</span>';
+  const mBtn = document.createElement("button");
+  mBtn.type = "button"; mBtn.className = "secondary";
+  const refreshM = () => { mBtn.textContent = sfx.muted ? "🔇 เสียง: ปิด (กดเพื่อเปิด)" : "🔊 เสียง: เปิด (กดเพื่อปิด)"; };
+  refreshM();
+  mBtn.addEventListener("click", () => { sfx.unlock(); sfx.toggleMute(); sfx.click(); refreshM(); });
+  mRow.appendChild(mBtn);
+  body.appendChild(mRow);
+
+  // ความดัง
+  const vol = (label, which) => {
+    const row = document.createElement("label");
+    row.className = "set-row";
+    const t = document.createElement("span");
+    t.className = "set-label"; t.textContent = label;
+    const input = document.createElement("input");
+    input.type = "range"; input.min = "0"; input.max = "100";
+    input.value = String(Math.round((which === "sfx" ? sfx.sfxVol : sfx.musicVol) * 100));
+    input.addEventListener("input", () => sfx.setVolume(which, input.value / 100));
+    row.append(t, input);
+    return row;
+  };
+  body.appendChild(vol("ความดังเอฟเฟกต์", "sfx"));
+  body.appendChild(vol("ความดังเพลงธีม", "music"));
+
+  const custom = document.createElement("button");
+  custom.type = "button"; custom.className = "secondary";
+  custom.textContent = "🎵 ตั้งค่าเสียงและเพลงธีมเอง…";
+  custom.addEventListener("click", () => { sfx.unlock(); sfx.click(); openSoundSettings(); });
+  body.appendChild(custom);
+
+  box.appendChild(head);
+  box.appendChild(body);
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  settingsEl = ov;
+  document.addEventListener("keydown", settingsKey);
+  if (view === "game") paused = true; // หยุดเกมไว้ระหว่างเปิดตั้งค่า
+}
+// ปิดหน้าต่างตั้งค่าเสียงแล้วถ้าตั้งค่าหลักยังเปิดอยู่ให้เกมยังหยุดต่อ
+
+const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", () => { sfx.unlock(); sfx.click(); fn(); }); };
+on("menuPlay", () => setView("setup"));
+on("menuQuick", () => { randomizeAll(); goBattle(); });
+on("menuSettings", openSettings);
+on("backMenu", () => setView("menu"));
+on("setupSettings", openSettings);
+on("fight", goBattle);
+on("randomAll", randomizeAll);
+on("gbAgain", startBattle);
+on("gbSetup", goSetup);
+on("gbMenu", () => { battle = null; setIdleHud(); setView("menu"); });
+on("gbSettings", openSettings);
 loadSoundConfig();
-const btnRandom = document.getElementById("randomAll");
-if (btnRandom) btnRandom.addEventListener("click", () => { sfx.unlock(); randomizeAll(); });
-btnSpeed.addEventListener("click", () => {
-  sfx.unlock();
-  sfx.click();
-  speedMult = speedMult === 1 ? 2 : speedMult === 2 ? 0.5 : 1;
-  btnSpeed.textContent = "ความเร็ว x" + speedMult;
-});
-btnMute.addEventListener("click", () => {
-  sfx.unlock();
-  sfx.toggleMute();
-  sfx.click();
-  updateMuteLabel();
-});
 selMode.addEventListener("change", () => {
   sfx.unlock();
   sfx.click();
@@ -2191,7 +2299,7 @@ function render() {
 }
 
 function loop(ts) {
-  const dt = Math.min(0.033, (ts - lastTs) / 1000 || 0) * speedMult;
+  const dt = Math.min(0.033, (ts - lastTs) / 1000 || 0) * (paused ? 0 : speedMult);
   lastTs = ts;
   if (battle) {
     // แบ่งก้าวย่อย กันกระสุนเร็วทะลุตัว
@@ -2269,12 +2377,12 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 39";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 40";
   }
 }
 
 rebuildPlayers();
-updateMuteLabel();
+setView("menu");
 checkVersions();
 fitCanvas();
 if (typeof window !== "undefined" && window.addEventListener) {

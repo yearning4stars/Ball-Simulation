@@ -304,3 +304,32 @@ button.pick:hover { background: #20263d; }
 .snd-row button { padding: 2px 8px; }
 .snd-row button:disabled { opacity: 0.35; cursor: default; }
 @media (max-width: 520px) { .snd-name { width: 6.5em; } }
+
+
+/* ---------- เมนูหลัก / หน้าจอต่างๆ ---------- */
+body[data-view="menu"] #setup, body[data-view="menu"] #gamebar, body[data-view="menu"] #stage, body[data-view="menu"] #gameTitle { display: none; }
+body[data-view="setup"] #menu, body[data-view="setup"] #gamebar { display: none; }
+body[data-view="game"] #menu, body[data-view="game"] #setup { display: none; }
+body[data-view="setup"] #gameTitle, body[data-view="game"] #gameTitle { display: none; }
+
+.menu {
+  display: flex;
+  min-height: calc(100vh - 60px);
+  flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+}
+.menu-logo { font-size: 3.2rem; line-height: 1; }
+.menu-title { font-size: 2.4rem; font-weight: 700; letter-spacing: 2px; color: #ff7a59; }
+.menu-sub { font-size: 0.85rem; color: #8f98b8; margin-bottom: 18px; }
+.menu-btns { display: flex; flex-direction: column; gap: 10px; width: min(300px, 90%); }
+.menu-btn { font-size: 1.05rem; padding: 12px 16px; border-radius: 12px; }
+
+/* หน้าต่างตั้งค่า */
+.set-box { width: min(460px, 100%); }
+.set-body { overflow-y: auto; text-align: left; display: flex; flex-direction: column; gap: 14px; padding: 2px; }
+.set-row { display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; }
+.set-row > .set-label { font-weight: 600; color: #c3c9e0; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button { flex: 1; min-width: 70px; padding: 7px 8px; font-size: 0.82rem; }
+.seg button.on { background: #ff7a59; border-color: #ff7a59; color: #1a0c07; font-weight: 700; }
+.set-row input[type=range] { width: 100%; }
+.set-body > button { padding: 8px 10px; font-size: 0.85rem; }
