@@ -312,8 +312,8 @@ let pickerTab = "all";
 // ตัวที่ไม่ตรงหมวดไหนจะไปอยู่หมวด "อื่นๆ" ให้อัตโนมัติ
 const CHAR_CATEGORIES = [
   { id: "general", label: "General", match: ["gunner", "dasher"] },
-  { id: "aoso", label: "Wheel of Aoso", match: ["funx", "johan"] },
-  { id: "solar", label: "Solar Project Moon", match: ["red mist", "redmist", "the red mist"] },
+  { id: "aoso", label: "Wheel of Aoso", match: ["funx", "johan", "solar"] },
+  { id: "projectmoon", label: "Project Moon", match: ["red mist", "redmist", "the red mist"] },
   { id: "alien", label: "Alien Stage", match: ["luka"] },
   { id: "bluelock", label: "Blue Lock", match: ["isagi"] },
   { id: "rov", label: "RoV", match: ["florentino"] },
