@@ -677,9 +677,7 @@ const CHARACTERS = {
   },
 
   // ---------- Warden (Minecraft) แฟนเกม ----------
-  // ภาพ (ใส่เองใน assets/characters/warden/ หันหน้าไปทางขวา PNG พื้นหลังโปร่งใส):
-  //   idle.png  ท่ายืนปกติ | boom.png ท่าอกเปิดชาร์จ Sonic Boom | smash.png ท่าตะปบ | roar.png ท่าคำราม (Darkness)
-  //   ถ้ายังไม่มีไฟล์ เกมจะวาดเป็นบอลสีแทน เลยเทสสกิลได้ก่อนมีภาพ
+  // ภาพ: assets/characters/warden/  idle.png ยืนปกติ | boom.png ท่าเตรียม Sonic Boom | smash.png ท่าตะปบ | roar.png ท่าคำราม
   // ตัวเลขเป็นค่าเสนอเริ่มต้น (ตึก ช้า ดาเมจหนัก) ปรับเองได้ตามใจ
   warden: {
     name: "Warden",
@@ -695,26 +693,29 @@ const CHARACTERS = {
     },
     skills: [
       {
-        // สกิล 1: Sonic Boom ชาร์จแล้วปล่อยคลื่นเสียงเส้นแคบ เร็วและแรงมาก (ในเกมจริงทะลุเกราะ ที่นี่ = ดาเมจเกือบเท่ากันตลอดระยะ)
+        // สกิล 1: Sonic Boom เตรียมชาร์จที่อก (charge: true = มีประกายชาร์จ) แล้วยิงลำแสงวงคลื่นเส้นตรงแคบ เร็ว แรง
+        // style: "sonicboom" = วาดเป็นลำแสง + วงแหวนซ้อน + ระเบิดตอนโดน, projectileEffect "stop" = ทะลวงกระสุนศัตรูที่ขวาง
         type: "shockwave",
+        style: "sonicboom",
+        charge: true,
         name: "Sonic Boom",
         icon: "🔊",
         cooldown: 6.5,
         initialCooldown: 2.5,
         frame: "boom",
         duration: 1.1,
-        fireDelay: 0.8, // ชาร์จก่อนปล่อย
-        damage: 26,
-        damageFar: 20,
-        waveSpeed: 900,
-        waveRange: 900,
-        waveArcDeg: 22,
-        knockback: 420,
-        projectileEffect: "stop", // ทะลวงกระสุนศัตรูที่ขวางทาง
+        fireDelay: 0.8, // เวลาชาร์จก่อนยิง
+        damage: 30,
+        damageFar: 26,
+        waveSpeed: 1100,
+        waveRange: 1000,
+        waveArcDeg: 7, // แคบมาก = ลำแสงเส้นตรง
+        knockback: 480,
+        projectileEffect: "stop",
         sound: "wave",
       },
       {
-        // สกิล 2: ตะปบ/ทุบ พุ่งเข้าหาศัตรูระยะใกล้ ผลักกระเด็นแรง
+        // สกิล 2: ตะปบทุบ พุ่งเข้าหาศัตรูระยะใกล้ ผลักกระเด็นแรง
         type: "dash",
         name: "ตะปบทุบ",
         icon: "👊",
@@ -727,23 +728,27 @@ const CHARACTERS = {
         knockback: 540,
       },
       {
-        // สกิล 3: Darkness คำรามส่งก้อนความมืด ดาเมจเลือดน้อย แต่บั่นทอนสติ -> ศัตรูเล็งเพี้ยน คูลดาวน์ช้าลง (ตรงกับตาบอดของ Darkness)
-        type: "projectile",
-        name: "Darkness",
-        icon: "🌑",
+        // สกิล 3: Roar คำรามเป็นวงกว้าง AoE รอบตัว (waveArcDeg 360 = ทุกทิศ) ใกล้ตัวโดนหนักและมึน
+        // ผลักกระสุนศัตรูออก + บั่นทอนสติ (waveMind) + ผลักศัตรูทุกคนในวงกระเด็น
+        type: "shockwave",
+        style: "roar",
+        name: "Roar",
+        icon: "😱",
         cooldown: 8,
         initialCooldown: 4,
         frame: "roar",
-        duration: 0.8,
-        fireDelay: 0.3,
-        damage: 3,
-        mindDamage: 55,
-        projectileSpeed: 280,
-        projectileRadius: 32,
-        wobble: 12,
-        wobbleFreq: 5,
-        knockback: 60,
-        indestructible: true,
+        duration: 0.9,
+        fireDelay: 0.35,
+        damage: 14,
+        damageFar: 6,
+        waveSpeed: 560,
+        waveRange: 460, // รัศมีของวง AoE (px)
+        waveArcDeg: 360,
+        stunNear: 0.8,
+        stunRange: 0.4,
+        waveMind: 35,
+        knockback: 420,
+        projectileEffect: "push",
         sound: "wave",
       },
     ],

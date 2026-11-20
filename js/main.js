@@ -26,6 +26,7 @@ try { const v = parseFloat(localStorage.getItem("bb_speed")); if ([0.5, 1, 2].in
 let paused = false; // หยุดเกมชั่วคราวตอนเปิดหน้าต่างตั้งค่าระหว่างสู้
 let lastTs = 0;
 let shake = 0;
+let sonicBlasts = []; // วงระเบิดตอน Sonic Boom โดนเป้า
 let screenFlash = 0; // วาบขาวทั้งจอ (ตอนเริ่มตัดเวลา)
 let ghosts = []; // ภาพติดตาของคนที่กำลังเร่งเวลา (Johan)
 let ghostAcc = 0;
@@ -556,6 +557,7 @@ function startBattle() {
   floaters = [];
   slashFxList = [];
   ghosts = [];
+  sonicBlasts = [];
   shake = 0;
 }
 
@@ -764,9 +766,18 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, "#ffffff", 8, 220);
       sfx.deflect();
     } else if (e.type === "wave") {
-      spawnParticles(e.x, e.y, "#ffffff", 14, 260);
-      shake = Math.max(shake, 5);
+      spawnParticles(e.x, e.y, e.style ? "#2de0d0" : "#ffffff", 14, 260);
+      shake = Math.max(shake, e.style === "roar" ? 9 : 5);
+      if (e.style === "roar") screenFlash = Math.max(screenFlash, 0.12);
       sfx.wave();
+    } else if (e.type === "sonicHit") {
+      // Sonic Boom ถึงเป้า: ระเบิดวงคลื่นสีฟ้าเขียว + เศษประกาย + จอสั่น
+      spawnParticles(e.x, e.y, "#2de0d0", 30, 420);
+      spawnParticles(e.x, e.y, "#ffffff", 12, 300);
+      sonicBlasts.push({ x: e.x, y: e.y, ang: e.ang, t: 0 });
+      shake = Math.max(shake, 15);
+      screenFlash = Math.max(screenFlash, 0.3);
+      sfx.hit();
     } else if (e.type === "dash") {
       spawnParticles(e.x, e.y, "#ffffff", 12, 220);
       sfx.dash();
@@ -1818,9 +1829,111 @@ function drawSlashFx(dt) {
   slashFxList = slashFxList.filter((s) => s.t < LIFE);
 }
 
+
+// ---------- Warden: Sonic Boom (ลำแสงวงคลื่น) / Roar (วงคำรามรอบตัว) / ประกายชาร์จ ----------
+function drawSonicBeam(w) {
+  const dx = Math.cos(w.ang), dy = Math.sin(w.ang);
+  const front = w.r, tail = Math.max(w.r0, front - 380);
+  if (front <= tail) return;
+  const fade = Math.min(1, (w.maxR - w.r) / 160 + 0.15);
+  const x0 = w.x + dx * tail, y0 = w.y + dy * tail, x1 = w.x + dx * front, y1 = w.y + dy * front;
+  ctx.save();
+  ctx.globalAlpha = fade;
+  ctx.lineCap = "round";
+  // แกนลำแสง: จางที่หาง สว่างที่หัว
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, "rgba(45,224,208,0)");
+  g.addColorStop(0.7, "rgba(45,224,208,0.55)");
+  g.addColorStop(1, "rgba(220,255,252,1)");
+  ctx.shadowColor = "#2de0d0"; ctx.shadowBlur = 28;
+  ctx.strokeStyle = g; ctx.lineWidth = 30;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = 9;
+  ctx.beginPath(); ctx.moveTo(x0 + dx * (front - tail) * 0.4, y0 + dy * (front - tail) * 0.4); ctx.lineTo(x1, y1); ctx.stroke();
+  // วงแหวนเสียงซ้อนกันตามแนวลำแสง (เหมือนเอฟเฟกต์ Sonic Boom ในเกม) ยิ่งไปข้างหน้ายิ่งกว้าง
+  const gap = 46, phase = (w.r % gap);
+  for (let d = front - phase; d > tail; d -= gap) {
+    const k = (d - tail) / (front - tail); // 0 หาง .. 1 หัว
+    const rx = 5 + k * 9, ry = 16 + k * 34;
+    ctx.globalAlpha = fade * (0.25 + 0.75 * k);
+    ctx.strokeStyle = k > 0.85 ? "#ffffff" : "#2de0d0";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(w.x + dx * d, w.y + dy * d, rx, ry, w.ang, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // หัวลำแสง
+  ctx.globalAlpha = fade;
+  ctx.fillStyle = "#e8fffd"; ctx.shadowColor = "#2de0d0"; ctx.shadowBlur = 24;
+  ctx.beginPath(); ctx.arc(x1, y1, 13, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawRoarRing(w) {
+  const fade = Math.max(0, 1 - w.r / w.maxR);
+  for (let k = 0; k < 3; k++) {
+    const rr = w.r - k * 34;
+    if (rr < 10) continue;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, fade * 1.4) * (1 - k * 0.3);
+    ctx.shadowColor = "#2de0d0"; ctx.shadowBlur = 22;
+    ctx.strokeStyle = k === 0 ? "#bffcf6" : "#2de0d0";
+    ctx.lineWidth = 16 - k * 4;
+    ctx.beginPath(); ctx.arc(w.x, w.y, rr, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  // พื้นมืดจางๆ ภายในวง (ความมืดของ Warden)
+  ctx.save();
+  const g = ctx.createRadialGradient(w.x, w.y, w.r * 0.3, w.x, w.y, w.r);
+  g.addColorStop(0, "rgba(2,12,18,0)");
+  g.addColorStop(1, "rgba(2,20,28," + (0.35 * fade).toFixed(3) + ")");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// ประกายชาร์จที่อกตอนกำลังเตรียม Sonic Boom + วงระเบิดตอนโดนเป้า
+function drawWardenFx(b, dt) {
+  for (const f of b.fighters) {
+    const c = f.cast;
+    if (!c || !c.sk.charge || c.fired || f.hp <= 0) continue;
+    const need = c.sk.fireDelay || 0.8;
+    const k = Math.min(1, c.t / need);
+    const cx = f.x, cy = f.y - f.r * 0.1;
+    ctx.save();
+    ctx.globalAlpha = 0.35 + 0.5 * k;
+    ctx.shadowColor = "#2de0d0"; ctx.shadowBlur = 26;
+    ctx.strokeStyle = "#2de0d0"; ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      const rr = f.r * (1.6 - ((k * 2 + i / 3) % 1) * 1.3);
+      ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, rr), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.fillStyle = "#e8fffd";
+    ctx.beginPath(); ctx.arc(cx, cy, 6 + k * 16, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  for (const s of sonicBlasts) {
+    s.t += dt;
+    const k = s.t / 0.45;
+    if (k >= 1) continue;
+    ctx.save();
+    ctx.globalAlpha = 1 - k;
+    ctx.shadowColor = "#2de0d0"; ctx.shadowBlur = 24;
+    ctx.strokeStyle = "#e8fffd"; ctx.lineWidth = 10 * (1 - k) + 2;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 20 + k * 110, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "#2de0d0"; ctx.lineWidth = 6 * (1 - k) + 1;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 10 + k * 70, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  sonicBlasts = sonicBlasts.filter((s) => s.t < 0.45);
+}
+
 // ---------- คลื่นเสียง: ส่วนโค้งหลายชั้นแผ่ออกไปทางศัตรู ----------
 function drawWaves(b) {
   for (const w of b.waves) {
+    if (w.style === "sonicboom") { drawSonicBeam(w); continue; }
+    if (w.style === "roar") { drawRoarRing(w); continue; }
     const fade = Math.max(0, 1 - w.r / w.maxR);
     for (let k = 0; k < 4; k++) {
       const rr = w.r - k * 24;
@@ -2186,6 +2299,7 @@ function render() {
     const gray = (on) => { ctx.filter = on ? "grayscale(0.85) brightness(0.85)" : "none"; };
     if (battle.phantom) drawPhantom(battle);
     drawWaves(battle);
+    drawWardenFx(battle, 1 / 60);
     drawSlashFx(1 / 60);
     battle.fighters.forEach((f) => {
       if (f.hp <= 0) return;
@@ -2378,7 +2492,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 41";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 42";
   }
 }
 

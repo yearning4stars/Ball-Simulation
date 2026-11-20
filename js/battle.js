@@ -1480,11 +1480,13 @@ class Battle {
       bleed: sk.bleed || 0, // โดนแล้วเลือดไหลกี่วินาที (bleedDps ต่อวินาที)
       bleedDps: sk.bleedDps || 0,
       cdPenalty: sk.cdPenalty || 0, // โดนแล้วคูลดาวน์ทุกสกิลของศัตรูเพิ่มกี่วินาที (Greater Split: ทำลายสกิลศัตรู)
+      style: sk.style || "", // รูปแบบการวาด: "sonicboom" = ลำแสงระเบิด | "roar" = วงคำรามรอบตัว | ไม่ใส่ = ส่วนโค้งปกติ
+      mind: sk.waveMind || 0, // โดนคลื่นแล้วสติ/ความมั่นใจลดเท่านี้ (0-100)
       owner: f,
-      color: f.def.color,
+      color: sk.color || f.def.color,
       hits: [], // คนที่โดนคลื่นนี้ไปแล้ว (คลื่นลูกเดียวโดนคนเดียวกันได้ครั้งเดียว)
     });
-    this.events.push({ type: "wave", x: f.x, y: f.y, sound: sk.sound || "wave" });
+    this.events.push({ type: "wave", x: f.x, y: f.y, sound: sk.sound || "wave", style: sk.style || "" });
   }
 
   // ---------- การเคลื่อนที่ ----------
@@ -1712,6 +1714,8 @@ class Battle {
             this._damage(t, this._out(w.owner, dmg * this._dmgMult(w.owner, t)), t.x - (dx / dist) * t.r, t.y - (dy / dist) * t.r);
             this._knock(t, dx, dy, w.knockback);
             this._applyExtras(t, w);
+            if (w.mind) this._hurtMind(t, w.mind, t.x, t.y);
+            if (w.style === "sonicboom") this.events.push({ type: "sonicHit", x: t.x, y: t.y, ang: w.ang });
             // โดนคลื่นในระยะใกล้ตัวผู้ปล่อย = ติดสตั้น (ขยับช้า ใช้สกิลไม่ได้)
             if (w.stunNear && travel <= w.stunRange) {
               t.stun = Math.max(t.stun, w.stunNear);
