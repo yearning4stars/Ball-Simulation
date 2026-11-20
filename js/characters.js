@@ -793,7 +793,8 @@ const CHARACTERS = {
         sound: "shoot",
       },
       {
-        // สกิล 2: บีบแฮมสเตอร์ ฟื้นเลือดต่อเนื่องตลอดท่า (ใช้เมื่อเลือดต่ำกว่า 85%)
+        // สกิล 2: บีบแฮมสเตอร์ ฟื้นเลือดต่อเนื่อง 4 ต่อวินาทีตลอดท่า (ใช้เมื่อเลือดต่ำกว่า 85%)
+        // ถ้าโดนดาเมจระหว่างบีบ = ท่าถูกยกเลิก แฮมสเตอร์หลุดวิ่งหนี (นาน hamsterLife วิ) ถ้าวิ่งชนศัตรูจะลดสติ hamsterMind
         type: "squeeze",
         name: "บีบแฮมสเตอร์",
         icon: "🐹",
@@ -801,9 +802,12 @@ const CHARACTERS = {
         cooldown: 14,
         initialCooldown: 6,
         frame: "squeeze",
-        duration: 2.4,
-        heal: 44,
+        duration: 3.5,
+        healPerSec: 4,
         useBelow: 0.85,
+        hamsterLife: 6,
+        hamsterSpeed: 300,
+        hamsterMind: 25,
       },
     ],
   },

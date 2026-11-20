@@ -33,6 +33,7 @@ class Battle {
     this.time = 0;
     this.projectiles = [];
     this.waves = []; // คลื่นเสียงที่กำลังแผ่ออก
+    this.hamsters = []; // แฮมสเตอร์ที่หลุดจากมือ Hatsu แล้ววิ่งหนี
     this.events = []; // เอฟเฟกต์ให้ตัววาดเอาไปใช้ แล้วเคลียร์ทุกเฟรม
     this.winner = null; // 0, 1 หรือ "draw"
     this.wt = 0; // เวลาของ "โลก" (ย้อนเวลาแล้วถอยกลับตามจริง) ใช้กับประวัติสำหรับสกิลย้อนเวลา
@@ -296,6 +297,7 @@ class Battle {
     this._updateFlowers(dt);
     this._updateGuests(dt);
     this._updateWaves(dt);
+    this._updateHamsters(dt);
     // ตัดเวลาอาจจบกลางก้าวนี้ (cast ถูกเคลียร์) ให้สถานะที่ตัววาดอ่านตรงกับความจริงเสมอ
     // (นับจากสถานะจริงตอนนี้ ไม่ใช่ตัวที่จำไว้ตอนต้นก้าว เพราะอีกคนอาจเพิ่งเริ่มตัดเวลาต่อจากคนที่เพิ่งจบในก้าวเดียวกัน)
     if (!this.fighters.some((g) => g.cast && g.cast.sk.type === "timeerase")) {
@@ -351,7 +353,8 @@ class Battle {
         }
       } else if (sk.type === "squeeze") {
         // บีบแฮมสเตอร์: ฟื้นเลือดต่อเนื่องตลอดท่า (รวม heal ทั้งท่า) แจ้งเลขฟื้นทุก 0.4 วินาที
-        const h = ((sk.heal || 0) * dt) / (sk.duration || 1);
+        const rate = sk.healPerSec !== undefined ? sk.healPerSec : (sk.heal || 0) / (sk.duration || 1); // ฟื้นกี่ HP ต่อวินาที
+        const h = rate * dt;
         f.hp = Math.min(f.maxHp, f.hp + h);
         c.acc = (c.acc || 0) + h;
         c.tick = (c.tick || 0) + dt;
@@ -1816,6 +1819,52 @@ class Battle {
     return n;
   }
 
+  // แฮมสเตอร์หลุดมือ: ยกเลิกท่า วิ่งหนีออกจากศัตรู เด้งกำแพง ถ้าวิ่งชนศัตรูจะลดสติของศัตรู
+  _dropHamster(f) {
+    const sk = f.cast.sk;
+    const foe = this._target(f);
+    const hx = f.x + (f.facing || 1) * f.r * 0.95;
+    const hy = f.y - f.r * 0.15;
+    const away = foe ? Math.atan2(hy - foe.y, hx - foe.x) : this.rng() * Math.PI * 2;
+    this.hamsters.push({
+      x: hx, y: hy, ang: away, speed: sk.hamsterSpeed || 300, r: 14, t: 0,
+      life: sk.hamsterLife || 6, mind: sk.hamsterMind || 25, owner: f, cd: {}, vx: 0, flip: 1,
+    });
+    f.cast = null;
+    f.frame = "idle";
+    f.gcd = 0.4;
+    this.events.push({ type: "hamsterDrop", x: hx, y: hy });
+  }
+
+  _updateHamsters(dt) {
+    for (const h of this.hamsters) {
+      h.t += dt;
+      h.ang += (this.rng() - 0.5) * 7 * dt; // ตื่นตกใจ วิ่งส่าย
+      let vx = Math.cos(h.ang) * h.speed;
+      let vy = Math.sin(h.ang) * h.speed;
+      h.x += vx * dt;
+      h.y += vy * dt;
+      if (h.x < h.r) { h.x = h.r; h.ang = Math.PI - h.ang; }
+      if (h.x > this.w - h.r) { h.x = this.w - h.r; h.ang = Math.PI - h.ang; }
+      if (h.y < h.r) { h.y = h.r; h.ang = -h.ang; }
+      if (h.y > this.h - h.r) { h.y = this.h - h.r; h.ang = -h.ang; }
+      h.flip = Math.cos(h.ang) >= 0 ? 1 : -1;
+      for (const k of Object.keys(h.cd)) h.cd[k] = Math.max(0, h.cd[k] - dt);
+      this.fighters.forEach((g, gi) => {
+        if (g.hp <= 0 || g.team === h.owner.team) return;
+        if ((h.cd[gi] || 0) > 0) return;
+        const d = Math.hypot(g.x - h.x, g.y - h.y);
+        if (d < g.r + h.r) {
+          h.cd[gi] = 1.4;
+          this._hurtMind(g, h.mind, g.x, g.y); // ชนศัตรู: สติลด
+          h.ang = Math.atan2(h.y - g.y, h.x - g.x) + (this.rng() - 0.5); // เด้งออก
+          this.events.push({ type: "hamsterBump", x: h.x, y: h.y });
+        }
+      });
+    }
+    this.hamsters = this.hamsters.filter((h) => h.t < h.life);
+  }
+
   _hurtMind(f, amount, x, y) {
     f.mind = Math.min(100, f.mind + amount);
     f.mindHold = MIND_HOLD;
@@ -1867,6 +1916,8 @@ class Battle {
     f.hitFlash = 0.15;
     f.combatT = 0;
     this.events.push({ type: "hit", x, y, amount });
+    // กำลังบีบแฮมสเตอร์แล้วโดนดาเมจ = ท่าถูกยกเลิก แฮมสเตอร์หลุดวิ่งหนี
+    if (f.cast && f.cast.sk.type === "squeeze" && amount > 0) this._dropHamster(f);
     // The Red Mist: เลือดต่ำกว่า egoAt = E.G.O. ปรากฏ (ครั้งเดียว) ดาเมจแรงขึ้นและปลดล็อกท่าของ E.G.O.
     if (f.def.egoAt && !f.egoUsed && f.hp > 0 && f.hp <= f.maxHp * f.def.egoAt) {
       f.egoUsed = true;
@@ -1906,6 +1957,7 @@ class Battle {
       this.flowers = [];
       this.guests = [];
       this.waves = [];
+      this.hamsters = [];
       this.rewind = null;
       this.eraser = null;
       this.dazedList = [];

@@ -718,6 +718,7 @@ const DUMMY_DEF = { __dummy: true, name: "หุ่นฝึก", color: "#8a93b
 let labMode = false;
 let labSel = { slot: 0, skill: 0 }; // skill = -1 -> ใช้ทุกสกิลสลับกัน
 let labHome = { x: 0, y: 0 };
+let labSqueezeN = 0;
 const infoEl = document.getElementById("info");
 const cardsEl = document.getElementById("cards");
 const labWrap = document.getElementById("labWrap");
@@ -816,7 +817,10 @@ function skillDetail(sk) {
   }
   if (sk.stunNear) parts.push("สตั้น " + sk.stunNear + " วิ");
   if (sk.mindDamage || sk.waveMind) parts.push("สติ −" + (sk.waveMind || sk.mindDamage));
-  if (sk.heal && sk.type === "squeeze") parts.push("ฟื้น " + sk.heal + " HP ตลอดท่า (ใช้เมื่อเลือด < " + Math.round((sk.useBelow || 0.85) * 100) + "%)");
+  if (sk.type === "squeeze") {
+    parts.push("ฟื้น " + sk.healPerSec + " HP/วิ (ใช้เมื่อเลือด < " + Math.round((sk.useBelow || 0.85) * 100) + "%)");
+    parts.push("โดนดาเมจ = ยกเลิก แฮมสเตอร์หลุดวิ่งหนี ชนศัตรู สติ −" + (sk.hamsterMind || 25));
+  }
   if (sk.knockback) parts.push("ผลัก " + sk.knockback);
   if (sk.bleed) parts.push("เลือดไหล " + sk.bleed + " วิ");
   if (sk.slowDuration) parts.push("ชะลอ " + sk.slowDuration + " วิ");
@@ -943,6 +947,11 @@ function labTick(dt) {
   d.x += (labHome.x - d.x) * k;
   d.y += (labHome.y - d.y) * k;
   if (f.def.energyMax) f.energy = f.def.energyMax;
+  // สาธิตแฮมสเตอร์: การบีบครั้งที่ 2, 4, ... จะโดนดาเมจกลางท่า ให้เห็นแฮมสเตอร์หลุดวิ่งหนี
+  if (f.cast && f.cast.sk.type === "squeeze" && f.cast.t > 1.2) {
+    if (f.cast.demo === undefined) f.cast.demo = (labSqueezeN++ % 2) === 1;
+    if (f.cast.demo) b._damage(f, 1, f.x, f.y, false, true);
+  }
   f.skills.forEach((sk, i) => {
     const mine = labSel.skill === -1 || labSel.skill === i;
     if (!mine) { f.cds[i] = 9999; return; }
@@ -1187,6 +1196,12 @@ function handleEvents(events) {
     } else if (e.type === "four") {
       floaters.push({ x: e.x, y: e.y - 64, text: "4! ดาเมจ +" + e.bonus, life: 1.1, color: "#ff8f5a", size: 26 });
       spawnParticles(e.x, e.y, "#ff5a5f", 10, 240);
+    } else if (e.type === "hamsterDrop") {
+      floaters.push({ x: e.x, y: e.y - 40, text: "แฮมสเตอร์หลุด!", life: 1.0, color: "#ffb0c8", size: 22 });
+      spawnParticles(e.x, e.y, "#ffd0e0", 10, 220);
+    } else if (e.type === "hamsterBump") {
+      spawnParticles(e.x, e.y, "#ffd0e0", 8, 200);
+      shake = Math.max(shake, 3);
     } else if (e.type === "squeeze") {
       spawnParticles(e.x, e.y, "#ffd0e0", 5, 140);
     } else if (e.type === "heal") {
@@ -1970,6 +1985,21 @@ function drawFour(p) {
   ctx.restore();
 }
 
+// แฮมสเตอร์ที่หลุดมือแล้ววิ่งหนี (หันตามทิศวิ่ง สั่นเล็กน้อย จางลงตอนใกล้หาย)
+function drawRunningHamsters(b) {
+  for (const h of b.hamsters || []) {
+    const left = h.life - h.t;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, left / 0.8);
+    ctx.translate(h.x, h.y + Math.sin(h.t * 30) * 2);
+    ctx.scale(-h.flip, 1); // อิโมจิหันซ้ายเป็นค่าเริ่มต้น
+    ctx.font = "30px " + FONT;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("🐹", 0, 0);
+    ctx.restore();
+  }
+}
+
 // แฮมสเตอร์ที่ Hatsu กำลังบีบ: ตัวอิโมจิถูกบีบยืดหดเป็นจังหวะ
 function drawHamster(f) {
   const t = f.cast.t;
@@ -2600,6 +2630,7 @@ function render() {
     const gray = (on) => { ctx.filter = on ? "grayscale(0.85) brightness(0.85)" : "none"; };
     if (battle.phantom) drawPhantom(battle);
     drawWaves(battle);
+    drawRunningHamsters(battle);
     drawWardenFx(battle, 1 / 60);
     drawSlashFx(1 / 60);
     battle.fighters.forEach((f) => {
@@ -2796,7 +2827,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 44";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 45";
   }
 }
 
