@@ -308,6 +308,7 @@ button.pick:hover { background: #20263d; }
 
 /* ---------- เมนูหลัก / หน้าจอต่างๆ ---------- */
 body[data-view="menu"] #setup, body[data-view="menu"] #gamebar, body[data-view="menu"] #stage, body[data-view="menu"] #gameTitle { display: none; }
+body[data-view="setup"] #stage { display: none; }
 body[data-view="setup"] #menu, body[data-view="setup"] #gamebar { display: none; }
 body[data-view="game"] #menu, body[data-view="game"] #setup { display: none; }
 body[data-view="setup"] #gameTitle, body[data-view="game"] #gameTitle { display: none; }
@@ -333,3 +334,46 @@ body[data-view="setup"] #gameTitle, body[data-view="game"] #gameTitle { display:
 .seg button.on { background: #ff7a59; border-color: #ff7a59; color: #1a0c07; font-weight: 700; }
 .set-row input[type=range] { width: 100%; }
 .set-body > button { padding: 8px 10px; font-size: 0.85rem; }
+
+
+/* ---------- หน้าเตรียมสู้: รายละเอียดตัวละคร + ห้องทดลองสกิล ---------- */
+.info { display: grid; gap: 10px; margin-top: 8px; align-items: start; }
+.info.two { grid-template-columns: minmax(230px, 1fr) minmax(300px, 520px) minmax(230px, 1fr); }
+.info.two .lab { grid-column: 2; grid-row: 1; }
+.info.two .cards { display: contents; }
+.info.two .card:nth-child(1) { grid-column: 1; grid-row: 1; }
+.info.two .card:nth-child(2) { grid-column: 3; grid-row: 1; }
+.info.many { grid-template-columns: 1fr; }
+.info.many .cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.info.many .lab { max-width: 560px; margin: 0 auto; width: 100%; }
+@media (max-width: 900px) {
+  .info.two { grid-template-columns: 1fr; }
+  .info.two .lab { grid-column: 1; grid-row: 1; margin: 0 auto; width: 100%; max-width: 560px; }
+  .info.two .cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); grid-row: 2; }
+  .info.two .card:nth-child(n) { grid-column: auto; grid-row: auto; }
+}
+.lab { background: #141829; border: 1px solid #232844; border-radius: 12px; padding: 8px; }
+.lab-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; color: #c3c9e0; }
+.lab-wrap { display: flex; justify-content: center; }
+.lab-btns { display: flex; gap: 6px; justify-content: center; margin-top: 6px; flex-wrap: wrap; }
+.lab-btns button.on { background: #ff7a59; border-color: #ff7a59; color: #1a0c07; font-weight: 700; }
+.lab-hint { font-size: 0.65rem; color: #7c85a8; margin-top: 4px; }
+
+.card { background: #141829; border: 2px solid #232844; border-radius: 12px; padding: 8px 10px; text-align: left; }
+.card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.card-head img { width: 44px; height: 44px; object-fit: contain; flex: none; }
+.card-name { font-weight: 700; font-size: 1.02rem; }
+.card-sub { font-size: 0.68rem; color: #8f98b8; }
+.card-stats { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
+.chip { font-size: 0.66rem; background: #0f1220; border-radius: 999px; padding: 2px 8px; color: #c3c9e0; }
+.card canvas.radar { display: block; width: 230px; height: 230px; margin: 0 auto; border: 0; background: transparent; border-radius: 0; }
+.card-sec { font-size: 0.7rem; font-weight: 700; color: #9aa4d0; margin: 6px 0 4px; }
+.skrow {
+  display: block; width: 100%; text-align: left; margin-bottom: 4px; padding: 5px 8px;
+  background: #171b2b; color: inherit; font-weight: 400; border: 1px solid #2d3350; border-radius: 8px;
+}
+.skrow:hover { background: #20263d; }
+.skrow.on { border-color: #ff7a59; box-shadow: 0 0 0 1px #ff7a59 inset; }
+.skrow .sk-top { display: flex; justify-content: space-between; gap: 6px; font-size: 0.78rem; font-weight: 600; }
+.skrow .sk-type { font-size: 0.62rem; color: #8f98b8; font-weight: 400; }
+.skrow .sk-det { font-size: 0.66rem; color: #aab2d0; margin-top: 2px; line-height: 1.35; }

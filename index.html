@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=42" />
+  <link rel="stylesheet" href="style.css?v=43" />
 </head>
 <body>
   <main>
@@ -50,6 +50,20 @@
       </div>
       <!-- ช่องเลือกตัวละครของผู้เล่นแต่ละคน: main.js สร้างให้ตามโหมด -->
       <div class="controls" id="players"></div>
+
+      <!-- รายละเอียดตัวละครที่เลือก (แทนสนามก่อนเริ่มสู้): กราฟค่าพลัง สกิล และห้องทดลองสกิล -->
+      <div id="info" class="info">
+        <div id="labBox" class="lab">
+          <div id="labTitle" class="lab-title">🧪 ห้องทดลองสกิล</div>
+          <div id="labWrap" class="lab-wrap"></div>
+          <div class="lab-btns">
+            <button id="labReplay" class="secondary">🔁 เล่นซ้ำ</button>
+            <button id="labAll" class="secondary">🎬 ใช้ทุกสกิลสลับกัน</button>
+          </div>
+          <div class="lab-hint">กดที่สกิลในการ์ดตัวละครเพื่อดูการจำลองสกิลนั้น (สู้กับหุ่นฝึก)</div>
+        </div>
+        <div id="cards" class="cards"></div>
+      </div>
     </section>
 
     <!-- แถบปุ่มตอนอยู่ในเกม -->
@@ -71,10 +85,10 @@
   </main>
 
   <!-- ?v=35 กันเบราว์เซอร์/GitHub Pages ใช้ไฟล์เก่าจากแคช: เวลาแก้โค้ด ให้เปลี่ยนเลขนี้ทุกที่พร้อมกัน -->
-  <script src="js/characters.js?v=42"></script>
+  <script src="js/characters.js?v=43"></script>
   <script src="js/battle.js?v=35"></script>
   <script src="js/audio.js?v=38"></script>
   <script src="js/sound-config.js?v=38"></script>
-  <script src="js/main.js?v=42"></script>
+  <script src="js/main.js?v=43"></script>
 </body>
 </html>

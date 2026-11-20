@@ -30,12 +30,12 @@ let sonicBlasts = []; // วงระเบิดตอน Sonic Boom โดน�
 let screenFlash = 0; // วาบขาวทั้งจอ (ตอนเริ่มตัดเวลา)
 let ghosts = []; // ภาพติดตาของคนที่กำลังเร่งเวลา (Johan)
 let ghostAcc = 0;
-const charKey = (def) => Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def);
+const charKey = (def) => (def && def.__dummy ? "__dummy" : Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def));
 
 // ---------- โหลดภาพ ----------
 const fxImages = {}; // fxImages[charKey][fxName] = สไปรต์เอฟเฟกต์ฟัน | null (ไม่มีไฟล์ = วาดรอยฟันด้วยโค้ด)
 let slashFxList = []; // รอยฟันที่กำลังแสดง
-const images = {}; // images[charKey][frameName] = HTMLImageElement | null
+const images = { __dummy: {} }; // images[charKey][frameName] = HTMLImageElement | null (หุ่นฝึกไม่มีภาพ = วาดเป็นบอล)
 
 function loadAllImages() {
   const jobs = [];
@@ -519,6 +519,7 @@ function rebuildPlayers() {
     sel.addEventListener("change", () => {
       refresh();
       savePicks();
+      if (view === "setup") refreshInfo();
       if (!battle || battle.winner !== null) setIdleHud();
     });
     btn.addEventListener("click", () => {
@@ -541,6 +542,7 @@ function rebuildPlayers() {
   buildHudPanels();
   setIdleHud();
   fitCanvas();
+  if (view === "setup") refreshInfo();
 }
 
 function startBattle() {
@@ -568,6 +570,13 @@ function setView(v) {
   document.body.dataset.view = v;
   closePicker();
   paused = false;
+  if (v === "setup") {
+    mountLab();
+    refreshInfo();
+  } else {
+    unmountLab();
+    if (v === "menu") battle = null;
+  }
   requestAnimationFrame(() => { fitCanvas(); fitCanvas(); });
   fitCanvas();
 }
@@ -691,6 +700,255 @@ on("gbSetup", goSetup);
 on("gbMenu", () => { battle = null; setIdleHud(); setView("menu"); });
 on("gbSettings", openSettings);
 loadSoundConfig();
+
+// ============================================================
+//  หน้าเตรียมสู้: รายละเอียดตัวละคร (กราฟค่าพลัง + สกิล) และห้องทดลองสกิล
+//  ห้องทดลอง = ใช้เอนจินจริง ให้ตัวละครใช้สกิลที่เลือกใส่หุ่นฝึก (ย้ายแคนวาสสนามมาแสดงในกรอบนี้)
+// ============================================================
+const TYPE_NAME = {
+  projectile: "ยิงกระสุน", dash: "พุ่งชน", shockwave: "คลื่นกระแทก", timeerase: "ตัดเวลา", rewind: "ย้อนเวลา",
+  timeaccel: "เร่งเวลา", timeslow: "ชะลอเวลา", ballkick: "เตะบอล", slash: "ฟันรอบตัว", summon: "เรียกเพื่อน",
+  triplethreat: "คอมโบ 3 ท่า", duel: "ดวล", metavision: "เห็นอนาคต",
+};
+const STAT_LABELS = ["พลังชีวิต", "ความเร็ว", "ดาเมจต่อครั้ง", "ดาเมจต่อวินาที", "ระยะโจมตี", "ควบคุม"];
+const DUMMY_DEF = { __dummy: true, name: "หุ่นฝึก", color: "#8a93b5", hp: 99999, speed: 0, radius: 34, frames: { idle: "" }, skills: [] };
+
+let labMode = false;
+let labSel = { slot: 0, skill: 0 }; // skill = -1 -> ใช้ทุกสกิลสลับกัน
+let labHome = { x: 0, y: 0 };
+const infoEl = document.getElementById("info");
+const cardsEl = document.getElementById("cards");
+const labWrap = document.getElementById("labWrap");
+
+function skillDamage(sk) {
+  return (sk.damage || 0) * (sk.count || 1);
+}
+// คำนวณค่าพลัง 6 ด้าน (0-1) จากข้อมูลตัวละคร: เป็นค่าประมาณเพื่อเทียบกันคร่าวๆ ไม่ใช่ค่าที่เกมใช้จริง
+function statsOf(def) {
+  const sks = skillsOf(def);
+  const wp = def.weapon;
+  let burst = 0, dps = 0, range = 0, ctrl = 0;
+  for (const sk of sks) {
+    const d = skillDamage(sk);
+    burst = Math.max(burst, d);
+    dps += d / Math.max(0.5, sk.cooldown || 1);
+    let r = 0.5;
+    if (sk.type === "projectile") r = 0.85;
+    else if (sk.type === "shockwave") r = Math.min(1, (sk.waveRange || 400) / 700);
+    else if (sk.type === "dash") r = 0.35;
+    else if (sk.type === "slash") r = 0.3;
+    else if (sk.type === "ballkick") r = 0.7;
+    range = Math.max(range, r);
+    let c = 0;
+    if (sk.stunNear) c += 0.3;
+    if (sk.mindDamage || sk.waveMind) c += 0.3;
+    if (sk.knockback > 300) c += 0.15;
+    if (sk.slowDuration || sk.bleed || sk.silence || sk.cdPenalty) c += 0.2;
+    if (["timeerase", "timeslow", "rewind", "duel", "metavision"].includes(sk.type)) c += 0.45;
+    ctrl += c;
+  }
+  if (wp) {
+    burst = Math.max(burst, wp.damage || 0);
+    dps += (wp.damage || 0) / Math.max(0.2, wp.hitCooldown || 0.4);
+    range = Math.max(range, 0.4);
+  }
+  return [
+    Math.min(1, def.hp / 200),
+    Math.min(1, def.speed / 250),
+    Math.min(1, burst / 32),
+    Math.min(1, dps / 14),
+    Math.min(1, range),
+    Math.min(1, ctrl),
+  ];
+}
+
+function drawRadar(cv, vals, color) {
+  const dpr = window.devicePixelRatio || 1;
+  const S = 230;
+  cv.width = S * dpr; cv.height = S * dpr;
+  const g = cv.getContext("2d");
+  g.scale(dpr, dpr);
+  g.clearRect(0, 0, S, S);
+  const cx = S / 2, cy = S / 2 + 2, R = 62, n = vals.length;
+  const ang = (i) => -Math.PI / 2 + (i / n) * Math.PI * 2;
+  g.strokeStyle = "#2d3350"; g.lineWidth = 1;
+  for (let ring = 1; ring <= 4; ring++) {
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = cx + Math.cos(ang(i)) * R * ring / 4, y = cy + Math.sin(ang(i)) * R * ring / 4;
+      i ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.closePath(); g.stroke();
+  }
+  for (let i = 0; i < n; i++) {
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(ang(i)) * R, cy + Math.sin(ang(i)) * R); g.stroke();
+  }
+  g.beginPath();
+  vals.forEach((v, i) => {
+    const r = R * Math.max(0.04, v);
+    const x = cx + Math.cos(ang(i)) * r, y = cy + Math.sin(ang(i)) * r;
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  });
+  g.closePath();
+  g.fillStyle = color + "55"; g.fill();
+  g.strokeStyle = color; g.lineWidth = 2; g.stroke();
+  g.fillStyle = color;
+  vals.forEach((v, i) => {
+    const r = R * Math.max(0.04, v);
+    g.beginPath(); g.arc(cx + Math.cos(ang(i)) * r, cy + Math.sin(ang(i)) * r, 2.5, 0, Math.PI * 2); g.fill();
+  });
+  g.font = "600 10px " + FONT; g.fillStyle = "#c3c9e0"; g.textAlign = "center"; g.textBaseline = "middle";
+  STAT_LABELS.forEach((t, i) => {
+    const a = ang(i), lx = cx + Math.cos(a) * (R + 22), ly = cy + Math.sin(a) * (R + 14);
+    g.fillText(t, lx, ly);
+  });
+}
+
+function skillDetail(sk) {
+  const parts = [];
+  const d = skillDamage(sk);
+  if (d) {
+    let t = "ดาเมจ " + sk.damage + (sk.count > 1 ? " ×" + sk.count : "");
+    if (sk.damageFar !== undefined && sk.damageFar !== sk.damage) t += " → " + sk.damageFar + " (ที่ปลายระยะ)";
+    parts.push(t);
+  }
+  if (sk.stunNear) parts.push("สตั้น " + sk.stunNear + " วิ");
+  if (sk.mindDamage || sk.waveMind) parts.push("สติ −" + (sk.waveMind || sk.mindDamage));
+  if (sk.knockback) parts.push("ผลัก " + sk.knockback);
+  if (sk.bleed) parts.push("เลือดไหล " + sk.bleed + " วิ");
+  if (sk.slowDuration) parts.push("ชะลอ " + sk.slowDuration + " วิ");
+  if (sk.silence) parts.push("ใบ้สกิล " + sk.silence + " วิ");
+  if (["timeerase", "timeaccel", "timeslow", "rewind"].includes(sk.type) && sk.duration) parts.push("นาน " + sk.duration + " วิ");
+  if (sk.type === "shockwave" && sk.waveArcDeg) parts.push(sk.waveArcDeg >= 360 ? "วงกว้างรอบตัว" : "มุม " + sk.waveArcDeg + "°");
+  if (sk.requires === "ego") parts.push("ปลดล็อกเมื่อ E.G.O. ปรากฏ");
+  return (sk.desc ? sk.desc + " · " : "") + parts.join(" · ");
+}
+
+function refreshInfo() {
+  if (!infoEl || !playerSels.length) return;
+  infoEl.className = "info " + (playerSels.length === 2 ? "two" : "many");
+  if (labSel.slot >= playerSels.length) labSel = { slot: 0, skill: 0 };
+  const defOf = (i) => CHARACTERS[playerSels[i].value];
+  if (labSel.skill >= skillsOf(defOf(labSel.slot)).length) labSel.skill = 0;
+
+  cardsEl.innerHTML = "";
+  playerSels.forEach((sel, i) => {
+    const def = CHARACTERS[sel.value];
+    const card = document.createElement("div");
+    card.className = "card";
+    card.style.borderColor = layout && layout.colors ? layout.colors[i] : "#232844";
+    const head = document.createElement("div");
+    head.className = "card-head";
+    const img = document.createElement("img");
+    img.src = def.frames.idle; img.alt = "";
+    const tt = document.createElement("div");
+    tt.innerHTML = '<div class="card-name"></div><div class="card-sub"></div>';
+    tt.firstChild.textContent = def.name; tt.firstChild.style.color = def.color;
+    tt.lastChild.textContent = (layout ? layout.labels[i] : "") + (CHAR_CATEGORIES ? " · " + (catLabel(sel.value)) : "");
+    head.append(img, tt);
+    card.appendChild(head);
+
+    const chips = document.createElement("div");
+    chips.className = "card-stats";
+    for (const t of ["HP " + def.hp, "เร็ว " + def.speed, "ขนาด " + def.radius, def.weapon ? "อาวุธ: " + (def.weapon.name || "หมุนรอบตัว") : null]) {
+      if (!t) continue;
+      const c = document.createElement("span"); c.className = "chip"; c.textContent = t; chips.appendChild(c);
+    }
+    card.appendChild(chips);
+
+    const cv = document.createElement("canvas");
+    cv.className = "radar";
+    card.appendChild(cv);
+    drawRadar(cv, statsOf(def), def.color);
+
+    const sec = document.createElement("div");
+    sec.className = "card-sec"; sec.textContent = "สกิล (กดเพื่อดูการจำลอง)";
+    card.appendChild(sec);
+    skillsOf(def).forEach((sk, j) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "skrow" + (labSel.slot === i && labSel.skill === j ? " on" : "");
+      const top = document.createElement("div");
+      top.className = "sk-top";
+      const nm = document.createElement("span");
+      nm.textContent = skillIcon(sk) + " " + (sk.name || sk.type);
+      const cd = document.createElement("span");
+      cd.className = "sk-type"; cd.textContent = (TYPE_NAME[sk.type] || sk.type) + " · " + sk.cooldown + " วิ";
+      top.append(nm, cd);
+      const det = document.createElement("div");
+      det.className = "sk-det"; det.textContent = skillDetail(sk);
+      b.append(top, det);
+      b.addEventListener("click", () => { sfx.unlock(); sfx.click(); labSel = { slot: i, skill: j }; refreshInfo(); });
+      card.appendChild(b);
+    });
+    cardsEl.appendChild(card);
+  });
+  startLab();
+}
+function catLabel(key) {
+  const id = categoryOf(key);
+  const c = CHAR_CATEGORIES.find((x) => x.id === id);
+  return c ? c.label : "อื่นๆ";
+}
+
+function mountLab() {
+  labMode = true;
+  if (canvas.parentElement !== labWrap) labWrap.appendChild(canvas);
+  const two = playerSels.length === 2;
+  const pageW = (infoEl.parentElement ? infoEl.parentElement.clientWidth : window.innerWidth) || window.innerWidth;
+  const avail = two && window.innerWidth > 900 ? pageW - 2 * 250 - 40 : pageW - 36;
+  labWrap.style.setProperty("--arena", Math.floor(Math.max(260, Math.min(520, avail))) + "px");
+}
+function unmountLab() {
+  labMode = false;
+  const stage = document.getElementById("stage");
+  const hr = document.getElementById("hudR");
+  if (stage && canvas.parentElement !== stage) stage.insertBefore(canvas, hr);
+}
+
+function startLab() {
+  if (!labMode || typeof Battle === "undefined" || !playerSels.length) return;
+  const def = CHARACTERS[playerSels[labSel.slot].value];
+  labBattle_new(def);
+  const sks = skillsOf(def);
+  const sk = labSel.skill >= 0 ? sks[labSel.skill] : null;
+  const t = document.getElementById("labTitle");
+  if (t) t.textContent = "🧪 ห้องทดลองสกิล — " + def.name + " · " + (sk ? (sk.name || sk.type) : "ทุกสกิล");
+  const b = document.getElementById("labAll");
+  if (b) b.classList.toggle("on", labSel.skill === -1);
+}
+function labBattle_new(def) {
+  battle = new Battle(W, H, [def, DUMMY_DEF], Math.random, [0, 1]);
+  battle.layout = { mode: "1v1", n: 2, teams: [0, 1], labels: ["", ""], colors: null };
+  const [f, d] = battle.fighters;
+  f.x = W * 0.27; f.y = H * 0.55;
+  d.x = W * 0.73; d.y = H * 0.55;
+  d.vx = d.vy = 0;
+  labHome = { x: d.x, y: d.y };
+  particles = []; shards = []; floaters = []; slashFxList = []; ghosts = []; sonicBlasts = []; shake = 0;
+}
+// ทุกเฟรมในห้องทดลอง: เลือดเต็มเสมอ, หุ่นอยู่กับที่, ให้ใช้เฉพาะสกิลที่เลือก
+function labTick(dt) {
+  const b = battle;
+  if (!b || b.fighters.length < 2) return;
+  const [f, d] = b.fighters;
+  f.hp = f.maxHp; d.hp = d.maxHp;
+  d.vx = d.vy = 0;
+  const k = Math.min(1, dt * 2.5);
+  d.x += (labHome.x - d.x) * k;
+  d.y += (labHome.y - d.y) * k;
+  if (f.def.energyMax) f.energy = f.def.energyMax;
+  f.skills.forEach((sk, i) => {
+    const mine = labSel.skill === -1 || labSel.skill === i;
+    if (!mine) { f.cds[i] = 9999; return; }
+    if (f.cds[i] > Math.min(sk.cooldown, 3.2)) f.cds[i] = Math.min(sk.cooldown, 3.2);
+    if (sk.requires === "ego") { f.ego = true; f.egoUsed = true; }
+    if (sk.requires === "lunge") f.lunge = true;
+  });
+}
+
+on("labReplay", () => { startLab(); });
+on("labAll", () => { labSel = { slot: labSel.slot, skill: labSel.skill === -1 ? 0 : -1 }; refreshInfo(); });
 selMode.addEventListener("change", () => {
   sfx.unlock();
   sfx.click();
@@ -2417,6 +2675,7 @@ function loop(ts) {
   const dt = Math.min(0.033, (ts - lastTs) / 1000 || 0) * (paused ? 0 : speedMult);
   lastTs = ts;
   if (battle) {
+    if (labMode) labTick(dt);
     // แบ่งก้าวย่อย กันกระสุนเร็วทะลุตัว
     const steps = Math.max(1, Math.ceil(dt / 0.008));
     for (let i = 0; i < steps; i++) {
@@ -2426,7 +2685,7 @@ function loop(ts) {
   }
   updateEffects(dt);
   render();
-  if (battle) { updateHud(battle); updateMusic(battle); }
+  if (battle && !labMode) { updateHud(battle); updateMusic(battle); }
   requestAnimationFrame(loop);
 }
 
@@ -2492,7 +2751,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 42";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 43";
   }
 }
 
