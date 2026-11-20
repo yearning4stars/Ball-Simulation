@@ -306,6 +306,26 @@ function savePicks() {
 // ---------- หน้าต่างเลือกตัวละคร ----------
 let pickerEl = null;
 let pickerFor = -1;
+let pickerTab = "all";
+
+// หมวดหมู่ตัวละครในหน้าต่างเลือก: เพิ่มตัวละครใหม่ใส่ชื่อ (หรือ key) ใน match ของหมวดที่ต้องการ
+// ตัวที่ไม่ตรงหมวดไหนจะไปอยู่หมวด "อื่นๆ" ให้อัตโนมัติ
+const CHAR_CATEGORIES = [
+  { id: "general", label: "General", match: ["gunner", "dasher"] },
+  { id: "aoso", label: "Wheel of Aoso", match: ["funx", "johan"] },
+  { id: "solar", label: "Solar Project Moon", match: ["red mist", "redmist", "the red mist"] },
+  { id: "alien", label: "Alien Stage", match: ["luka"] },
+  { id: "bluelock", label: "Blue Lock", match: ["isagi"] },
+  { id: "rov", label: "RoV", match: ["florentino"] },
+];
+function categoryOf(key) {
+  const hay = (key + " " + (CHARACTERS[key].name || "")).toLowerCase().replace(/[_\-]/g, " ");
+  const compact = hay.replace(/\s+/g, "");
+  for (const c of CHAR_CATEGORIES) {
+    if (c.match.some((m) => hay.includes(m) || compact.includes(m.replace(/\s+/g, "")))) return c.id;
+  }
+  return "other";
+}
 
 function closePicker() {
   if (pickerEl) pickerEl.remove();
@@ -360,10 +380,8 @@ function openPicker(i) {
   head.appendChild(rnd);
   head.appendChild(x);
 
-  const grid = document.createElement("div");
-  grid.className = "pk-grid";
   const cur = playerSels[i].value;
-  for (const k of keys) {
+  const makeCard = (k) => {
     const d = CHARACTERS[k];
     const card = document.createElement("button");
     card.type = "button";
@@ -399,15 +417,59 @@ function openPicker(i) {
       card.appendChild(tag);
     }
     card.addEventListener("click", () => { choose(i, k); closePicker(); });
-    grid.appendChild(card);
+    return card;
+  };
+
+  // จัดตัวละครเข้าหมวด (หมวดที่ว่างจะไม่แสดง)
+  const cats = CHAR_CATEGORIES.map((c) => ({ id: c.id, label: c.label, keys: [] }));
+  const others = { id: "other", label: "อื่นๆ", keys: [] };
+  for (const k of keys) {
+    const id = categoryOf(k);
+    (cats.find((c) => c.id === id) || others).keys.push(k);
   }
+  const groups = cats.concat([others]).filter((c) => c.keys.length);
+  if (pickerTab !== "all" && !groups.some((g) => g.id === pickerTab)) pickerTab = "all";
+
+  const tabs = document.createElement("div");
+  tabs.className = "pk-tabs";
+  const body = document.createElement("div");
+  body.className = "pk-body";
+  const renderBody = () => {
+    body.innerHTML = "";
+    for (const g of groups) {
+      if (pickerTab !== "all" && pickerTab !== g.id) continue;
+      const sec = document.createElement("div");
+      sec.className = "pk-cat";
+      const h = document.createElement("div");
+      h.className = "pk-cat-title";
+      h.textContent = g.label + " (" + g.keys.length + ")";
+      const gr = document.createElement("div");
+      gr.className = "pk-grid";
+      for (const k of g.keys) gr.appendChild(makeCard(k));
+      sec.appendChild(h);
+      sec.appendChild(gr);
+      body.appendChild(sec);
+    }
+    tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.id === pickerTab));
+  };
+  for (const t of [{ id: "all", label: "ทั้งหมด" }].concat(groups)) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pk-tab";
+    b.dataset.id = t.id;
+    b.textContent = t.label;
+    b.addEventListener("click", () => { pickerTab = t.id; renderBody(); });
+    tabs.appendChild(b);
+  }
+  renderBody();
   box.appendChild(head);
-  box.appendChild(grid);
+  box.appendChild(tabs);
+  box.appendChild(body);
   ov.appendChild(box);
   document.body.appendChild(ov);
   pickerEl = ov;
   document.addEventListener("keydown", pickerKey);
-  const curCard = grid.querySelector(".cur");
+  const curCard = body.querySelector(".cur");
   if (curCard) curCard.focus();
 }
 
@@ -2207,7 +2269,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 38";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 39";
   }
 }
 

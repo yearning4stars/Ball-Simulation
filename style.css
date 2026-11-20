@@ -115,9 +115,18 @@ button.pick:hover { background: #20263d; }
 }
 .pk-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .pk-title { flex: 1; text-align: left; font-weight: 700; font-size: 1rem; }
+.pk-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.pk-tab {
+  background: #171b2b; color: #c3c9e0; font-weight: 600; font-size: 0.78rem;
+  border: 1px solid #2d3350; border-radius: 999px; padding: 4px 12px; cursor: pointer;
+}
+.pk-tab:hover { background: #1d2236; }
+.pk-tab.on { background: #3b4470; color: #fff; border-color: #6c78c0; }
+.pk-body { overflow-y: auto; padding: 2px; }
+.pk-cat { margin-bottom: 14px; }
+.pk-cat-title { text-align: left; font-weight: 700; font-size: 0.82rem; color: #9aa4d0; margin: 2px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #2d3350; }
 .pk-grid {
   padding: 2px;
-  overflow-y: auto;
   display: grid; gap: 10px;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 }
