@@ -753,6 +753,60 @@ const CHARACTERS = {
       },
     ],
   },
+
+  // ---------- Hatsu (Wheel of Aoso) ----------
+  // ธีมเลข 4: ทุกค่าอิงเลข 4 | ภาพ: assets/characters/hatsu/ (idle.png, shoot.png, squeeze.png) ยังไม่มีไฟล์ = วาดเป็นบอลสีแดงแทน
+  hatsu: {
+    name: "Hatsu",
+    color: "#ff5a5f",
+    hp: 144,
+    speed: 144,
+    radius: 44,
+    // พาสซีฟ "เลข 4": ดาเมจ +4 ต่อเงื่อนไข (ดูรายละเอียดใน battle.js _fourBonus)
+    //   เลือดตัวเอง <= 44 = +4 | เลือดตัวเอง <= 4 = +4 เพิ่ม | ในสนามมีใครเลือดเป็น 4/44/444 หรือมีกระสุนครบ 4 ลูกพอดี = +4
+    fourPower: 4,
+    frames: {
+      idle: "assets/characters/hatsu/idle.png",
+      shoot: "assets/characters/hatsu/shoot.png",
+      squeeze: "assets/characters/hatsu/squeeze.png",
+    },
+    skills: [
+      {
+        // สกิล 1: ยิงเลข 4 ออกไป 4 ตัวเป็นชุด ตัวละ 4 ดาเมจ
+        type: "projectile",
+        name: "Four Shot",
+        icon: "4️⃣",
+        desc: "ยิงเลข 4 ออกไป 4 ตัว",
+        cooldown: 4,
+        initialCooldown: 1.2,
+        frame: "shoot",
+        duration: 1.4,
+        fireDelay: 0.2,
+        count: 4,
+        interval: 0.25,
+        spread: 0.2,
+        damage: 4,
+        projectileSpeed: 444,
+        projectileRadius: 14,
+        shape: "four",
+        knockback: 80,
+        sound: "shoot",
+      },
+      {
+        // สกิล 2: บีบแฮมสเตอร์ ฟื้นเลือดต่อเนื่องตลอดท่า (ใช้เมื่อเลือดต่ำกว่า 85%)
+        type: "squeeze",
+        name: "บีบแฮมสเตอร์",
+        icon: "🐹",
+        desc: "บีบแฮมสเตอร์เพื่อฟื้นเลือด",
+        cooldown: 14,
+        initialCooldown: 6,
+        frame: "squeeze",
+        duration: 2.4,
+        heal: 44,
+        useBelow: 0.85,
+      },
+    ],
+  },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)

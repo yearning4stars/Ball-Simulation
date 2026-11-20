@@ -349,6 +349,18 @@ class Battle {
           c.fired = true;
           this._fireWave(f, enemy, sk);
         }
+      } else if (sk.type === "squeeze") {
+        // บีบแฮมสเตอร์: ฟื้นเลือดต่อเนื่องตลอดท่า (รวม heal ทั้งท่า) แจ้งเลขฟื้นทุก 0.4 วินาที
+        const h = ((sk.heal || 0) * dt) / (sk.duration || 1);
+        f.hp = Math.min(f.maxHp, f.hp + h);
+        c.acc = (c.acc || 0) + h;
+        c.tick = (c.tick || 0) + dt;
+        if (c.tick >= 0.4 || c.t >= sk.duration) {
+          if (c.acc >= 0.5) this.events.push({ type: "heal", x: f.x, y: f.y, amount: Math.round(c.acc) });
+          this.events.push({ type: "squeeze", x: f.x, y: f.y });
+          c.acc = 0;
+          c.tick = 0;
+        }
       } else if (sk.type === "slash") {
         this._slashRun(f, enemy, sk, c, dt);
       } else if (sk.type === "summon") {
@@ -420,6 +432,7 @@ class Battle {
       if (s2.type === "rewind" && !this._rewindWorthIt(f, s2)) continue;
       // Lunge (โจมตีปกติ) ใช้ได้เมื่อพร้อม และไม่ใช้ระหว่างวงจรรำ (ยังมีดอกไม้ให้เก็บ หรือ Triple Threat พร้อมแทง)
       if (s2.requires === "lunge" && (!f.lunge || this.flowers.some((fl) => fl.owner === f) || this._stabReady(f, enemy))) continue;
+      if (s2.type === "squeeze" && f.hp > f.maxHp * (s2.useBelow || 0.85)) continue; // เลือดยังเกือบเต็ม: ไม่บีบ
       if (s2.type === "summon" && !this._summonChoices(f, s2).length) continue; // ไม่มีเพื่อนให้เรียก (ต้องสู้กับคนนั้นอยู่)
       if (s2.requires === "ego" && !f.ego) continue; // ท่าของ E.G.O. ใช้ได้หลังปรากฏเท่านั้น
       if (s2.energyCost && f.energy < s2.energyCost) continue; // พลังงานไม่พอ
@@ -1783,7 +1796,24 @@ class Battle {
 
   // ดาเมจที่ผู้โจมตีทำได้จริง: ความมั่นใจลด (mind สูง) ดาเมจลดสูงสุด 35%
   _out(f, dmg) {
-    return Math.max(1, Math.round(dmg * (1 - 0.35 * (f.mind / 100))));
+    return Math.max(1, Math.round((dmg + this._fourBonus(f)) * (1 - 0.35 * (f.mind / 100))));
+  }
+
+  // Hatsu (def.fourPower): ดาเมจเพิ่มเมื่อมี "4" เกี่ยวข้อง (บวกแบบแบน ก่อนหักสติ)
+  //   +4 เลือดตัวเอง <= 44 | +4 อีกชั้น เลือด <= 4 | +4 ถ้าในสนามมีใครเลือดเป็น 4 / 44 / 444 หรือมีกระสุนในสนามครบ 4 ลูกพอดี
+  _fourBonus(f) {
+    if (!f.def.fourPower) return 0;
+    const p = f.def.fourPower;
+    const is4 = (v) => { const r = Math.round(v); return r === 4 || r === 44 || r === 444; };
+    let n = 0;
+    if (f.hp <= 44) n += p;
+    if (f.hp <= 4) n += p;
+    if (this.fighters.some((g) => g.hp > 0 && is4(g.hp)) || this.projectiles.length === 4) n += p;
+    if (n !== (f._four || 0)) {
+      f._four = n;
+      if (n > 0) this.events.push({ type: "four", x: f.x, y: f.y, bonus: n });
+    }
+    return n;
   }
 
   _hurtMind(f, amount, x, y) {

@@ -313,7 +313,7 @@ let pickerTab = "all";
 // ตัวที่ไม่ตรงหมวดไหนจะไปอยู่หมวด "อื่นๆ" ให้อัตโนมัติ
 const CHAR_CATEGORIES = [
   { id: "general", label: "General", match: ["gunner", "dasher"] },
-  { id: "aoso", label: "Wheel of Aoso", match: ["funx", "johan", "solar"] },
+  { id: "aoso", label: "Wheel of Aoso", match: ["funx", "johan", "solar", "hatsu"] },
   { id: "projectmoon", label: "Project Moon", match: ["red mist", "redmist", "the red mist"] },
   { id: "alien", label: "Alien Stage", match: ["luka"] },
   { id: "bluelock", label: "Blue Lock", match: ["isagi"] },
@@ -390,6 +390,7 @@ function openPicker(i) {
     card.className = "pk-card" + (k === cur ? " cur" : "");
     card.style.setProperty("--c", d.color);
     const img = document.createElement("img");
+    img.onerror = () => { img.style.visibility = "hidden"; };
     img.src = d.frames.idle;
     img.alt = d.name;
     const nm = document.createElement("div");
@@ -511,6 +512,7 @@ function rebuildPlayers() {
     btn.appendChild(nm);
     const refresh = () => {
       const d = CHARACTERS[sel.value];
+      thumb.onerror = () => { thumb.style.visibility = "hidden"; };
       thumb.src = d.frames.idle;
       nm.textContent = d.name;
       btn.style.borderColor = d.color;
@@ -708,7 +710,7 @@ loadSoundConfig();
 const TYPE_NAME = {
   projectile: "ยิงกระสุน", dash: "พุ่งชน", shockwave: "คลื่นกระแทก", timeerase: "ตัดเวลา", rewind: "ย้อนเวลา",
   timeaccel: "เร่งเวลา", timeslow: "ชะลอเวลา", ballkick: "เตะบอล", slash: "ฟันรอบตัว", summon: "เรียกเพื่อน",
-  triplethreat: "คอมโบ 3 ท่า", duel: "ดวล", metavision: "เห็นอนาคต",
+  triplethreat: "คอมโบ 3 ท่า", duel: "ดวล", metavision: "เห็นอนาคต", squeeze: "ฟื้นเลือด",
 };
 const STAT_LABELS = ["พลังชีวิต", "ความเร็ว", "ดาเมจต่อครั้ง", "ดาเมจต่อวินาที", "ระยะโจมตี", "ควบคุม"];
 const DUMMY_DEF = { __dummy: true, name: "หุ่นฝึก", color: "#8a93b5", hp: 99999, speed: 0, radius: 34, frames: { idle: "" }, skills: [] };
@@ -814,6 +816,7 @@ function skillDetail(sk) {
   }
   if (sk.stunNear) parts.push("สตั้น " + sk.stunNear + " วิ");
   if (sk.mindDamage || sk.waveMind) parts.push("สติ −" + (sk.waveMind || sk.mindDamage));
+  if (sk.heal && sk.type === "squeeze") parts.push("ฟื้น " + sk.heal + " HP ตลอดท่า (ใช้เมื่อเลือด < " + Math.round((sk.useBelow || 0.85) * 100) + "%)");
   if (sk.knockback) parts.push("ผลัก " + sk.knockback);
   if (sk.bleed) parts.push("เลือดไหล " + sk.bleed + " วิ");
   if (sk.slowDuration) parts.push("ชะลอ " + sk.slowDuration + " วิ");
@@ -840,6 +843,7 @@ function refreshInfo() {
     const head = document.createElement("div");
     head.className = "card-head";
     const img = document.createElement("img");
+    img.onerror = () => { img.style.visibility = "hidden"; };
     img.src = def.frames.idle; img.alt = "";
     const tt = document.createElement("div");
     tt.innerHTML = '<div class="card-name"></div><div class="card-sub"></div>';
@@ -932,7 +936,8 @@ function labTick(dt) {
   const b = battle;
   if (!b || b.fighters.length < 2) return;
   const [f, d] = b.fighters;
-  f.hp = f.maxHp; d.hp = d.maxHp;
+  const wantsHeal = f.skills.some((sk, i) => sk.type === "squeeze" && (labSel.skill === -1 || labSel.skill === i));
+  f.hp = wantsHeal ? f.maxHp * 0.5 : f.maxHp; d.hp = d.maxHp;
   d.vx = d.vy = 0;
   const k = Math.min(1, dt * 2.5);
   d.x += (labHome.x - d.x) * k;
@@ -1179,6 +1184,11 @@ function handleEvents(events) {
     } else if (e.type === "duel") {
       spawnParticles(e.x, e.y, "#ffd65a", 26, 340);
       shake = Math.max(shake, 8);
+    } else if (e.type === "four") {
+      floaters.push({ x: e.x, y: e.y - 64, text: "4! ดาเมจ +" + e.bonus, life: 1.1, color: "#ff8f5a", size: 26 });
+      spawnParticles(e.x, e.y, "#ff5a5f", 10, 240);
+    } else if (e.type === "squeeze") {
+      spawnParticles(e.x, e.y, "#ffd0e0", 5, 140);
     } else if (e.type === "heal") {
       floaters.push({ x: e.x, y: e.y - 50, text: "+" + e.amount, life: 0.8, color: "#6bff9e", size: 24 });
     } else if (e.type === "adStack") {
@@ -1945,6 +1955,39 @@ function drawMetaThreats(f) {
 }
 
 // ---------- กรอบคำพูด (กระสุนบั่นทอนสติ) ----------
+// กระสุนเลข 4 ของ Hatsu: ตัวเลข 4 ตัวหนาเรืองแสงหมุนเล็กน้อย
+function drawFour(p) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(Math.sin(p.t * 6 + p.phase) * 0.18);
+  ctx.shadowColor = "#ff5a5f"; ctx.shadowBlur = 16;
+  ctx.font = "900 " + Math.round(p.r * 2.6) + "px " + FONT;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineWidth = 5; ctx.strokeStyle = "#5a0d12";
+  ctx.strokeText("4", 0, 0);
+  ctx.fillStyle = "#fff1f1";
+  ctx.fillText("4", 0, 0);
+  ctx.restore();
+}
+
+// แฮมสเตอร์ที่ Hatsu กำลังบีบ: ตัวอิโมจิถูกบีบยืดหดเป็นจังหวะ
+function drawHamster(f) {
+  const t = f.cast.t;
+  const sq = 1 + Math.sin(t * 14) * 0.18;
+  ctx.save();
+  ctx.translate(f.x + f.facing * f.r * 0.95, f.y - f.r * 0.15);
+  ctx.scale(1 / sq, sq);
+  ctx.font = Math.round(f.r * 0.95) + "px " + FONT;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("🐹", 0, 0);
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 7);
+  ctx.font = "16px " + FONT; ctx.textAlign = "center";
+  ctx.fillText("💚", f.x + f.facing * f.r * 0.5, f.y - f.r - 8 - ((t * 30) % 14));
+  ctx.restore();
+}
+
 function drawWord(p) {
   ctx.save();
   ctx.translate(p.x, p.y);
@@ -2224,7 +2267,7 @@ function panelSide(i) {
 // ไอคอนสกิล: ใส่ icon: "🔥" ในสกิลใน characters.js เพื่อกำหนดเอง ไม่ใส่ = เลือกตามชนิดสกิล
 const SKILL_ICONS = {
   projectile: "🎯", dash: "💨", shockwave: "🌊", timeerase: "⏳", rewind: "⏪",
-  timeaccel: "⚡", timeslow: "🐌", ballkick: "⚽",
+  timeaccel: "⚡", timeslow: "🐌", ballkick: "⚽", squeeze: "🐹",
 };
 function skillIcon(sk) {
   if (sk.icon) return sk.icon;
@@ -2572,6 +2615,7 @@ function render() {
       if (f === battle.eraser) ctx.filter = "none";
       if (f.weapon && !f.disarmed) (f.weapon.type === "compass" ? drawCompass(f) : drawKatana(f));
       if (f.cast && f.cast.sk.type === "timeaccel") drawAccelAura(f);
+      if (f.cast && f.cast.sk.type === "squeeze") drawHamster(f);
       if (f.cast && f.cast.sk.type === "metavision") drawMetaAura(f);
       if (f.ego) drawEgoAura(f);
       if (f.bleedT > 0) drawBleed(f);
@@ -2622,6 +2666,7 @@ function render() {
       gray(battle.isDazed(p.owner));
       if (p.shape === "note") { drawNote(p); gray(false); continue; }
       if (p.shape === "text") { drawWord(p); gray(false); continue; }
+      if (p.shape === "four") { drawFour(p); gray(false); continue; }
       if (p.shape === "soccer") { drawSoccer(p); gray(false); continue; }
       if (p.shape === "dart") { drawDart(p); gray(false); continue; }
       if (p.shape === "basketball") { drawBasketball(p); gray(false); continue; }
@@ -2751,7 +2796,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 43";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 44";
   }
 }
 
