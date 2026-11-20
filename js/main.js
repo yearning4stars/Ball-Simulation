@@ -317,6 +317,7 @@ const CHAR_CATEGORIES = [
   { id: "alien", label: "Alien Stage", match: ["luka"] },
   { id: "bluelock", label: "Blue Lock", match: ["isagi"] },
   { id: "rov", label: "RoV", match: ["florentino"] },
+  { id: "minecraft", label: "Minecraft", match: ["warden"] },
 ];
 function categoryOf(key) {
   const hay = (key + " " + (CHARACTERS[key].name || "")).toLowerCase().replace(/[_\-]/g, " ");
@@ -2377,7 +2378,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 40";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 41";
   }
 }
 

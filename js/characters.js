@@ -675,6 +675,79 @@ const CHARACTERS = {
       },
     ],
   },
+
+  // ---------- Warden (Minecraft) แฟนเกม ----------
+  // ภาพ (ใส่เองใน assets/characters/warden/ หันหน้าไปทางขวา PNG พื้นหลังโปร่งใส):
+  //   idle.png  ท่ายืนปกติ | boom.png ท่าอกเปิดชาร์จ Sonic Boom | smash.png ท่าตะปบ | roar.png ท่าคำราม (Darkness)
+  //   ถ้ายังไม่มีไฟล์ เกมจะวาดเป็นบอลสีแทน เลยเทสสกิลได้ก่อนมีภาพ
+  // ตัวเลขเป็นค่าเสนอเริ่มต้น (ตึก ช้า ดาเมจหนัก) ปรับเองได้ตามใจ
+  warden: {
+    name: "Warden",
+    color: "#2de0d0", // ฟ้าเขียวเรืองแสงแบบ Sculk (ใช้กับชื่อและเอฟเฟกต์)
+    hp: 170,
+    speed: 135,
+    radius: 46,
+    frames: {
+      idle: "assets/characters/warden/idle.png",
+      boom: "assets/characters/warden/boom.png",
+      smash: "assets/characters/warden/smash.png",
+      roar: "assets/characters/warden/roar.png",
+    },
+    skills: [
+      {
+        // สกิล 1: Sonic Boom ชาร์จแล้วปล่อยคลื่นเสียงเส้นแคบ เร็วและแรงมาก (ในเกมจริงทะลุเกราะ ที่นี่ = ดาเมจเกือบเท่ากันตลอดระยะ)
+        type: "shockwave",
+        name: "Sonic Boom",
+        icon: "🔊",
+        cooldown: 6.5,
+        initialCooldown: 2.5,
+        frame: "boom",
+        duration: 1.1,
+        fireDelay: 0.8, // ชาร์จก่อนปล่อย
+        damage: 26,
+        damageFar: 20,
+        waveSpeed: 900,
+        waveRange: 900,
+        waveArcDeg: 22,
+        knockback: 420,
+        projectileEffect: "stop", // ทะลวงกระสุนศัตรูที่ขวางทาง
+        sound: "wave",
+      },
+      {
+        // สกิล 2: ตะปบ/ทุบ พุ่งเข้าหาศัตรูระยะใกล้ ผลักกระเด็นแรง
+        type: "dash",
+        name: "ตะปบทุบ",
+        icon: "👊",
+        cooldown: 3.4,
+        frame: "smash",
+        duration: 0.6,
+        speedMult: 2.4,
+        homing: 1.6,
+        damage: 18,
+        knockback: 540,
+      },
+      {
+        // สกิล 3: Darkness คำรามส่งก้อนความมืด ดาเมจเลือดน้อย แต่บั่นทอนสติ -> ศัตรูเล็งเพี้ยน คูลดาวน์ช้าลง (ตรงกับตาบอดของ Darkness)
+        type: "projectile",
+        name: "Darkness",
+        icon: "🌑",
+        cooldown: 8,
+        initialCooldown: 4,
+        frame: "roar",
+        duration: 0.8,
+        fireDelay: 0.3,
+        damage: 3,
+        mindDamage: 55,
+        projectileSpeed: 280,
+        projectileRadius: 32,
+        wobble: 12,
+        wobbleFreq: 5,
+        knockback: 60,
+        indestructible: true,
+        sound: "wave",
+      },
+    ],
+  },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
