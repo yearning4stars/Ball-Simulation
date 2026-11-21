@@ -969,6 +969,7 @@ function labTick(dt) {
   d.x += (labHome.x - d.x) * k;
   d.y += (labHome.y - d.y) * k;
   if (f.def.energyMax) f.energy = f.def.energyMax;
+  if (f.def.blind) f.hear = { x: d.x, y: d.y, age: 0 }; // ห้องทดลอง: ให้ตาบอดได้ยินหุ่นเป้าเสมอ
   // สาธิตแฮมสเตอร์: การบีบครั้งที่ 2, 4, ... จะโดนดาเมจกลางท่า ให้เห็นแฮมสเตอร์หลุดวิ่งหนี
   if (f.cast && f.cast.sk.type === "squeeze" && f.cast.t > 1.2) {
     if (f.cast.demo === undefined) f.cast.demo = (labSqueezeN++ % 2) === 1;
@@ -1072,6 +1073,10 @@ function handleEvents(events) {
       shake = Math.max(shake, e.style === "roar" ? 9 : 5);
       if (e.style === "roar") screenFlash = Math.max(screenFlash, 0.12);
       sfx.wave();
+    } else if (e.type === "hear") {
+      // วอร์เดนได้ยินเสียง: วงคลื่นเสียงจางๆ ที่ต้นเสียง + วงหูฟังรอบตัว
+      spawnParticles(e.x, e.y, "#2de0d0", 6, 120);
+      sonicBlasts.push({ x: e.x, y: e.y, ang: 0, t: 0.35 });
     } else if (e.type === "sonicHit") {
       // Sonic Boom ถึงเป้า: ระเบิดวงคลื่นสีฟ้าเขียว + เศษประกาย + จอสั่น
       spawnParticles(e.x, e.y, "#2de0d0", 30, 420);
@@ -1473,12 +1478,13 @@ const BALL_STYLES = {
     body: "#0d2532",
     rim: "#2de0d0",
     eyes: "none",
-    back(c, r, t) {
+    back(c, r, t, o) {
+      const hornT = (o && o.horn) || 0; // >0 = เพิ่งได้ยินเสียง เขากระตุกเอนไปทางเสียง
       // เขา (horn) บนหัวสองข้าง: ไม้เลื้อย Sculk พิกเซลโค้งชี้ขึ้น-ออก มีกิ่งแยก ปลายสว่าง
       const lerp = (a, b, k) => Math.round(a + (b - a) * k);
       for (const sx of [-1, 1]) {
-        const sway = Math.sin(t * 2 + sx) * r * 0.03;
-        const pos = (k) => [sx * r * (0.5 + 0.85 * k - 0.15 * k * k) + sway * k, -r * (0.9 + 0.62 * k - 0.1 * k * k)];
+        const sway = Math.sin(t * 2.4 + sx) * r * 0.1 + hornT * r * (0.32 + 0.12 * Math.sin(t * 38 + sx * 2)); // แกว่งเบาๆ + กระตุกไปข้างหน้าเมื่อได้ยิน
+        const pos = (k) => [sx * r * (0.5 + 0.85 * k - 0.15 * k * k) + sway * k * k * 2.2, -r * (0.9 + 0.62 * k - 0.1 * k * k)];
         const N = 9;
         for (let i = 0; i <= N; i++) {
           const k = i / N, [x, y] = pos(k);
@@ -1578,7 +1584,7 @@ function drawCodeBall(c, key, def, r, o) {
   const st = BALL_STYLES[key] || {};
   const t = o.t !== undefined ? o.t : performance.now() / 1000;
   const base = st.body || def.color;
-  if (st.back) { c.save(); st.back(c, r, t); c.restore(); }
+  if (st.back) { c.save(); st.back(c, r, t, o); c.restore(); }
   if (o.casting) { // กำลังใช้สกิล: ออร่าเรืองรอบตัว
     c.save(); c.globalAlpha = 0.35 + 0.25 * Math.sin(t * 16); c.strokeStyle = def.color; c.lineWidth = r * 0.16;
     c.beginPath(); c.arc(0, 0, r * 1.12, 0, Math.PI * 2); c.stroke(); c.restore();
@@ -1636,7 +1642,7 @@ function drawFighter(f, key) {
   ctx.scale(f.facing, 1);
 
   if (spriteMode === "ball") {
-    drawCodeBall(ctx, key, f.def, f.r, { flash: f.hitFlash > 0, casting: !!f.cast, hp: Math.ceil(f.hp), facing: f.facing });
+    drawCodeBall(ctx, key, f.def, f.r, { flash: f.hitFlash > 0, casting: !!f.cast, hp: Math.ceil(f.hp), facing: f.facing, horn: f.hornT || 0 });
   } else if (img) {
     if (f.hitFlash > 0) {
       // วาบขาวตอนโดนตี: ทาสีขาวบนสำเนาของภาพ (canvas แยก) เพื่อให้ทาเฉพาะส่วนตัวละคร ไม่ทาทั้งกล่อง
@@ -3124,7 +3130,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 51";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 52";
   }
 }
 

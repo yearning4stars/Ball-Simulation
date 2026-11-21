@@ -106,6 +106,55 @@ class Battle {
     return best || this.fighters.find((g) => g !== f && g.hp > 0) || f;
   }
 
+  // ---------- ตาบอด (def.blind): ได้ยินเสียง/แรงสั่นแล้วหันไปหาที่มาของเสียง ----------
+  // เสียง = เหตุการณ์ที่มีเสียง (ยิง พุ่ง คลื่น โดนตี ฯลฯ) นอกตัวเอง > กระสุนศัตรูที่บินอยู่ > แรงสั่นสะเทือนเมื่อศัตรูอยู่ใกล้ (def.senseRange)
+  _listen(evs, dt) {
+    const SOUNDS = ["muzzle", "dash", "wave", "hit", "sonicHit", "deflect", "kick", "slash", "slashFx", "hamsterBump", "waveStun", "flower", "bounce", "erase", "triple", "guestStrike", "summon"];
+    for (const f of this.fighters) {
+      if (!f.def.blind || f.hp <= 0) continue;
+      let src = null;
+      for (const e of evs) {
+        if (!SOUNDS.includes(e.type) || e.x === undefined) continue;
+        if (Math.hypot(e.x - f.x, e.y - f.y) < f.r * 1.4) continue; // เสียงของตัวเอง
+        src = { x: e.x, y: e.y };
+      }
+      if (!src) {
+        let bd = 700;
+        for (const p of this.projectiles) {
+          if (p.owner === f || p.owner.team === f.team) continue;
+          const d = Math.hypot(p.x - f.x, p.y - f.y);
+          if (d < bd) { bd = d; src = { x: p.x, y: p.y }; }
+        }
+      }
+      if (!src) {
+        const range = f.def.senseRange || 300;
+        let bd = range;
+        for (const g of this._foes(f)) {
+          const d = Math.hypot(g.x - f.x, g.y - f.y);
+          if (d < bd) { bd = d; src = { x: g.x, y: g.y }; }
+        }
+      }
+      if (src) {
+        const fresh = !f.hear || f.hear.age > 0.5 || Math.hypot(src.x - f.hear.x, src.y - f.hear.y) > 90;
+        f.hear = { x: src.x, y: src.y, age: 0 };
+        if (fresh) {
+          f.hornT = 0.7;
+          this.events.push({ type: "hear", x: src.x, y: src.y, wx: f.x, wy: f.y });
+        }
+      } else if (f.hear) {
+        f.hear.age += dt;
+        if (f.hear.age > (f.def.hearMemory || 3)) f.hear = null;
+      }
+      if (f.hornT > 0) f.hornT = Math.max(0, f.hornT - dt);
+    }
+  }
+
+  // เป้าหมายจำลองที่ตำแหน่งเสียง (คัดลอกคุณสมบัติจากศัตรูจริงไว้ ให้โค้ดสกิลอ่านค่าได้ตามปกติ)
+  _soundTarget(f, real) {
+    if (f.hear) return Object.assign({}, real, { x: f.hear.x, y: f.hear.y, vx: 0, vy: 0, knockX: 0, knockY: 0, r: 18 });
+    return Object.assign({}, real, { x: f.x + f.facing * 120, y: f.y, vx: 0, vy: 0, knockX: 0, knockY: 0, r: 18 });
+  }
+
   isDazed(f) {
     return this.dazedList.includes(f);
   }
@@ -182,6 +231,7 @@ class Battle {
   }
 
   update(dt) {
+    const heardEvents = this.events.slice(); // เหตุการณ์ (เสียง) ของก้าวก่อนหน้า ให้ตัวละครตาบอลฟัง
     this.events.length = 0;
     if (this.winner !== null) {
       // จบแมตช์แล้ว: คนชนะยังเด้งไปมาต่อ ส่วนคนแพ้ไม่ถูกคำนวณอีก (ตัววาดจะทำให้แตกกระจาย)
@@ -210,10 +260,12 @@ class Battle {
     this.dazedList = this.eraser && this.eraser.cast.dazedList ? this.eraser.cast.dazedList.filter((g) => g.hp > 0) : [];
     // ชะลอเวลา (Johan): คนอื่นที่อยู่ในวงจะเดินช้าลง / เร่งเวลา: ผู้ใช้เองเดินเร็วขึ้น
     this.slower = this.fighters.find((f) => f.cast && f.cast.sk.type === "timeslow") || null;
+    this._listen(heardEvents, dt);
     for (const f of this.fighters) {
       if (f.hp <= 0) continue;
       let enemy = this._target(f);
       if (this.isDazed(f) && this.phantom) enemy = this.phantom;
+      if (f.def.blind) enemy = this._soundTarget(f, enemy); // ตาบอด: เล็ง/เดินเข้าหา "ที่มาของเสียง" แทนตัวศัตรู
       f.facing = enemy.x >= f.x ? 1 : -1;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
       // เวลาที่ตัวนี้ "รู้สึก": ถูกชะลอ (ts) และ/หรือเร่งเอง (rate)
@@ -274,7 +326,7 @@ class Battle {
         f.dashTimer = 0;
       } else {
         if (!f.cast && !this._chaseFlowers(f, enemy, fdt)) this._approach(f, enemy, fdt); // ว่างๆ: วิ่งไปเก็บดอกไม้ของตัวเอง ไม่งั้นเข้าหาศัตรูให้อยู่ในระยะสกิล
-        this._updateSkill(f, enemy, cdt);
+        if (!(f.def.blind && !f.hear && !f.cast)) this._updateSkill(f, enemy, cdt); // ตาบอดและยังไม่ได้ยินอะไร: ยังไม่ร่ายสกิล
       }
       this._move(f, fdt);
     }

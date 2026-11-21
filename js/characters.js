@@ -684,7 +684,12 @@ const CHARACTERS = {
     color: "#2de0d0", // ฟ้าเขียวเรืองแสงแบบ Sculk (ใช้กับชื่อและเอฟเฟกต์)
     hp: 170,
     speed: 135,
-    radius: 46,
+    radius: 64, // ตัวใหญ่
+    // ตาบอด: เล็งไปที่ "เสียง" (ยิง พุ่ง คลื่น โดนตี กระสุนที่บินอยู่) แทนตัวศัตรู + รับรู้แรงสั่นเมื่อศัตรูอยู่ใกล้ senseRange px
+    // จำที่มาของเสียงล่าสุดไว้ hearMemory วินาที ถ้าเงียบนานกว่านั้นจะยังไม่ร่ายสกิล
+    blind: true,
+    senseRange: 320,
+    hearMemory: 3,
     frames: {
       idle: "assets/characters/warden/idle.png",
       boom: "assets/characters/warden/boom.png",
