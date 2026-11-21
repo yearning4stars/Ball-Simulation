@@ -350,6 +350,58 @@ function randomizeAll() {
   playerSels.forEach((_, i) => choose(i, keys[Math.floor(Math.random() * keys.length)]));
 }
 
+// ---------- หน้าต่างเลือกสกิน (เหมือนหน้าต่างเลือกตัวละคร) ----------
+function openSkinPicker(i) {
+  closePicker();
+  const sel = playerSels[i];
+  if (!sel) return;
+  pickerFor = i;
+  const key = sel.value, d = CHARACTERS[key];
+  const ov = document.createElement("div");
+  ov.className = "pk-overlay";
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) closePicker(); });
+  const box = document.createElement("div");
+  box.className = "pk-box pk-box-sm";
+  box.setAttribute("role", "dialog");
+  const head = document.createElement("div");
+  head.className = "pk-head";
+  const title = document.createElement("div");
+  title.className = "pk-title";
+  title.textContent = "เลือกสกิน — " + d.name + " (" + layout.labels[i] + ")";
+  if (layout.colors) title.style.color = layout.colors[i];
+  const x = document.createElement("button");
+  x.type = "button"; x.className = "secondary"; x.textContent = "✕"; x.title = "ปิด (Esc)";
+  x.addEventListener("click", closePicker);
+  head.appendChild(title); head.appendChild(x);
+  const body = document.createElement("div");
+  body.className = "pk-body";
+  const gr = document.createElement("div");
+  gr.className = "pk-grid";
+  for (const id of skinsOf(key)) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "pk-card" + (id === sel.skin ? " cur" : "");
+    card.style.setProperty("--c", d.color);
+    const img = document.createElement("img");
+    img.onerror = () => { img.style.visibility = "hidden"; };
+    img.src = thumbSrc(key, id); img.alt = SKINS[id].name;
+    const nm = document.createElement("div");
+    nm.className = "pk-name"; nm.textContent = SKINS[id].icon + " " + SKINS[id].name;
+    const st = document.createElement("div");
+    st.className = "pk-stat"; st.textContent = id === sel.skin ? "กำลังใช้อยู่" : "กดเพื่อใช้สกินนี้";
+    card.appendChild(img); card.appendChild(nm); card.appendChild(st);
+    card.addEventListener("click", () => { setSkin(i, id); closePicker(); });
+    gr.appendChild(card);
+  }
+  body.appendChild(gr);
+  box.appendChild(head); box.appendChild(body);
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  pickerEl = ov;
+  document.addEventListener("keydown", pickerKey);
+  const cur = body.querySelector(".cur"); if (cur) cur.focus();
+}
+
 function openPicker(i) {
   closePicker();
   pickerFor = i;
@@ -522,23 +574,18 @@ function rebuildPlayers() {
       btn.style.borderColor = d.color;
     };
     refresh();
-    // เลือกสกิน: รายการสกินของตัวละครที่เลือกอยู่ในช่องนี้
-    const skinSel = document.createElement("select");
-    skinSel.className = "skin-sel";
-    skinSel.title = "เลือกสกินตัวละคร";
+    // ปุ่มสกิน: เปิดหน้าต่างเลือกสกินของตัวละครในช่องนี้
+    const skinBtn = document.createElement("button");
+    skinBtn.type = "button";
+    skinBtn.className = "secondary skin-btn";
+    skinBtn.title = "เลือกสกินตัวละคร";
     const fillSkins = () => {
-      skinSel.innerHTML = "";
-      for (const id of skinsOf(sel.value)) {
-        const o = document.createElement("option");
-        o.value = id; o.textContent = SKINS[id].icon + " " + SKINS[id].name;
-        skinSel.appendChild(o);
-      }
       sel.skin = fixSkin(sel.value, sel.skin);
-      skinSel.value = sel.skin;
-      skinSel.hidden = skinSel.options.length < 2;
+      skinBtn.textContent = SKINS[sel.skin].icon + " " + SKINS[sel.skin].name;
+      skinBtn.hidden = skinsOf(sel.value).length < 2;
     };
     fillSkins();
-    skinSel.addEventListener("change", () => { sfx.unlock(); sfx.click(); setSkin(i, skinSel.value); });
+    skinBtn.addEventListener("click", () => { sfx.unlock(); sfx.click(); openSkinPicker(i); });
     sel.addEventListener("change", () => {
       fillSkins();
       refresh();
@@ -554,7 +601,7 @@ function rebuildPlayers() {
     label.appendChild(lt);
     label.appendChild(sel);
     label.appendChild(btn);
-    label.appendChild(skinSel);
+    label.appendChild(skinBtn);
     playersBox.appendChild(label);
     if ((layout.mode === "1v1" && i === 0) || (layout.mode === "2v2" && i === 1)) {
       const vs = document.createElement("span");
@@ -929,7 +976,9 @@ function mountLab() {
   const two = playerSels.length === 2;
   const pageW = (infoEl.parentElement ? infoEl.parentElement.clientWidth : window.innerWidth) || window.innerWidth;
   const avail = two && window.innerWidth > 900 ? pageW - 2 * 250 - 40 : pageW - 36;
-  labWrap.style.setProperty("--arena", Math.floor(Math.max(260, Math.min(520, avail))) + "px");
+  // สนามทดลองเล็กลงให้พอดีจอเหมือนเกมจริง: จำกัดตามความสูงจอ (เผื่อแถบควบคุมด้านบน ชื่อห้อง ปุ่มด้านล่าง) ไม่ให้ต้องเลื่อน
+  const byH = (window.innerHeight || 800) - 300;
+  labWrap.style.setProperty("--arena", Math.floor(Math.max(220, Math.min(430, avail, byH))) + "px");
 }
 function unmountLab() {
   labMode = false;
@@ -3200,7 +3249,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 56";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 57";
   }
 }
 
@@ -3210,6 +3259,7 @@ checkVersions();
 fitCanvas();
 if (typeof window !== "undefined" && window.addEventListener) {
   window.addEventListener("resize", fitCanvas);
+  window.addEventListener("resize", () => { if (labMode) mountLab(); });
   window.addEventListener("orientationchange", () => setTimeout(fitCanvas, 100));
 }
 Promise.all([loadAllImages(), loadFonts()]).then(() => {
