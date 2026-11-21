@@ -1265,7 +1265,18 @@ function handleEvents(events) {
         shake = Math.max(shake, e.three ? 9 : 4);
         spawnParticles(e.x, e.y + 20, "#ff8a1f", e.three ? 26 : 14, 320);
       }
-      floaters.push({ x: e.x, y: e.y + 60, text: e.scored ? (e.three ? "ลง! 3 แต้ม!" : "ลง! 2 แต้ม") : "พลาด!", life: 1.1, color: e.scored ? "#ffb347" : "#b8c0d8", size: e.scored ? 34 : 26 });
+      floaters.push({ x: e.x, y: e.y + 60, text: e.scored ? (e.three ? "ลง! 3 แต้ม!" : e.dunk === "dunk" ? "DUNK! 2 แต้ม" : "ลง! 2 แต้ม") : "ชนห่วง!", life: 1.1, color: e.scored ? "#ffb347" : "#b8c0d8", size: e.scored ? 34 : 26 });
+    } else if (e.type === "rim") {
+      spawnParticles(e.x, e.y, "#ff6a2a", 8, 220);
+      shake = Math.max(shake, 3);
+      sfx.deflect();
+    } else if (e.type === "dunk") {
+      spawnParticles(e.x, e.y + 10, "#ffd27a", e.style === "dunk" ? 22 : 10, 300);
+      shake = Math.max(shake, e.style === "dunk" ? 8 : 3);
+      floaters.push({ x: e.x, y: e.y + 100, text: e.style === "dunk" ? "แดงก!" : "เลย์อัพ!", life: 0.9, color: "#ffb347", size: 30 });
+    } else if (e.type === "floorBall") {
+      spawnParticles(e.x, e.y + 10, "#c9b79c", 3, 90);
+      sfx.kick();
     } else if (e.type === "guestStrike") {
       spawnParticles(e.x, e.y, e.color || "#fff", 22, 320);
       shake = Math.max(shake, 7);
@@ -1757,6 +1768,9 @@ function drawFighter(f, key) {
   ctx.ellipse(0, f.r * 0.95, f.r * 0.9, f.r * 0.25, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  // กระโดด dunk / lay up: ตัวลอยขึ้นจากเงา
+  if (f.cast && f.cast.sk && f.cast.sk.type === "dunk" && f.lift) ctx.translate(0, -f.lift);
+
   // เอียงตามทิศเคลื่อนที่นิดหน่อยให้ดูมีชีวิต
   ctx.rotate(Math.max(-0.25, Math.min(0.25, (f.vy / 800) * f.facing)));
   ctx.scale(f.facing, 1);
@@ -2232,7 +2246,7 @@ function drawBasketball(p) {
   const r = p.r;
   // วิถีโค้งแบบยิงบาส: ลูกลอยสูงตอนกลางทางแล้วลงที่เป้า (วาดอย่างเดียว การชนยังเป็นพื้นราบ)
   const prog = p.shotT ? Math.min(1, p.t / p.shotT) : 1;
-  const lift = Math.sin(prog * Math.PI) * (p.three ? 46 : 22);
+  const lift = p.z !== undefined ? p.z : 8 + Math.sin(prog * Math.PI) * (p.three ? 62 : 34); // ลูกชู้ตลอยสูงเหนือหัว / ลูกตกพื้นใช้ความสูง z
   ctx.fillStyle = "rgba(0,0,0,0.28)";
   ctx.beginPath();
   ctx.ellipse(p.x, p.y + r * 0.9, r * (0.9 - lift / 140), r * 0.3, 0, 0, Math.PI * 2);
@@ -3114,6 +3128,11 @@ function render() {
     for (const f of battle.fighters) if (f.hp > 0) drawDuelLink(f);
 
     if (battle.hoop) drawHoop(battle.hoop);
+    for (const lb of battle.looseBalls || []) { // ลูกบาสที่ตกพื้น (ค่อยๆ จางหายตอนหยุดนิ่ง)
+      ctx.globalAlpha = lb.rest > 0 ? Math.max(0, 1 - lb.rest / 1.2) : 1;
+      drawBasketball({ x: lb.x, y: lb.y, r: lb.r, t: lb.rest > 0 ? 0 : lb.t * 0.6, spin: lb.spin, z: lb.z });
+      ctx.globalAlpha = 1;
+    }
     for (const gu of battle.guests || []) drawGuest(gu);
     for (const fl of battle.flowers) drawFlower(fl);
     for (const b of battle.balls) drawBall(b);
@@ -3239,7 +3258,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 35;
+const EXPECTED_VERSION = 36;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
@@ -3251,7 +3270,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 60";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 61";
   }
 }
 

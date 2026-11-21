@@ -528,6 +528,12 @@ const CHARACTERS = {
         damage: 6, // ดาเมจเลือดตอนลง 3 แต้ม
         damageNear: 3, // ดาเมจเลือดตอน 2 แต้ม / ตอนลูกโดนหน้าศัตรูระหว่างทาง
         threeRange: 300, // ยิงห่างอย่างน้อยเท่านี้ (px) = 3 แต้ม
+        // ลูกบาสลอยเป็นวิถีโค้งเหนือหัวทุกคน (ไม่โดนใครระหว่างทาง) ถ้าพลาดจะชนห่วงแล้วตกพื้น (เสียงดังให้ Warden ได้ยินด้วย)
+        // ยืนห่างแป้นไม่เกิน dunkRange px = ไม่ชู้ต วิ่งขึ้นไป dunk (สุ่ม 50%) หรือ lay up แทน
+        dunkRange: 190,
+        dunkDuration: 0.85, // ระยะเวลาท่า dunk / lay up (วินาที)
+        dunkDamage: 5, // ดาเมจเลือดตอน dunk ลง (lay up ใช้ damageNear)
+        mindDunk: 35, // dunk ลง = ข่มขวัญ (lay up ลง = mindLayup ถ้าไม่ใส่ = mindDamage x 0.5)
         mindDamage: 50, // 3 แต้มลง = ข่มขวัญหนัก (สติ -50) โดน 2 ลูกสติแตก ดูคำอธิบาย mindDamage ด้านบน
         mindNear: 20, // ลูกโดนหน้าศัตรูระหว่างทาง = ข่มขวัญเบา
         projectileSpeed: 560,
@@ -822,6 +828,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 35;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 36;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

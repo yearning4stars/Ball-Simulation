@@ -52,6 +52,7 @@ class Battle {
     this.guests = []; // เพื่อนที่ Solar เรียกมาโจมตี {name, owner, target, x, y, phase, t, g}
     this.flowers = []; // ดอกไม้ของ Florentino (จาก Blossom): เก็บแล้วเติมพลังงานและรีเซ็ต Triple Threat
     // แป้นบาส: สร้างเมื่อมีตัวละครที่มีสกิลที่ตั้ง toHoop (Solar) ตั้งอยู่กลางขอบบนของสนาม
+    this.looseBalls = []; // ลูกบาสที่ตกลงพื้นหลังชนห่วง/ลงตาข่าย {x,y,z,vx,vy,vz,t,bounces,rest}
     this.hoop = this.fighters.some((f) => f.skills.some((k) => k.toHoop)) ? { x: width * 0.5, y: 100, r: 24 } : null;
     const ks = this.fighters.map((f) => f.skills.find((k) => k.type === "ballkick")).find(Boolean);
     if (ks) {
@@ -109,7 +110,7 @@ class Battle {
   // ---------- ตาบอด (def.blind): ได้ยินเสียง/แรงสั่นแล้วหันไปหาที่มาของเสียง ----------
   // เสียง = เหตุการณ์ที่มีเสียง (ยิง พุ่ง คลื่น โดนตี ฯลฯ) นอกตัวเอง > กระสุนศัตรูที่บินอยู่ > แรงสั่นสะเทือนเมื่อศัตรูอยู่ใกล้ (def.senseRange)
   _listen(evs, dt) {
-    const SOUNDS = ["muzzle", "dash", "wave", "hit", "sonicHit", "deflect", "kick", "slash", "slashFx", "hamsterBump", "waveStun", "flower", "bounce", "erase", "triple", "guestStrike", "summon"];
+    const SOUNDS = ["muzzle", "dash", "wave", "hit", "sonicHit", "deflect", "kick", "slash", "slashFx", "hamsterBump", "waveStun", "flower", "bounce", "erase", "triple", "guestStrike", "summon", "hoop", "rim", "dunk", "floorBall"];
     for (const f of this.fighters) {
       if (!f.def.blind || f.hp <= 0) continue;
       let src = null;
@@ -345,6 +346,7 @@ class Battle {
       if (f.hp > 0 && f.weapon && !f.disarmed) this._updateWeapon(f, this._target(f), f.tdt);
     }
     this._updateProjectiles(dt);
+    this._updateLooseBalls(dt);
     this._updateBalls(dt);
     this._updateFlowers(dt);
     this._updateGuests(dt);
@@ -398,6 +400,8 @@ class Battle {
           this._fireProjectile(f, enemy, sk);
           c.shots++;
         }
+      } else if (sk.type === "dunk") {
+        this._dunkRun(f, sk, c);
       } else if (sk.type === "shockwave") {
         if (!c.fired && c.t >= (sk.fireDelay || 0)) {
           c.fired = true;
@@ -504,6 +508,13 @@ class Battle {
     if (sk.requires === "lunge") f.lunge = false;
     f.cast = { i: pick, sk, t: 0, shots: 0, fired: false, hit: false };
     f.frame = sk.frame || "idle";
+    // ยืนใกล้แป้นมาก (dunkRange): ไม่ชู้ตแล้ว วิ่งขึ้นไป dunk หรือ lay up แทน
+    if (sk.toHoop && this.hoop && sk.dunkRange && Math.hypot(this.hoop.x - f.x, this.hoop.y - f.y) <= sk.dunkRange) {
+      const style = this.rng() < 0.5 ? "dunk" : "layup";
+      f.cast.sk = Object.assign({}, sk, { type: "dunk", duration: sk.dunkDuration || 0.85 });
+      f.cast.dunk = { style, sx: f.x, sy: f.y, done: false };
+      f.frame = sk.dunkFrame || sk.frame || "idle";
+    }
 
     if (sk.type === "dash") {
       f.dashTimer = sk.duration;
@@ -602,7 +613,7 @@ class Battle {
     }
     if (sk.projectileEffect === "stop") { // ฟันรอบตัวทำลายกระสุนศัตรูที่อยู่ในระยะ
       for (const p of this.projectiles) {
-        if (p.owner.team !== f.team && !p.dead && !p.indestructible && Math.hypot(p.x - f.x, p.y - f.y) <= reach + p.r) p.dead = true;
+        if (p.owner.team !== f.team && !p.dead && !p.indestructible && !p.hoop && Math.hypot(p.x - f.x, p.y - f.y) <= reach + p.r) p.dead = true;
       }
     }
   }
@@ -1000,7 +1011,7 @@ class Battle {
 
     // กระสุนศัตรู: หาจุดที่เข้าใกล้ตัวมากที่สุดบนเส้นทางตรง
     for (const p of this.projectiles) {
-      if (p.owner.team === f.team || p.dead || this._evaded(p, f)) continue;
+      if (p.owner.team === f.team || p.dead || p.hoop || this._evaded(p, f)) continue;
       const ps = this._timeScale(p.x, p.y, p.owner);
       const sp = p.speed * ps;
       if (sp <= 0) continue;
@@ -1400,7 +1411,7 @@ class Battle {
 
     // ปัดกระสุนของศัตรูทิ้ง (ทำได้ตลอด ไม่เกี่ยวกับคูลดาวน์การฟัน)
     for (const p of this.projectiles) {
-      if (p.owner === f || p.dead || p.indestructible) continue;
+      if (p.owner === f || p.dead || p.indestructible || p.hoop) continue; // ลูกบาสที่ลอยเหนือหัวไปแป้นปัดไม่ถึง
       const qx = p.x - f.x;
       const qy = p.y - f.y;
       const tt = Math.max(s0, Math.min(s1, qx * ca + qy * sa));
@@ -1690,6 +1701,92 @@ class Battle {
     }
   }
 
+  // ---------- บาสเกตบอล: ลงห่วง / dunk / ลูกตกพื้น ----------
+  // ลงห่วง: ข่มขวัญศัตรูทุกคน + ดาเมจเลือด
+  _scoreBasket(owner, mind, dmg) {
+    for (const foe of this._foes(owner)) {
+      if (foe.hp <= 0) continue;
+      this._hurtMind(foe, mind, foe.x, foe.y);
+      if (dmg) this._damage(foe, dmg, foe.x, foe.y);
+    }
+  }
+
+  // ลูกบาสหลุดจากห่วงแล้วตกลงพื้น (ลงตาข่าย = ร่วงตรงๆ / ชนห่วง = เด้งออกด้านข้างก่อนตก)
+  _dropBall(h, scored, r) {
+    const side = this.rng() < 0.5 ? -1 : 1;
+    this.looseBalls.push({
+      x: h.x + (scored ? 0 : side * h.r * 0.9),
+      y: h.y + 6,
+      z: 58, // ความสูงจากพื้น (px) วาดเป็นระยะยกลูก
+      vx: scored ? (this.rng() - 0.5) * 30 : side * (70 + this.rng() * 60),
+      vy: scored ? 20 : 50 + this.rng() * 80,
+      vz: scored ? 0 : 170 + this.rng() * 80,
+      r: r || 20,
+      t: 0,
+      bounces: 0,
+      rest: 0,
+      spin: side,
+    });
+  }
+
+  _updateLooseBalls(dt) {
+    const G = 900;
+    for (const b of this.looseBalls) {
+      b.t += dt;
+      if (b.rest > 0) { b.rest += dt; continue; }
+      b.vz -= G * dt;
+      b.z += b.vz * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      if (b.x < b.r) { b.x = b.r; b.vx = Math.abs(b.vx); }
+      if (b.x > this.w - b.r) { b.x = this.w - b.r; b.vx = -Math.abs(b.vx); }
+      if (b.y > this.h - b.r) { b.y = this.h - b.r; b.vy = -Math.abs(b.vy); }
+      if (b.z <= 0) {
+        b.z = 0;
+        const impact = -b.vz;
+        if (impact > 60) this.events.push({ type: "floorBall", x: b.x, y: b.y, power: impact }); // เสียงเด้งพื้น (ตาบอดได้ยิน)
+        b.bounces++;
+        b.vz = impact * 0.5;
+        b.vx *= 0.65;
+        b.vy *= 0.65;
+        if (b.bounces >= 4 || b.vz < 50) { b.vz = 0; b.vx = b.vy = 0; b.rest = 0.001; } // หยุดนิ่ง แล้วค่อยๆ จางหาย
+      }
+    }
+    this.looseBalls = this.looseBalls.filter((b) => b.rest < 1.2);
+  }
+
+  // dunk / lay up: วิ่งเข้าไปใต้ห่วง กระโดด แล้วทำคะแนน (เกิดแทนการชู้ตเมื่อยืนใกล้แป้นมาก)
+  _dunkRun(f, sk, c) {
+    const h = this.hoop;
+    const d = c.dunk;
+    if (!h || !d) { c.t = sk.duration; return; }
+    const tx = h.x;
+    const ty = h.y + h.r + f.r * 0.5;
+    const e = Math.min(1, c.t / 0.4);
+    const ease = 1 - (1 - e) * (1 - e);
+    f.x = d.sx + (tx - d.sx) * ease;
+    f.y = d.sy + (ty - d.sy) * ease;
+    const len = Math.hypot(tx - f.x, ty - f.y) || 1;
+    f.vx = ((tx - f.x) / len) * 1 + (tx - d.sx >= 0 ? 0.01 : -0.01); // ให้ตัวหันไปทางแป้น (ความเร็วถูกปรับเป็นค่าปกติใน _move)
+    f.vy = ((ty - f.y) / len) * 1;
+    const peak = d.style === "dunk" ? 56 : 38;
+    const u = Math.max(0, Math.min(1, (c.t - 0.25) / 0.5));
+    f.lift = Math.sin(u * Math.PI) * peak;
+    if (!d.done && c.t >= 0.55) {
+      d.done = true;
+      const base = d.style === "dunk" ? 0.95 : 0.82;
+      const scored = this.rng() < base * (1 - 0.6 * (f.mind / 100));
+      this.events.push({ type: "dunk", style: d.style, x: h.x, y: h.y });
+      this.events.push({ type: "hoop", scored, three: false, dunk: d.style, x: h.x, y: h.y });
+      if (scored) {
+        const mind = d.style === "dunk" ? sk.mindDunk !== undefined ? sk.mindDunk : (sk.mindDamage || 0) * 0.7 : sk.mindLayup !== undefined ? sk.mindLayup : (sk.mindDamage || 0) * 0.5;
+        const dmg = d.style === "dunk" ? (sk.dunkDamage !== undefined ? sk.dunkDamage : (sk.damageNear || 0) + 2) : sk.damageNear || 0;
+        this._scoreBasket(f, mind, dmg);
+      } else this.events.push({ type: "rim", x: h.x, y: h.y });
+      this._dropBall(h, scored, 20);
+    }
+  }
+
   // ---------- กระสุน / โน้ต ----------
   _updateProjectiles(dt) {
     for (const p of this.projectiles) {
@@ -1724,16 +1821,12 @@ class Battle {
         const chance = (p.three ? 0.7 : 0.9) * (1 - 0.6 * (p.owner.mind / 100));
         const scored = this.rng() < chance;
         this.events.push({ type: "hoop", scored, three: p.three, x: p.hoop.x, y: p.hoop.y });
-        if (scored) {
-          for (const foe of this._foes(p.owner)) {
-            if (foe.hp <= 0) continue;
-            this._hurtMind(foe, p.scoreMind * (p.three ? 1 : 0.5), foe.x, foe.y);
-            if (p.scoreDamage) this._damage(foe, p.scoreDamage, foe.x, foe.y);
-          }
-        }
+        if (scored) this._scoreBasket(p.owner, p.scoreMind * (p.three ? 1 : 0.5), p.scoreDamage);
+        else this.events.push({ type: "rim", x: p.hoop.x, y: p.hoop.y }); // ชนห่วงแล้วเด้งออก
+        this._dropBall(p.hoop, scored, p.r);
         continue;
       }
-      for (const target of this._foes(p.owner)) {
+      for (const target of p.hoop ? [] : this._foes(p.owner)) { // ลูกชู้ตเข้าแป้นลอยเหนือหัวศัตรู ไม่โดนใครระหว่างทาง
         // หลบไปแล้ว (Meta Vision) / อยู่นอกความจริง (ตัดเวลา): กระสุนบินทะลุผ่านไป
         if (this._evaded(p, target) || target === this.eraser) continue;
         if (Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
@@ -1766,6 +1859,7 @@ class Battle {
       for (let j = i + 1; j < ps.length; j++) {
         const q = ps[j];
         if (q.dead || q.owner.team === p.owner.team) continue;
+        if (p.hoop || q.hoop) continue; // ลูกบาสลอยสูงเหนือหัว ไม่ชนกระสุนที่บินติดพื้น
         if (p.indestructible && q.indestructible) continue; // ทะลุผ่านกันไป
         if (Math.hypot(p.x - q.x, p.y - q.y) < p.r + q.r) {
           // ฝั่งที่ทำลายไม่ได้ (โน้ต) รอด อีกฝั่งแตกอย่างเดียว
@@ -1826,7 +1920,7 @@ class Battle {
       if (w.projectileEffect === "none") continue;
       const band = w.speed * dt + 16; // ความหนาของแนวคลื่นที่ปะทะกระสุนได้
       for (const p of this.projectiles) {
-      if (p.owner.team === w.owner.team || p.dead || p.hitByWave || p.unblockable) continue;
+      if (p.owner.team === w.owner.team || p.dead || p.hitByWave || p.unblockable || p.hoop) continue;
         const dx = p.x - w.x;
         const dy = p.y - w.y;
         const d = Math.hypot(dx, dy) || 0.0001;
@@ -2047,6 +2141,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 35;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 36;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };
