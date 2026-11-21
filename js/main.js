@@ -1452,6 +1452,7 @@ const BALL_STYLES = {
     },
   },
   florentino: {
+    eyes: "none", // ไม่มีตา
     // ดีไซน์ของเราเอง: สุภาพบุรุษนักดวล — ผ้าคลุมแดง กุหลาบที่อก ดาบเรเพียร์ กลีบกุหลาบลอยรอบตัว (อิงชุดสกิลในเกมนี้: ปักดอกไม้ / รำดาบ)
     back(c, r, t) {
       c.fillStyle = "#9c2236"; // ผ้าคลุมด้านหลัง พลิ้วเบาๆ
@@ -1462,6 +1463,14 @@ const BALL_STYLES = {
     },
     front(c, r, t, o) {
       t = t || 0; o = o || {};
+      // ผมสีชมพู: ปอยผมปัดไปด้านหน้าบนหัว
+      c.save(); c.beginPath(); c.arc(0, 0, r * 0.98, 0, Math.PI * 2); c.clip();
+      c.fillStyle = "#ff7fb8";
+      c.beginPath(); c.moveTo(-r * 1.1, -r * 0.1); c.quadraticCurveTo(-r * 0.9, -r * 1.1, r * 0.2, -r * 1.05);
+      c.quadraticCurveTo(r * 0.9, -r * 0.95, r * 1.05, -r * 0.35); c.quadraticCurveTo(r * 0.45, -r * 0.7, r * 0.1, -r * 0.45);
+      c.quadraticCurveTo(-r * 0.3, -r * 0.2, -r * 0.55, -r * 0.5); c.quadraticCurveTo(-r * 0.7, -r * 0.1, -r * 1.1, -r * 0.1); c.closePath(); c.fill();
+      c.strokeStyle = "#ffc2dd"; c.lineWidth = r * 0.04; c.beginPath(); c.moveTo(-r * 0.4, -r * 0.85); c.quadraticCurveTo(r * 0.2, -r * 0.95, r * 0.7, -r * 0.55); c.stroke();
+      c.restore();
       c.fillStyle = "#d63a4a"; // กุหลาบติดที่อก (ไม่มีหมวด)
       c.beginPath(); c.arc(r * 0.3, r * 0.5, r * 0.13, 0, Math.PI * 2); c.fill();
       c.fillStyle = "#8f1f2e"; c.beginPath(); c.arc(r * 0.3, r * 0.5, r * 0.06, 0, Math.PI * 2); c.fill();
@@ -1470,13 +1479,27 @@ const BALL_STYLES = {
       c.beginPath(); c.moveTo(-r * 0.25, r * 0.62); c.lineTo(0, r * 0.95); c.lineTo(r * 0.25, r * 0.62); c.closePath(); c.fill();
       // ดาบเรเพียร์ ด้ามทอง (ฟันแทงเมื่อกำลังร่ายสกิล)
       c.save(); c.translate(r * 0.55, r * 0.5);
-      const stab = o.casting ? Math.sin(t * 30) * r * 0.25 : 0;
-      c.rotate(-0.25); c.translate(stab, 0);
+      c.rotate(o.casting ? -0.25 + Math.sin(t * 22) * 0.9 : -0.25); // ท่าปาดอก: ฟาดดาบเป็นวง
       c.strokeStyle = "#e8e8f0"; c.lineWidth = r * 0.05; c.lineCap = "round";
       c.beginPath(); c.moveTo(r * 0.12, 0); c.lineTo(r * 1.0, 0); c.stroke();
       c.strokeStyle = "#e8c15a"; c.lineWidth = r * 0.07;
       c.beginPath(); c.moveTo(r * 0.12, -r * 0.14); c.lineTo(r * 0.12, r * 0.14); c.stroke();
       c.restore();
+      // ท่าปาดอก: เส้นปาดเป็นเสี้ยวพระจันทร์ + กลีบกุหลาบกระเด็นออกตามแนวปาด
+      if (o.casting) {
+        const ph = (t * 5) % 1;
+        c.save(); c.globalAlpha = 0.85 * (1 - ph * 0.5);
+        c.strokeStyle = "#ff9ac8"; c.lineCap = "round"; c.lineWidth = r * (0.22 - 0.12 * ph);
+        c.beginPath(); c.arc(0, 0, r * (1.25 + ph * 0.45), -1.0 + ph * 0.3, 1.0 + ph * 0.3); c.stroke();
+        c.strokeStyle = "#fff"; c.lineWidth = r * 0.05;
+        c.beginPath(); c.arc(0, 0, r * (1.25 + ph * 0.45), -0.8 + ph * 0.3, 0.8 + ph * 0.3); c.stroke();
+        c.fillStyle = "#d63a4a";
+        for (let i = 0; i < 5; i++) {
+          const a = -0.9 + i * 0.45 + ph * 0.3, d = r * (1.4 + ph * 0.7 + i * 0.05);
+          c.beginPath(); c.ellipse(Math.cos(a) * d, Math.sin(a) * d, r * 0.1, r * 0.05, a, 0, Math.PI * 2); c.fill();
+        }
+        c.restore();
+      }
       // กลีบกุหลาบลอยรอบตัว
       c.fillStyle = "rgba(214,58,74,0.85)";
       for (let i = 0; i < 4; i++) {
@@ -3177,7 +3200,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 55";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 56";
   }
 }
 
