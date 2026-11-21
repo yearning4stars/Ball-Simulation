@@ -611,7 +611,8 @@ class Battle {
   // เรียกได้เฉพาะเพื่อนที่ไม่ได้เป็นศัตรูของตัวเอง (ถ้าต้องสู้กับ FuNx อยู่ก็เรียก FuNx ไม่ได้)
   _summonChoices(f, sk) {
     const foes = this._foes(f);
-    return (sk.guests || []).filter((g) => !foes.some((o) => o.hp > 0 && o.def.name === g.name));
+    return (sk.guests || []).filter((g) => !foes.some((o) => o.hp > 0 && o.def.name === g.name)
+      && !(g.squeeze && f.hp > f.maxHp * (g.useBelow || 0.85))); // เพื่อนสายฮีล: เลือดยังเกือบเต็มไม่เรียก
   }
 
   _summon(f, enemy, sk) {
@@ -624,6 +625,12 @@ class Battle {
     const ang = this.rng() * Math.PI * 2;
     const gx = Math.max(30, Math.min(this.w - 30, enemy.x + Math.cos(ang) * 420));
     const gy = Math.max(30, Math.min(this.h - 30, enemy.y + Math.sin(ang) * 420));
+    if (g.squeeze) { // เพื่อนสายฮีล (Hatsu): โผล่ข้างๆ เจ้าของ แล้วบีบแฮมสเตอร์เพิ่มเลือดให้
+      const side = f.x > this.w / 2 ? -1 : 1;
+      this.guests.push({ g, name: g.name, owner: f, target: f, x: f.x + side * (f.r + 44), y: f.y, phase: "squeeze", t: 0, facing: -side, acc: 0, tick: 0 });
+      this.events.push({ type: "summon", x: f.x, y: f.y, name: g.name, say: g.say, color: g.color });
+      return;
+    }
     this.guests.push({ g, name: g.name, owner: f, target: enemy, x: gx, y: gy, phase: "in", t: 0, facing: enemy.x >= gx ? 1 : -1 });
     this.events.push({ type: "summon", x: f.x, y: f.y, name: g.name, say: g.say, color: g.color });
   }
@@ -633,6 +640,21 @@ class Battle {
       gu.t += dt;
       if (gu.owner.hp <= 0) { gu.phase = "dead"; continue; }
       const t = gu.target;
+      if (gu.phase === "squeeze") {
+        // ตามเจ้าของ บีบแฮมสเตอร์ใกล้ๆ: ฟื้นเลือดให้เจ้าของต่อเนื่อง แจ้งเลขฟื้นทุก 0.4 วิ
+        const o = gu.owner, g = gu.g, side = -gu.facing;
+        gu.x = o.x + side * (o.r + 44); gu.y = o.y;
+        const h = (g.healPerSec || 0) * dt;
+        o.hp = Math.min(o.maxHp, o.hp + h);
+        gu.acc += h; gu.tick += dt;
+        if (gu.tick >= 0.4 || gu.t >= (g.duration || 2.5)) {
+          if (gu.acc >= 0.5) this.events.push({ type: "heal", x: o.x, y: o.y, amount: Math.round(gu.acc) });
+          this.events.push({ type: "squeeze", x: gu.x, y: gu.y });
+          gu.acc = 0; gu.tick = 0;
+        }
+        if (gu.t >= (g.duration || 2.5) || o.hp >= o.maxHp) { gu.phase = "out"; gu.t = 0; }
+        continue;
+      }
       if (gu.phase === "in") {
         const dx = t.x - gu.x;
         const dy = t.y - gu.y;

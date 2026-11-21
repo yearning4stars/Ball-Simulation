@@ -553,8 +553,8 @@ const CHARACTERS = {
           { name: "FuNx", say: "ตัดเวลา!", damage: 16, silence: 2.2, knockback: 140, color: "#ff2a55" },
           // Johan: เข็มทิศ + ชะลอเวลา = ดาเมจ + ศัตรูช้าลง
           { name: "Johan", say: "ชะลอเวลา!", damage: 10, slow: 3, slowMult: 0.4, knockback: 100, color: "#7ff5dc" },
-          // Hatsu: เลข 4 = ดาเมจ 4 x 4 + ศัตรูช้าลงนิดหน่อย
-          { name: "Hatsu", say: "สี่!", damage: 16, slow: 1.5, slowMult: 0.7, knockback: 120, color: "#ff5a5f" },
+          // Hatsu: ไม่โจมตี — โผล่ข้างตัว Solar แล้วบีบแฮมสเตอร์ให้ฟื้นเลือด healPerSec x duration (เรียกเมื่อเลือดต่ำกว่า useBelow ของเลือดเต็มเท่านั้น)
+          { name: "Hatsu", say: "บีบแฮมสเตอร์~", squeeze: true, healPerSec: 8, duration: 2.5, useBelow: 0.85, color: "#ff5a5f" },
         ],
       },
     ],

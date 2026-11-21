@@ -2267,6 +2267,7 @@ function drawGuest(gu) {
   ctx.filter = "drop-shadow(0 0 12px " + (gu.g.color || "#fff") + ")";
   drawFighter({ x: gu.x, y: gu.y, r: def.radius, vy: 0, facing: gu.facing, frame: "idle", hitFlash: 0, def }, key);
   ctx.restore();
+  if (gu.phase === "squeeze") drawHamster({ x: gu.x, y: gu.y, r: def.radius, facing: gu.facing, cast: { t: gu.t } }); // บีบแฮมสเตอร์
 }
 
 function drawSoccer(p) {
@@ -3250,7 +3251,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 59";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 60";
   }
 }
 
