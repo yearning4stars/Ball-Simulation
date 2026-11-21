@@ -1395,14 +1395,14 @@ const BALL_STYLES = {
     },
   },
   singer: {
-    front(c, r) {
+    front(c, r, t, o) {
       c.strokeStyle = "#2a2f45"; c.lineWidth = r * 0.12; c.lineCap = "round"; // หูฟัง
       c.beginPath(); c.arc(0, -r * 0.05, r * 0.98, Math.PI * 1.05, Math.PI * 1.95); c.stroke();
       c.fillStyle = "#2a2f45";
       c.beginPath(); c.ellipse(-r * 0.95, -r * 0.1, r * 0.17, r * 0.3, 0, 0, Math.PI * 2); c.fill();
       c.beginPath(); c.ellipse(r * 0.95, -r * 0.1, r * 0.17, r * 0.3, 0, 0, Math.PI * 2); c.fill();
       c.fillStyle = "#fff"; c.font = "700 " + Math.round(r * 0.6) + "px " + FONT; c.textAlign = "center"; c.textBaseline = "middle";
-      c.fillText("♪", -r * 0.1, r * 0.55);
+      c.save(); c.scale((o && o.facing) || 1, 1); c.fillText("♪", -r * 0.1 * ((o && o.facing) || 1), r * 0.55); c.restore();
     },
   },
   funx: {
@@ -1468,46 +1468,77 @@ const BALL_STYLES = {
     },
   },
   warden: {
-    // ตามภาพตัวอย่าง: บอลฟ้าเขียวขอบสว่างบาง ลายเส้นนอนจางๆ, แท่งเทา 6 อัน (2 กลุ่ม กลุ่มละ 3) เฉียงสองข้างของเลข HP กลางตัว,
-    // มีหนวด Sculk พิกเซลแตกกิ่งลอยรอบตัว และก้อนทองเล็กๆ ลอยวน
-    body: "#17a3b8",
-    rim: "#2fd0e6",
+    // ลักษณะเด่นของ Warden: หัวมืดไม่มีตา มีปากโหวงขอบพิกเซลเรืองฟ้า, เขาบนหัวสองข้าง, กลางอกเป็นกลุ่มคริสตัล Sculk เรืองแสงบนซี่โครงเขียวเข้ม,
+    // แผงข้างลำตัวมีลายเขียว  (เขา = หนวด Sculk โค้งบนหัวเหมือนต้นฉบับ)
+    body: "#0d2532",
+    rim: "#2de0d0",
     eyes: "none",
     back(c, r, t) {
-      const spots = [[1.12, -0.12, -0.4, 0], [0.15, 1.2, 2.1, 1.7], [-1.1, -0.55, 3.6, 3.1]];
-      spots.forEach(([sx, sy, rot, ph]) => sculkTendril(c, sx * r, sy * r, r * 0.55, rot + Math.sin(t * 1.4 + ph) * 0.25, t + ph));
-      c.fillStyle = "#ffc21a"; // ก้อนทอง
-      for (let k = 0; k < 2; k++) {
-        const a = t * 0.9 + k * 3.4;
-        c.save(); c.translate(Math.cos(a) * r * 1.2, Math.sin(a) * r * 1.2); c.rotate(a * 2);
-        c.fillRect(-r * 0.12, -r * 0.09, r * 0.26, r * 0.18);
-        c.fillStyle = "#fff0a0"; c.fillRect(-r * 0.12, -r * 0.09, r * 0.26, r * 0.05);
-        c.restore(); c.fillStyle = "#ffc21a";
+      // เขา (horn) บนหัวสองข้าง: ไม้เลื้อย Sculk พิกเซลโค้งชี้ขึ้น-ออก มีกิ่งแยก ปลายสว่าง โคนแดงเหมือนต้นฉบับ
+      const lerp = (a, b, k) => Math.round(a + (b - a) * k);
+      for (const sx of [-1, 1]) {
+        const sway = Math.sin(t * 2 + sx) * r * 0.03;
+        const pos = (k) => [sx * r * (0.5 + 0.85 * k - 0.15 * k * k) + sway * k, -r * (0.9 + 0.62 * k - 0.1 * k * k)];
+        const N = 9;
+        for (let i = 0; i <= N; i++) {
+          const k = i / N, [x, y] = pos(k);
+          const sz = r * (0.28 - 0.12 * k);
+          if (i === 0) c.fillStyle = "#e0242b"; // โคนเขาสีแดง
+          else c.fillStyle = "rgb(" + lerp(18, 80, k) + "," + lerp(84, 214, k) + "," + lerp(96, 206, k) + ")";
+          c.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+        }
+        for (const [kb, dir, len] of [[0.35, 1, 3], [0.62, -1, 2], [0.85, 1, 2]]) { // กิ่งแยก
+          const [bx, by] = pos(kb);
+          for (let j = 1; j <= len; j++) {
+            const sz = r * (0.17 - j * 0.02);
+            c.fillStyle = j === len ? "#7ff0e4" : "#2a9aa6";
+            c.fillRect(bx + sx * dir * j * r * 0.14 - sz / 2, by - j * r * 0.12 - sz / 2, sz, sz);
+          }
+        }
+        const [tx, ty] = pos(1);
+        c.save(); c.shadowColor = "#2de0d0"; c.shadowBlur = r * 0.25; c.fillStyle = "#b9fff6";
+        c.fillRect(tx - r * 0.06, ty - r * 0.06, r * 0.12, r * 0.12); c.restore();
       }
     },
     front(c, r, t, o) {
-      c.save(); // ลายเส้นนอนจางๆ ในตัวบอล
+      c.save();
       c.beginPath(); c.arc(0, 0, r * 0.96, 0, Math.PI * 2); c.clip();
-      c.fillStyle = "rgba(255,255,255,0.07)";
-      for (let y = -r; y < r; y += r * 0.16) c.fillRect(-r, y, r * 2, r * 0.07);
-      c.restore();
-      const bars = [[0.16, -0.72], [0.42, -0.51], [0.66, -0.25], [-0.68, 0.2], [-0.47, 0.46], [-0.24, 0.7]];
-      for (const [bx, by] of bars) { // แท่งเทาเฉียง "/"
-        c.save(); c.translate(bx * r, by * r); c.rotate(-0.78);
-        const g = c.createLinearGradient(0, -r * 0.1, 0, r * 0.1);
-        g.addColorStop(0, "#f2f2ee"); g.addColorStop(1, "#bfc2c0");
-        c.fillStyle = g; c.strokeStyle = "#7d8587"; c.lineWidth = r * 0.03;
-        c.beginPath(); c.roundRect(-r * 0.26, -r * 0.1, r * 0.52, r * 0.2, r * 0.03); c.fill(); c.stroke();
-        c.restore();
+      // หัว: แผ่นมืดด้านบน มีจุดเรืองฟ้าเล็กๆ ที่กระหม่อม
+      c.fillStyle = "#08171f"; c.fillRect(-r, -r, r * 2, r * 1.02);
+      c.fillStyle = "#2de0d0";
+      for (const [dx, dy] of [[-0.35, -0.82], [0.1, -0.88], [0.45, -0.76], [-0.05, -0.7]]) c.fillRect(dx * r, dy * r, r * 0.07, r * 0.07);
+      // ปากโหวงขอบพิกเซลฟ้า (โค้งคว่ำเหมือนร้องไห้)
+      const q = r * 0.085;
+      c.fillStyle = "#04090d";
+      c.beginPath(); c.ellipse(0, -r * 0.3, r * 0.55, r * 0.3, 0, Math.PI, 0); c.lineTo(r * 0.55, -r * 0.1); c.lineTo(-r * 0.55, -r * 0.1); c.closePath(); c.fill();
+      c.fillStyle = "#1fb8c8";
+      for (let a = Math.PI; a <= Math.PI * 2 + 0.01; a += 0.22) {
+        c.fillRect(Math.cos(a) * r * 0.6 - q / 2, -r * 0.3 + Math.sin(a) * r * 0.36 - q / 2, q, q);
       }
-      c.font = "800 " + Math.round(r * 0.52) + "px " + FONT; c.textAlign = "center"; c.textBaseline = "middle";
-      c.lineWidth = r * 0.14; c.strokeStyle = "#0b1519"; c.lineJoin = "round";
-      const txt = String(o && o.hp !== undefined ? o.hp : "");
-      c.strokeText(txt, 0, r * 0.03); c.fillStyle = "#fff"; c.fillText(txt, 0, r * 0.03); // เลข HP
+      c.fillRect(-r * 0.62, -r * 0.3, q, r * 0.22); c.fillRect(r * 0.56, -r * 0.3, q, r * 0.22);
+      c.fillRect(-r * 0.5, -r * 0.1, r * 0.35, q * 0.8); c.fillRect(r * 0.15, -r * 0.1, r * 0.35, q * 0.8);
+      // แผงข้างลำตัว: เขียวเข้มมีลายเฉียง
+      for (const sx of [-1, 1]) {
+        c.fillStyle = "#0b2a30"; c.fillRect(sx > 0 ? r * 0.58 : -r, 0.0, r * 0.42, r);
+        c.fillStyle = "#2f8f72";
+        for (let i = 0; i < 3; i++) {
+          c.save(); c.translate(sx * r * (0.72 + i * 0.1), r * 0.35); c.rotate(sx * 0.25);
+          c.fillRect(-q * 0.4, 0, q * 0.8, r * 0.4); c.restore();
+        }
+      }
+      // กลางอก: ซี่โครงเขียวเข้ม + คริสตัล Sculk เรืองแสง
+      c.fillStyle = "#1f6b5e";
+      for (let i = 0; i < 3; i++) { c.fillRect(-r * 0.5, r * (0.08 + i * 0.2), r * 0.3, r * 0.1); c.fillRect(r * 0.2, r * (0.08 + i * 0.2), r * 0.3, r * 0.1); }
+      const glow = 0.7 + 0.3 * Math.sin(t * 3.2);
+      c.shadowColor = "#2de0d0"; c.shadowBlur = r * 0.3 * glow;
+      c.fillStyle = "#4df5ea";
+      for (const [dx, dy] of [[0, 0.05], [0.12, 0.17], [-0.06, 0.3], [0.1, 0.44], [-0.12, 0.54], [0.04, 0.64]]) c.fillRect(dx * r - q / 2, dy * r, q * 1.1, q * 1.1);
+      c.restore();
     },
   },
   hatsu: {
-    front(c, r) {
+    front(c, r, t, o) {
+      c.scale((o && o.facing) || 1, 1);
       c.font = "900 " + Math.round(r * 0.95) + "px " + FONT; c.textAlign = "center"; c.textBaseline = "middle";
       c.lineWidth = r * 0.12; c.strokeStyle = "#5a0d12"; c.strokeText("4", 0, r * 0.52);
       c.fillStyle = "#fff"; c.fillText("4", 0, r * 0.52);
@@ -1606,7 +1637,7 @@ function drawFighter(f, key) {
   ctx.scale(f.facing, 1);
 
   if (spriteMode === "ball") {
-    drawCodeBall(ctx, key, f.def, f.r, { flash: f.hitFlash > 0, casting: !!f.cast, hp: Math.ceil(f.hp) });
+    drawCodeBall(ctx, key, f.def, f.r, { flash: f.hitFlash > 0, casting: !!f.cast, hp: Math.ceil(f.hp), facing: f.facing });
   } else if (img) {
     if (f.hitFlash > 0) {
       // วาบขาวตอนโดนตี: ทาสีขาวบนสำเนาของภาพ (canvas แยก) เพื่อให้ทาเฉพาะส่วนตัวละคร ไม่ทาทั้งกล่อง
@@ -3094,7 +3125,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 48";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 50";
   }
 }
 
