@@ -391,7 +391,8 @@ function openPicker(i) {
     card.style.setProperty("--c", d.color);
     const img = document.createElement("img");
     img.onerror = () => { img.style.visibility = "hidden"; };
-    img.src = d.frames.idle;
+    img.style.visibility = "visible";
+    img.src = thumbSrc(k);
     img.alt = d.name;
     const nm = document.createElement("div");
     nm.className = "pk-name";
@@ -513,7 +514,8 @@ function rebuildPlayers() {
     const refresh = () => {
       const d = CHARACTERS[sel.value];
       thumb.onerror = () => { thumb.style.visibility = "hidden"; };
-      thumb.src = d.frames.idle;
+      thumb.style.visibility = "visible";
+      thumb.src = thumbSrc(sel.value);
       nm.textContent = d.name;
       btn.style.borderColor = d.color;
     };
@@ -573,6 +575,7 @@ function setView(v) {
   closePicker();
   paused = false;
   if (v === "setup") {
+    rebuildPlayers(); // ให้ภาพย่อตัวละครตรงกับรูปแบบที่เลือกอยู่
     mountLab();
     refreshInfo();
   } else {
@@ -621,6 +624,24 @@ function openSettings() {
   head.appendChild(x);
   const body = document.createElement("div");
   body.className = "set-body";
+
+  // รูปแบบตัวละคร
+  const stRow = document.createElement("div");
+  stRow.className = "set-row";
+  stRow.innerHTML = '<span class="set-label">รูปแบบตัวละคร</span>';
+  const stSeg = document.createElement("div");
+  stSeg.className = "seg";
+  const stBtns = Object.keys(STYLE_NAMES).map((m) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "secondary"; b.textContent = STYLE_NAMES[m];
+    b.addEventListener("click", () => { sfx.unlock(); sfx.click(); setSpriteMode(m); refreshSt(); });
+    stSeg.appendChild(b);
+    return [m, b];
+  });
+  const refreshSt = () => stBtns.forEach(([m, b]) => b.classList.toggle("on", m === spriteMode));
+  refreshSt();
+  stRow.appendChild(stSeg);
+  body.appendChild(stRow);
 
   // ความเร็วเกม
   const spRow = document.createElement("div");
@@ -695,6 +716,7 @@ on("menuQuick", () => { randomizeAll(); goBattle(); });
 on("menuSettings", openSettings);
 on("backMenu", () => setView("menu"));
 on("setupSettings", openSettings);
+on("styleBtn", () => setSpriteMode(spriteMode === "ball" ? "sprite" : "ball"));
 on("fight", goBattle);
 on("randomAll", randomizeAll);
 on("gbAgain", startBattle);
@@ -848,7 +870,7 @@ function refreshInfo() {
     head.className = "card-head";
     const img = document.createElement("img");
     img.onerror = () => { img.style.visibility = "hidden"; };
-    img.src = def.frames.idle; img.alt = "";
+    img.src = thumbSrc(sel.value); img.alt = "";
     const tt = document.createElement("div");
     tt.innerHTML = '<div class="card-name"></div><div class="card-sub"></div>';
     tt.firstChild.textContent = def.name; tt.firstChild.style.color = def.color;
@@ -987,7 +1009,15 @@ function spawnParticles(x, y, color, n, power) {
 
 // หั่นภาพตัวละครเป็นตาราง N x N แล้วให้แต่ละชิ้นกระเด็นออกจากจุดกึ่งกลาง
 function spawnShards(f, key) {
-  const img = images[key] && (images[key][f.frame] || images[key].idle);
+  let img = images[key] && (images[key][f.frame] || images[key].idle);
+  if (spriteMode === "ball") { // โหมดบอล: หั่นรูปบอลที่วาดไว้เป็นเศษ
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 156;
+    const c = cv.getContext("2d");
+    c.translate(78, 78);
+    drawCodeBall(c, key, f.def, 60, { t: 0.4, hp: Math.ceil(f.hp) });
+    img = cv;
+  }
   const size = f.r * 2.6;
   const N = 6;
   const tile = size / N;
@@ -1323,6 +1353,220 @@ function poseFrame(f, key) {
   return imgs[plain] ? plain : "idle";
 }
 
+// ============================================================
+//  รูปแบบตัวละคร: 1 = ต้นฉบับ (ภาพ PNG ในโค้ด)  2 = บอลกลมวาดด้วยโค้ด มีสัญลักษณ์เด่นประจำตัวละคร
+// ============================================================
+let spriteMode = "sprite";
+try { if (localStorage.getItem("bb_style") === "ball") spriteMode = "ball"; } catch (e) { /* ข้าม */ }
+const STYLE_NAMES = { sprite: "1. ต้นฉบับ (ภาพ)", ball: "2. บอลกลม (วาดด้วยโค้ด)" };
+
+function shade(hex, amt) { // amt -1..1: มืดลง..สว่างขึ้น
+  const n = parseInt(hex.replace("#", ""), 16);
+  const c = (v) => Math.max(0, Math.min(255, Math.round(amt >= 0 ? v + (255 - v) * amt : v * (1 + amt))));
+  return "rgb(" + c((n >> 16) & 255) + "," + c((n >> 8) & 255) + "," + c(n & 255) + ")";
+}
+
+// สัญลักษณ์เด่นของแต่ละตัว (พิกัดสมมติหันขวา ขนาดอิงรัศมี r): body = สีตัว, back = วาดหลังตัว, front = วาดทับตัว,
+// eyes = "none" ไม่ใส่ตา หรือสีตา; ตัวที่ไม่ได้ลงทะเบียนจะเป็นบอลเปล่าๆ ใส่ตาอย่างเดียว
+const BALL_STYLES = {
+  gunner: {
+    front(c, r) {
+      c.fillStyle = "#2b3350"; // หมวกแก๊ป
+      c.beginPath(); c.arc(0, -r * 0.1, r * 0.98, Math.PI * 1.08, Math.PI * 1.92); c.closePath(); c.fill();
+      c.fillRect(r * 0.2, -r * 0.62, r * 0.85, r * 0.16);
+      c.fillStyle = "#3a4256"; c.fillRect(r * 0.55, r * 0.12, r * 0.8, r * 0.2); // ปืนพก
+      c.fillRect(r * 0.55, r * 0.2, r * 0.2, r * 0.38);
+      c.fillStyle = "#ffd54a"; c.fillRect(r * 1.3, r * 0.15, r * 0.1, r * 0.14);
+    },
+  },
+  dasher: {
+    back(c, r, t) {
+      c.strokeStyle = "rgba(255,255,255,0.55)"; c.lineWidth = r * 0.07; c.lineCap = "round";
+      for (let i = -1; i <= 1; i++) {
+        const o = ((t * 3 + i) % 1) * r * 0.25;
+        c.beginPath(); c.moveTo(-r * 1.05 - o, i * r * 0.42); c.lineTo(-r * 1.55 - o, i * r * 0.42); c.stroke();
+      }
+    },
+    front(c, r, t) {
+      c.fillStyle = "#fff"; // ผ้าคาดหัว + ชายปลิว
+      c.fillRect(-r * 0.97, -r * 0.5, r * 1.94, r * 0.17);
+      const w = Math.sin(t * 14) * r * 0.1;
+      c.beginPath(); c.moveTo(-r * 0.95, -r * 0.46); c.lineTo(-r * 1.5, -r * 0.62 + w); c.lineTo(-r * 1.4, -r * 0.4 + w); c.closePath(); c.fill();
+    },
+  },
+  singer: {
+    front(c, r) {
+      c.strokeStyle = "#2a2f45"; c.lineWidth = r * 0.12; c.lineCap = "round"; // หูฟัง
+      c.beginPath(); c.arc(0, -r * 0.05, r * 0.98, Math.PI * 1.05, Math.PI * 1.95); c.stroke();
+      c.fillStyle = "#2a2f45";
+      c.beginPath(); c.ellipse(-r * 0.95, -r * 0.1, r * 0.17, r * 0.3, 0, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.ellipse(r * 0.95, -r * 0.1, r * 0.17, r * 0.3, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#fff"; c.font = "700 " + Math.round(r * 0.6) + "px " + FONT; c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillText("♪", -r * 0.1, r * 0.55);
+    },
+  },
+  funx: {
+    front(c, r, t) {
+      c.fillStyle = "#d63a4a"; // ผ้าพันคอแดง
+      c.fillRect(-r * 0.9, r * 0.38, r * 1.8, r * 0.2);
+      c.beginPath(); c.moveTo(-r * 0.85, r * 0.5); c.lineTo(-r * 1.4, r * 0.4 + Math.sin(t * 9) * r * 0.1); c.lineTo(-r * 1.3, r * 0.65); c.closePath(); c.fill();
+      clockIcon(c, -r * 0.05, -r * 0.62, r * 0.27, t);
+    },
+  },
+  johan: {
+    front(c, r, t) {
+      hourglassIcon(c, 0, -r * 0.8, r * 0.22, t);
+    },
+  },
+  isagi: {
+    eyes: "#3fa8ff",
+    front(c, r) {
+      c.strokeStyle = "#3fa8ff"; c.lineWidth = r * 0.07; // วงตา Meta Vision
+      c.beginPath(); c.arc(r * 0.45, -r * 0.12, r * 0.3, 0, Math.PI * 2); c.stroke();
+      const bx = r * 0.55, by = r * 0.68, br = r * 0.3; // ลูกฟุตบอลข้างเท้า
+      c.fillStyle = "#fff"; c.beginPath(); c.arc(bx, by, br, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#222"; c.beginPath();
+      for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * Math.PI * 0.4; c.lineTo(bx + Math.cos(a) * br * 0.5, by + Math.sin(a) * br * 0.5); }
+      c.closePath(); c.fill();
+    },
+  },
+  florentino: {
+    front(c, r) {
+      c.fillStyle = "#1c1822"; // หมวกทรงสูง
+      c.fillRect(-r * 0.55, -r * 1.55, r * 1.1, r * 0.8);
+      c.fillRect(-r * 0.95, -r * 0.8, r * 1.9, r * 0.14);
+      c.fillStyle = "#d63a4a"; c.fillRect(-r * 0.55, -r * 0.95, r * 1.1, r * 0.15);
+      c.beginPath(); c.arc(r * 0.45, -r * 0.88, r * 0.14, 0, Math.PI * 2); c.fill(); // กุหลาบ
+      c.strokeStyle = "#e8e8f0"; c.lineWidth = r * 0.05; c.lineCap = "round"; // ดาบเรเพียร์
+      c.beginPath(); c.moveTo(r * 0.6, r * 0.5); c.lineTo(r * 1.5, r * 0.1); c.stroke();
+    },
+  },
+  solar: {
+    body: "#ffb82e",
+    back(c, r, t) {
+      c.fillStyle = "#ffe27a";
+      for (let i = 0; i < 12; i++) {
+        c.save(); c.rotate(t * 0.8 + (i * Math.PI) / 6);
+        c.beginPath(); c.moveTo(r * 0.9, -r * 0.14); c.lineTo(r * 1.4, 0); c.lineTo(r * 0.9, r * 0.14); c.closePath(); c.fill();
+        c.restore();
+      }
+    },
+  },
+  redmist: {
+    body: "#3a0d14",
+    eyes: "#ff2d3d",
+    back(c, r, t) {
+      for (let i = 0; i < 5; i++) {
+        const a = t * 0.9 + i * 1.26;
+        c.fillStyle = "rgba(220, 30, 50, 0.35)";
+        c.beginPath(); c.arc(Math.cos(a) * r * 1.0, Math.sin(a) * r * 0.9, r * 0.32, 0, Math.PI * 2); c.fill();
+      }
+    },
+    front(c, r) {
+      c.fillStyle = "#c81e32"; // ปกเสื้อโค้ทแดง
+      c.beginPath(); c.moveTo(-r * 0.45, r * 0.4); c.lineTo(0, r * 0.95); c.lineTo(r * 0.45, r * 0.4); c.lineTo(0, r * 0.55); c.closePath(); c.fill();
+    },
+  },
+  warden: {
+    // บอลฟ้าเขียวมีซี่โครงขาวเฉียง เลข HP กลางตัว และหนวด Sculk พิกเซลโบกรอบตัว
+    body: "#168a98",
+    rim: "#8ff3f5",
+    eyes: "none",
+    back(c, r, t) {
+      for (let k = 0; k < 4; k++) {
+        const a0 = k * 1.57 + 0.6 + Math.sin(t * 1.6 + k) * 0.25;
+        for (let i = 0; i < 5; i++) {
+          const d = r * (1.0 + i * 0.26);
+          const wob = Math.sin(t * 5 + k * 2 + i * 0.8) * r * 0.12;
+          const x = Math.cos(a0) * d - Math.sin(a0) * wob, y = Math.sin(a0) * d + Math.cos(a0) * wob;
+          const sz = r * (0.34 - i * 0.04);
+          c.fillStyle = i === 4 ? "#2de0d0" : i % 2 ? "#0f6572" : "#0a3f4a";
+          c.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+          if (i === 3 && Math.sin(t * 4 + k) > 0.5) { c.fillStyle = "#ffb82e"; c.fillRect(x + sz, y - sz, sz * 0.8, sz * 0.8); }
+        }
+      }
+    },
+    front(c, r, t, o) {
+      c.save(); c.rotate(-0.65); // ซี่โครงขาวเฉียง
+      c.fillStyle = "#e9e7d3";
+      for (let i = -1; i <= 1; i++) c.fillRect(-r * 0.7, i * r * 0.3 - r * 0.08, r * 0.62, r * 0.17);
+      c.restore();
+      c.font = "800 " + Math.round(r * 0.5) + "px " + FONT; c.textAlign = "center"; c.textBaseline = "middle";
+      c.lineWidth = r * 0.1; c.strokeStyle = "#063d47"; c.lineJoin = "round";
+      const txt = String(o && o.hp !== undefined ? o.hp : "");
+      c.strokeText(txt, r * 0.18, 0); c.fillStyle = "#fff"; c.fillText(txt, r * 0.18, 0); // เลข HP
+    },
+  },
+  hatsu: {
+    front(c, r) {
+      c.font = "900 " + Math.round(r * 0.95) + "px " + FONT; c.textAlign = "center"; c.textBaseline = "middle";
+      c.lineWidth = r * 0.12; c.strokeStyle = "#5a0d12"; c.strokeText("4", 0, r * 0.52);
+      c.fillStyle = "#fff"; c.fillText("4", 0, r * 0.52);
+    },
+  },
+};
+function clockIcon(c, x, y, rr, t) {
+  c.save(); c.translate(x, y);
+  c.fillStyle = "#fff"; c.strokeStyle = "#222"; c.lineWidth = rr * 0.22;
+  c.beginPath(); c.arc(0, 0, rr, 0, Math.PI * 2); c.fill(); c.stroke();
+  c.lineWidth = rr * 0.2; c.lineCap = "round";
+  c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(t * 3) * rr * 0.7, Math.sin(t * 3) * rr * 0.7); c.stroke();
+  c.beginPath(); c.moveTo(0, 0); c.lineTo(0, -rr * 0.5); c.stroke();
+  c.restore();
+}
+function hourglassIcon(c, x, y, rr, t) {
+  c.save(); c.translate(x, y); c.rotate(Math.sin(t * 2) * 0.1);
+  c.fillStyle = "#ffe9a8"; c.strokeStyle = "#3a2a10"; c.lineWidth = rr * 0.2; c.lineJoin = "round";
+  c.beginPath(); c.moveTo(-rr, -rr * 1.2); c.lineTo(rr, -rr * 1.2); c.lineTo(0, 0); c.lineTo(rr, rr * 1.2); c.lineTo(-rr, rr * 1.2); c.lineTo(0, 0); c.closePath();
+  c.fill(); c.stroke(); c.restore();
+}
+
+// วาดบอลตัวละคร (พิกัดกลางตัว หันขวา) ไว้ใน ctx ที่ส่งมา
+function drawCodeBall(c, key, def, r, o) {
+  o = o || {};
+  const st = BALL_STYLES[key] || {};
+  const t = o.t !== undefined ? o.t : performance.now() / 1000;
+  const base = st.body || def.color;
+  if (st.back) { c.save(); st.back(c, r, t); c.restore(); }
+  if (o.casting) { // กำลังใช้สกิล: ออร่าเรืองรอบตัว
+    c.save(); c.globalAlpha = 0.35 + 0.25 * Math.sin(t * 16); c.strokeStyle = def.color; c.lineWidth = r * 0.16;
+    c.beginPath(); c.arc(0, 0, r * 1.12, 0, Math.PI * 2); c.stroke(); c.restore();
+  }
+  const g = c.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.1, 0, 0, r);
+  g.addColorStop(0, shade(base, 0.45)); g.addColorStop(0.6, base); g.addColorStop(1, shade(base, -0.4));
+  c.fillStyle = o.flash ? "#fff" : g;
+  c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.fill();
+  c.lineWidth = Math.max(2, r * 0.07); c.strokeStyle = o.flash ? "#fff" : st.rim || shade(base, -0.6); c.stroke();
+  if (st.eyes !== "none") { // ตา มองไปทางขวา (ทิศที่หัน)
+    const ec = st.eyes || "#1b1f33";
+    for (const ex of [0.2, 0.6]) {
+      c.fillStyle = "#fff"; c.beginPath(); c.ellipse(r * ex, -r * 0.12, r * 0.15, r * 0.2, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = ec; c.beginPath(); c.arc(r * (ex + 0.05), -r * 0.1, r * 0.09, 0, Math.PI * 2); c.fill();
+    }
+  }
+  if (st.front && !o.flash) { c.save(); st.front(c, r, t, o); c.restore(); }
+}
+
+const ballIcons = {};
+function ballIconURL(key) { // รูปบอลเล็ก ใช้เป็นภาพย่อในปุ่มเลือกตัวละครและการ์ดข้อมูล
+  if (ballIcons[key]) return ballIcons[key];
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = 128;
+  const c = cv.getContext("2d");
+  c.translate(64, 76);
+  drawCodeBall(c, key, CHARACTERS[key], 33, { t: 0.4, hp: CHARACTERS[key].hp });
+  return (ballIcons[key] = cv.toDataURL());
+}
+const thumbSrc = (key) => (spriteMode === "ball" ? ballIconURL(key) : CHARACTERS[key].frames.idle);
+
+function setSpriteMode(m) {
+  spriteMode = m === "ball" ? "ball" : "sprite";
+  try { localStorage.setItem("bb_style", spriteMode); } catch (e) { /* ข้าม */ }
+  const b = document.getElementById("styleBtn");
+  if (b) b.textContent = "🎨 รูปแบบ: " + STYLE_NAMES[spriteMode];
+  if (view === "setup") rebuildPlayers();
+}
+
 function drawFighter(f, key) {
   const size = f.r * 2.6;
   const img = images[key] && (images[key][poseFrame(f, key)] || images[key].idle);
@@ -1340,7 +1584,9 @@ function drawFighter(f, key) {
   ctx.rotate(Math.max(-0.25, Math.min(0.25, (f.vy / 800) * f.facing)));
   ctx.scale(f.facing, 1);
 
-  if (img) {
+  if (spriteMode === "ball") {
+    drawCodeBall(ctx, key, f.def, f.r, { flash: f.hitFlash > 0, casting: !!f.cast, hp: Math.ceil(f.hp) });
+  } else if (img) {
     if (f.hitFlash > 0) {
       // วาบขาวตอนโดนตี: ทาสีขาวบนสำเนาของภาพ (canvas แยก) เพื่อให้ทาเฉพาะส่วนตัวละคร ไม่ทาทั้งกล่อง
       flashCv.width = flashCv.height = Math.ceil(size);
@@ -2827,11 +3073,12 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 45";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 47";
   }
 }
 
 rebuildPlayers();
+setSpriteMode(spriteMode);
 setView("menu");
 checkVersions();
 fitCanvas();
