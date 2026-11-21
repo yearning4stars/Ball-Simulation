@@ -1474,7 +1474,7 @@ const BALL_STYLES = {
     rim: "#2de0d0",
     eyes: "none",
     back(c, r, t) {
-      // เขา (horn) บนหัวสองข้าง: ไม้เลื้อย Sculk พิกเซลโค้งชี้ขึ้น-ออก มีกิ่งแยก ปลายสว่าง โคนแดงเหมือนต้นฉบับ
+      // เขา (horn) บนหัวสองข้าง: ไม้เลื้อย Sculk พิกเซลโค้งชี้ขึ้น-ออก มีกิ่งแยก ปลายสว่าง
       const lerp = (a, b, k) => Math.round(a + (b - a) * k);
       for (const sx of [-1, 1]) {
         const sway = Math.sin(t * 2 + sx) * r * 0.03;
@@ -1483,8 +1483,7 @@ const BALL_STYLES = {
         for (let i = 0; i <= N; i++) {
           const k = i / N, [x, y] = pos(k);
           const sz = r * (0.28 - 0.12 * k);
-          if (i === 0) c.fillStyle = "#e0242b"; // โคนเขาสีแดง
-          else c.fillStyle = "rgb(" + lerp(18, 80, k) + "," + lerp(84, 214, k) + "," + lerp(96, 206, k) + ")";
+          c.fillStyle = "rgb(" + lerp(18, 80, k) + "," + lerp(84, 214, k) + "," + lerp(96, 206, k) + ")";
           c.fillRect(x - sz / 2, y - sz / 2, sz, sz);
         }
         for (const [kb, dir, len] of [[0.35, 1, 3], [0.62, -1, 2], [0.85, 1, 2]]) { // กิ่งแยก
@@ -3125,7 +3124,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 50";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 51";
   }
 }
 
