@@ -392,7 +392,7 @@ function openPicker(i) {
     const img = document.createElement("img");
     img.onerror = () => { img.style.visibility = "hidden"; };
     img.style.visibility = "visible";
-    img.src = thumbSrc(k);
+    img.src = thumbSrc(k, playerSels[i].skin);
     img.alt = d.name;
     const nm = document.createElement("div");
     nm.className = "pk-name";
@@ -481,6 +481,7 @@ function openPicker(i) {
 function rebuildPlayers() {
   const keys = Object.keys(CHARACTERS);
   const old = playerSels.map((sel) => sel.value);
+  const oldSkins = playerSels.map((sel) => sel.skin);
   layout = currentLayout();
   ffaWrap.hidden = layout.mode !== "ffa";
   playersBox.innerHTML = "";
@@ -502,6 +503,7 @@ function rebuildPlayers() {
       sel.appendChild(opt);
     }
     sel.value = old[i] && CHARACTERS[old[i]] ? old[i] : savedPick(i) || keys[i % keys.length];
+    sel.skin = fixSkin(sel.value, oldSkins[i] || savedSkin(i) || DEFAULT_SKIN);
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "pick";
@@ -515,12 +517,30 @@ function rebuildPlayers() {
       const d = CHARACTERS[sel.value];
       thumb.onerror = () => { thumb.style.visibility = "hidden"; };
       thumb.style.visibility = "visible";
-      thumb.src = thumbSrc(sel.value);
+      thumb.src = thumbSrc(sel.value, sel.skin);
       nm.textContent = d.name;
       btn.style.borderColor = d.color;
     };
     refresh();
+    // เลือกสกิน: รายการสกินของตัวละครที่เลือกอยู่ในช่องนี้
+    const skinSel = document.createElement("select");
+    skinSel.className = "skin-sel";
+    skinSel.title = "เลือกสกินตัวละคร";
+    const fillSkins = () => {
+      skinSel.innerHTML = "";
+      for (const id of skinsOf(sel.value)) {
+        const o = document.createElement("option");
+        o.value = id; o.textContent = SKINS[id].icon + " " + SKINS[id].name;
+        skinSel.appendChild(o);
+      }
+      sel.skin = fixSkin(sel.value, sel.skin);
+      skinSel.value = sel.skin;
+      skinSel.hidden = skinSel.options.length < 2;
+    };
+    fillSkins();
+    skinSel.addEventListener("change", () => { sfx.unlock(); sfx.click(); setSkin(i, skinSel.value); });
     sel.addEventListener("change", () => {
+      fillSkins();
       refresh();
       savePicks();
       if (view === "setup") refreshInfo();
@@ -534,6 +554,7 @@ function rebuildPlayers() {
     label.appendChild(lt);
     label.appendChild(sel);
     label.appendChild(btn);
+    label.appendChild(skinSel);
     playersBox.appendChild(label);
     if ((layout.mode === "1v1" && i === 0) || (layout.mode === "2v2" && i === 1)) {
       const vs = document.createElement("span");
@@ -557,7 +578,7 @@ function startBattle() {
   const defs = playerSels.map((sel) => CHARACTERS[sel.value]);
   battle = new Battle(W, H, defs, Math.random, layout.teams);
   battle.layout = layout;
-  battle.fighters.forEach((f) => { f.trailHp = f.hp; }); // แถบเลือดที่ค่อยๆ ลดตามหลัง
+  battle.fighters.forEach((f, i) => { f.trailHp = f.hp; f.skin = (playerSels[i] && playerSels[i].skin) || DEFAULT_SKIN; }); // แถบเลือดที่ค่อยๆ ลดตามหลัง
   particles = [];
   shards = [];
   floaters = [];
@@ -624,24 +645,6 @@ function openSettings() {
   head.appendChild(x);
   const body = document.createElement("div");
   body.className = "set-body";
-
-  // รูปแบบตัวละคร
-  const stRow = document.createElement("div");
-  stRow.className = "set-row";
-  stRow.innerHTML = '<span class="set-label">รูปแบบตัวละคร</span>';
-  const stSeg = document.createElement("div");
-  stSeg.className = "seg";
-  const stBtns = Object.keys(STYLE_NAMES).map((m) => {
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "secondary"; b.textContent = STYLE_NAMES[m];
-    b.addEventListener("click", () => { sfx.unlock(); sfx.click(); setSpriteMode(m); refreshSt(); });
-    stSeg.appendChild(b);
-    return [m, b];
-  });
-  const refreshSt = () => stBtns.forEach(([m, b]) => b.classList.toggle("on", m === spriteMode));
-  refreshSt();
-  stRow.appendChild(stSeg);
-  body.appendChild(stRow);
 
   // ความเร็วเกม
   const spRow = document.createElement("div");
@@ -716,7 +719,6 @@ on("menuQuick", () => { randomizeAll(); goBattle(); });
 on("menuSettings", openSettings);
 on("backMenu", () => setView("menu"));
 on("setupSettings", openSettings);
-on("styleBtn", () => setSpriteMode(spriteMode === "ball" ? "sprite" : "ball"));
 on("fight", goBattle);
 on("randomAll", randomizeAll);
 on("gbAgain", startBattle);
@@ -870,7 +872,7 @@ function refreshInfo() {
     head.className = "card-head";
     const img = document.createElement("img");
     img.onerror = () => { img.style.visibility = "hidden"; };
-    img.src = thumbSrc(sel.value); img.alt = "";
+    img.src = thumbSrc(sel.value, sel.skin); img.alt = "";
     const tt = document.createElement("div");
     tt.innerHTML = '<div class="card-name"></div><div class="card-sub"></div>';
     tt.firstChild.textContent = def.name; tt.firstChild.style.color = def.color;
@@ -951,6 +953,7 @@ function labBattle_new(def) {
   battle = new Battle(W, H, [def, DUMMY_DEF], Math.random, [0, 1]);
   battle.layout = { mode: "1v1", n: 2, teams: [0, 1], labels: ["", ""], colors: null };
   const [f, d] = battle.fighters;
+  f.skin = playerSels[labSel.slot] ? playerSels[labSel.slot].skin : DEFAULT_SKIN; d.skin = "sprite";
   f.x = W * 0.27; f.y = H * 0.55;
   d.x = W * 0.73; d.y = H * 0.55;
   d.vx = d.vy = 0;
@@ -1011,7 +1014,7 @@ function spawnParticles(x, y, color, n, power) {
 // หั่นภาพตัวละครเป็นตาราง N x N แล้วให้แต่ละชิ้นกระเด็นออกจากจุดกึ่งกลาง
 function spawnShards(f, key) {
   let img = images[key] && (images[key][f.frame] || images[key].idle);
-  if (spriteMode === "ball") { // โหมดบอล: หั่นรูปบอลที่วาดไว้เป็นเศษ
+  if (skinKind(f.skin || skinForKey(key)) === "ball") { // สกินบอล: หั่นรูปบอลที่วาดไว้เป็นเศษ
     const cv = document.createElement("canvas");
     cv.width = cv.height = 156;
     const c = cv.getContext("2d");
@@ -1361,9 +1364,22 @@ function poseFrame(f, key) {
 // ============================================================
 //  รูปแบบตัวละคร: 1 = ต้นฉบับ (ภาพ PNG ในโค้ด)  2 = บอลกลมวาดด้วยโค้ด มีสัญลักษณ์เด่นประจำตัวละคร
 // ============================================================
-let spriteMode = "sprite";
-try { if (localStorage.getItem("bb_style") === "ball") spriteMode = "ball"; } catch (e) { /* ข้าม */ }
-const STYLE_NAMES = { sprite: "1. ต้นฉบับ (ภาพ)", ball: "2. บอลกลม (วาดด้วยโค้ด)" };
+// ระบบสกิน: เลือกสกินได้ทีละช่องผู้เล่น (เก็บที่ sel.skin) เพิ่มสกินใหม่ = เพิ่มรายการใน SKINS
+//   name = ชื่อในรายการ, kind = "sprite" (ใช้ภาพ PNG ของตัวละคร) | "ball" (วาดด้วยโค้ด)
+//   ตัวละครจำกัดสกินเองได้ด้วย CHARACTERS[k].skins = ["sprite", ...]
+const SKINS = {
+  sprite: { name: "ต้นฉบับ", icon: "🖼️", kind: "sprite" },
+  ball: { name: "บอลกลม", icon: "⚽", kind: "ball" },
+};
+const DEFAULT_SKIN = (() => { try { return localStorage.getItem("bb_style") === "ball" ? "ball" : "sprite"; } catch (e) { return "sprite"; } })();
+const skinsOf = (key) => ((CHARACTERS[key] && CHARACTERS[key].skins) || Object.keys(SKINS)).filter((id) => SKINS[id]);
+const fixSkin = (key, id) => (SKINS[id] && skinsOf(key).includes(id) ? id : skinsOf(key)[0] || "sprite");
+const skinKind = (id) => (SKINS[id] || SKINS.sprite).kind;
+// สกินของตัวละครที่กำลังสู้อยู่ (ใช้กับภาพติดตา/เศษ/เพื่อนที่ถูกเรียกมา ซึ่งไม่มี fighter ติดมาด้วย)
+function skinForKey(key) {
+  const f = battle && battle.fighters.find((x) => charKey(x.def) === key);
+  return (f && f.skin) || DEFAULT_SKIN;
+}
 
 function shade(hex, amt) { // amt -1..1: มืดลง..สว่างขึ้น
   const n = parseInt(hex.replace("#", ""), 16);
@@ -1614,14 +1630,21 @@ function ballIconURL(key) { // รูปบอลเล็ก ใช้เป็
   drawCodeBall(c, key, CHARACTERS[key], 33, { t: 0.4, hp: CHARACTERS[key].hp });
   return (ballIcons[key] = cv.toDataURL());
 }
-const thumbSrc = (key) => (spriteMode === "ball" ? ballIconURL(key) : CHARACTERS[key].frames.idle);
+const thumbSrc = (key, skin) => (skinKind(fixSkin(key, skin)) === "ball" ? ballIconURL(key) : CHARACTERS[key].frames.idle);
 
-function setSpriteMode(m) {
-  spriteMode = m === "ball" ? "ball" : "sprite";
-  try { localStorage.setItem("bb_style", spriteMode); } catch (e) { /* ข้าม */ }
-  const b = document.getElementById("styleBtn");
-  if (b) b.textContent = "🎨 รูปแบบ: " + STYLE_NAMES[spriteMode];
+// เปลี่ยนสกินของช่องผู้เล่น i
+function setSkin(i, id) {
+  const sel = playerSels[i];
+  if (!sel) return;
+  sel.skin = fixSkin(sel.value, id);
+  saveSkins();
   if (view === "setup") rebuildPlayers();
+}
+function saveSkins() {
+  try { localStorage.setItem("bb_skins", JSON.stringify(playerSels.map((s) => s.skin))); } catch (e) { /* ข้าม */ }
+}
+function savedSkin(i) {
+  try { return JSON.parse(localStorage.getItem("bb_skins") || "[]")[i] || null; } catch (e) { return null; }
 }
 
 function drawFighter(f, key) {
@@ -1641,7 +1664,7 @@ function drawFighter(f, key) {
   ctx.rotate(Math.max(-0.25, Math.min(0.25, (f.vy / 800) * f.facing)));
   ctx.scale(f.facing, 1);
 
-  if (spriteMode === "ball") {
+  if (skinKind(f.skin || skinForKey(key)) === "ball") {
     drawCodeBall(ctx, key, f.def, f.r, { flash: f.hitFlash > 0, casting: !!f.cast, hp: Math.ceil(f.hp), facing: f.facing, horn: f.hornT || 0 });
   } else if (img) {
     if (f.hitFlash > 0) {
@@ -3130,12 +3153,11 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 52";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 53";
   }
 }
 
 rebuildPlayers();
-setSpriteMode(spriteMode);
 setView("menu");
 checkVersions();
 fitCanvas();

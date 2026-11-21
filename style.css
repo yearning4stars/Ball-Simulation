@@ -377,3 +377,6 @@ body[data-view="setup"] #gameTitle, body[data-view="game"] #gameTitle { display:
 .skrow .sk-top { display: flex; justify-content: space-between; gap: 6px; font-size: 0.78rem; font-weight: 600; }
 .skrow .sk-type { font-size: 0.62rem; color: #8f98b8; font-weight: 400; }
 .skrow .sk-det { font-size: 0.66rem; color: #aab2d0; margin-top: 2px; line-height: 1.35; }
+
+/* เลือกสกินในช่องผู้เล่น */
+select.skin-sel { padding: 6px 8px; font-size: 0.82rem; max-width: 150px; }
