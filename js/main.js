@@ -1421,7 +1421,8 @@ const SKINS = {
   ball: { name: "บอลกลม", icon: "⚽", kind: "ball" },
 };
 const DEFAULT_SKIN = (() => { try { return localStorage.getItem("bb_style") === "ball" ? "ball" : "sprite"; } catch (e) { return "sprite"; } })();
-const skinsOf = (key) => ((CHARACTERS[key] && CHARACTERS[key].skins) || Object.keys(SKINS)).filter((id) => SKINS[id]);
+// ค่าเริ่มต้นทุกตัวมีแค่สกิน "ต้นฉบับ"; ตัวที่มีสกินอื่นต้องระบุ skins ใน characters.js (ตอนนี้มีแค่ Warden ที่มีบอล)
+const skinsOf = (key) => ((CHARACTERS[key] && CHARACTERS[key].skins) || ["sprite"]).filter((id) => SKINS[id]);
 const fixSkin = (key, id) => (SKINS[id] && skinsOf(key).includes(id) ? id : skinsOf(key)[0] || "sprite");
 const skinKind = (id) => (SKINS[id] || SKINS.sprite).kind;
 // สกินของตัวละครที่กำลังสู้อยู่ (ใช้กับภาพติดตา/เศษ/เพื่อนที่ถูกเรียกมา ซึ่งไม่มี fighter ติดมาด้วย)
@@ -3249,7 +3250,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 57";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 58";
   }
 }
 
