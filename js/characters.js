@@ -538,7 +538,7 @@ const CHARACTERS = {
         sound: "shoot",
       },
       {
-        // สกิล 2: เรียกเพื่อน FuNx หรือ Johan มาโจมตีให้ 1 ครั้ง (ใช้สกิลของเขาให้แบบย่อ)
+        // สกิล 2: เรียกเพื่อน FuNx, Johan หรือ Hatsu มาโจมตีให้ 1 ครั้ง (ใช้สกิลของเขาให้แบบย่อ)
         // เรียกคนที่ "ต้องสู้ด้วยอยู่" ไม่ได้ (ถ้าศัตรูคนไหนชื่อเดียวกับเพื่อน จะเรียกคนนั้นไม่ได้)
         type: "summon",
         name: "เรียกเพื่อน",
@@ -553,6 +553,8 @@ const CHARACTERS = {
           { name: "FuNx", say: "ตัดเวลา!", damage: 16, silence: 2.2, knockback: 140, color: "#ff2a55" },
           // Johan: เข็มทิศ + ชะลอเวลา = ดาเมจ + ศัตรูช้าลง
           { name: "Johan", say: "ชะลอเวลา!", damage: 10, slow: 3, slowMult: 0.4, knockback: 100, color: "#7ff5dc" },
+          // Hatsu: เลข 4 = ดาเมจ 4 x 4 + ศัตรูช้าลงนิดหน่อย
+          { name: "Hatsu", say: "สี่!", damage: 16, slow: 1.5, slowMult: 0.7, knockback: 120, color: "#ff5a5f" },
         ],
       },
     ],

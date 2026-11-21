@@ -1428,7 +1428,7 @@ const skinKind = (id) => (SKINS[id] || SKINS.sprite).kind;
 // สกินของตัวละครที่กำลังสู้อยู่ (ใช้กับภาพติดตา/เศษ/เพื่อนที่ถูกเรียกมา ซึ่งไม่มี fighter ติดมาด้วย)
 function skinForKey(key) {
   const f = battle && battle.fighters.find((x) => charKey(x.def) === key);
-  return (f && f.skin) || DEFAULT_SKIN;
+  return fixSkin(key, (f && f.skin) || DEFAULT_SKIN); // ตัวที่ไม่มีสกินบอล (เช่น เพื่อนที่ Solar เรียกมา) ใช้ภาพต้นฉบับเสมอ
 }
 
 function shade(hex, amt) { // amt -1..1: มืดลง..สว่างขึ้น
@@ -3250,7 +3250,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 58";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 59";
   }
 }
 
