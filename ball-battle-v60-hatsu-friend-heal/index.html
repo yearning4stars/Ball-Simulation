@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ball Battle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=60" />
+</head>
+<body>
+  <main>
+    <h1 id="gameTitle">Ball Battle</h1>
+
+    <!-- หน้าเมนูหลัก -->
+    <section id="menu" class="menu">
+      <div class="menu-logo">⚔️</div>
+      <div class="menu-title">Ball Battle</div>
+      <div class="menu-sub">ตัวละครเด้งไปมาในสนามแล้วสู้กันเอง</div>
+      <div class="menu-btns">
+        <button id="menuPlay" class="menu-btn">▶ เริ่มเกม</button>
+        <button id="menuQuick" class="menu-btn secondary">🎲 สุ่มตัวละครแล้วสู้เลย</button>
+        <button id="menuSettings" class="menu-btn secondary">⚙️ ตั้งค่า</button>
+      </div>
+    </section>
+
+    <!-- หน้าเตรียมสู้: เลือกโหมดและตัวละคร -->
+    <section id="setup">
+      <div class="controls">
+        <button id="backMenu" class="secondary">← เมนู</button>
+        <label>โหมด
+          <select id="mode">
+            <option value="1v1">1 ต่อ 1</option>
+            <option value="2v2">2 ต่อ 2</option>
+            <option value="ffa">ทุกคนสู้กันเอง (FFA)</option>
+          </select>
+        </label>
+        <label id="ffaWrap" hidden>จำนวนผู้เล่น
+          <select id="ffaCount">
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+          </select>
+        </label>
+        <button id="fight">เริ่มสู้</button>
+        <button id="randomAll" class="secondary">🎲 สุ่มตัวละคร</button>
+        <button id="setupSettings" class="secondary">⚙️ ตั้งค่า</button>
+      </div>
+      <!-- ช่องเลือกตัวละครของผู้เล่นแต่ละคน: main.js สร้างให้ตามโหมด -->
+      <div class="controls" id="players"></div>
+
+      <!-- รายละเอียดตัวละครที่เลือก (แทนสนามก่อนเริ่มสู้): กราฟค่าพลัง สกิล และห้องทดลองสกิล -->
+      <div id="info" class="info">
+        <div id="labBox" class="lab">
+          <div id="labTitle" class="lab-title">🧪 ห้องทดลองสกิล</div>
+          <div id="labWrap" class="lab-wrap"></div>
+          <div class="lab-btns">
+            <button id="labReplay" class="secondary">🔁 เล่นซ้ำ</button>
+            <button id="labAll" class="secondary">🎬 ใช้ทุกสกิลสลับกัน</button>
+          </div>
+          <div class="lab-hint">กดที่สกิลในการ์ดตัวละครเพื่อดูการจำลองสกิลนั้น (สู้กับหุ่นฝึก)</div>
+        </div>
+        <div id="cards" class="cards"></div>
+      </div>
+    </section>
+
+    <!-- แถบปุ่มตอนอยู่ในเกม -->
+    <div class="controls" id="gamebar">
+      <button id="gbAgain">🔁 สู้อีกครั้ง</button>
+      <button id="gbSetup" class="secondary">↩ เลือกตัวละคร</button>
+      <button id="gbMenu" class="secondary">🏠 เมนู</button>
+      <button id="gbSettings" class="secondary">⚙️ ตั้งค่า</button>
+    </div>
+
+    <div id="stage">
+      <!-- แผงผู้เล่นอยู่รอบสนาม (main.js สร้างให้ตามโหมด): ซ้าย/ขวาบนจอกว้าง, เหนือสนามบนมือถือ -->
+      <section id="hudL" class="hud"></section>
+      <canvas id="arena" width="720" height="720"></canvas>
+      <section id="hudR" class="hud"></section>
+    </div>
+
+    <p id="ver" class="ver">เวอร์ชัน 35</p>
+  </main>
+
+  <!-- ?v=35 กันเบราว์เซอร์/GitHub Pages ใช้ไฟล์เก่าจากแคช: เวลาแก้โค้ด ให้เปลี่ยนเลขนี้ทุกที่พร้อมกัน -->
+  <script src="js/characters.js?v=60"></script>
+  <script src="js/battle.js?v=35"></script>
+  <script src="js/audio.js?v=38"></script>
+  <script src="js/sound-config.js?v=38"></script>
+  <script src="js/main.js?v=60"></script>
+</body>
+</html>
