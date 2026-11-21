@@ -1468,33 +1468,42 @@ const BALL_STYLES = {
     },
   },
   warden: {
-    // บอลฟ้าเขียวมีซี่โครงขาวเฉียง เลข HP กลางตัว และหนวด Sculk พิกเซลโบกรอบตัว
-    body: "#168a98",
-    rim: "#8ff3f5",
+    // ตามภาพตัวอย่าง: บอลฟ้าเขียวขอบสว่างบาง ลายเส้นนอนจางๆ, แท่งเทา 6 อัน (2 กลุ่ม กลุ่มละ 3) เฉียงสองข้างของเลข HP กลางตัว,
+    // มีหนวด Sculk พิกเซลแตกกิ่งลอยรอบตัว และก้อนทองเล็กๆ ลอยวน
+    body: "#17a3b8",
+    rim: "#2fd0e6",
     eyes: "none",
     back(c, r, t) {
-      for (let k = 0; k < 4; k++) {
-        const a0 = k * 1.57 + 0.6 + Math.sin(t * 1.6 + k) * 0.25;
-        for (let i = 0; i < 5; i++) {
-          const d = r * (1.0 + i * 0.26);
-          const wob = Math.sin(t * 5 + k * 2 + i * 0.8) * r * 0.12;
-          const x = Math.cos(a0) * d - Math.sin(a0) * wob, y = Math.sin(a0) * d + Math.cos(a0) * wob;
-          const sz = r * (0.34 - i * 0.04);
-          c.fillStyle = i === 4 ? "#2de0d0" : i % 2 ? "#0f6572" : "#0a3f4a";
-          c.fillRect(x - sz / 2, y - sz / 2, sz, sz);
-          if (i === 3 && Math.sin(t * 4 + k) > 0.5) { c.fillStyle = "#ffb82e"; c.fillRect(x + sz, y - sz, sz * 0.8, sz * 0.8); }
-        }
+      const spots = [[1.12, -0.12, -0.4, 0], [0.15, 1.2, 2.1, 1.7], [-1.1, -0.55, 3.6, 3.1]];
+      spots.forEach(([sx, sy, rot, ph]) => sculkTendril(c, sx * r, sy * r, r * 0.55, rot + Math.sin(t * 1.4 + ph) * 0.25, t + ph));
+      c.fillStyle = "#ffc21a"; // ก้อนทอง
+      for (let k = 0; k < 2; k++) {
+        const a = t * 0.9 + k * 3.4;
+        c.save(); c.translate(Math.cos(a) * r * 1.2, Math.sin(a) * r * 1.2); c.rotate(a * 2);
+        c.fillRect(-r * 0.12, -r * 0.09, r * 0.26, r * 0.18);
+        c.fillStyle = "#fff0a0"; c.fillRect(-r * 0.12, -r * 0.09, r * 0.26, r * 0.05);
+        c.restore(); c.fillStyle = "#ffc21a";
       }
     },
     front(c, r, t, o) {
-      c.save(); c.rotate(-0.65); // ซี่โครงขาวเฉียง
-      c.fillStyle = "#e9e7d3";
-      for (let i = -1; i <= 1; i++) c.fillRect(-r * 0.7, i * r * 0.3 - r * 0.08, r * 0.62, r * 0.17);
+      c.save(); // ลายเส้นนอนจางๆ ในตัวบอล
+      c.beginPath(); c.arc(0, 0, r * 0.96, 0, Math.PI * 2); c.clip();
+      c.fillStyle = "rgba(255,255,255,0.07)";
+      for (let y = -r; y < r; y += r * 0.16) c.fillRect(-r, y, r * 2, r * 0.07);
       c.restore();
-      c.font = "800 " + Math.round(r * 0.5) + "px " + FONT; c.textAlign = "center"; c.textBaseline = "middle";
-      c.lineWidth = r * 0.1; c.strokeStyle = "#063d47"; c.lineJoin = "round";
+      const bars = [[0.16, -0.72], [0.42, -0.51], [0.66, -0.25], [-0.68, 0.2], [-0.47, 0.46], [-0.24, 0.7]];
+      for (const [bx, by] of bars) { // แท่งเทาเฉียง "/"
+        c.save(); c.translate(bx * r, by * r); c.rotate(-0.78);
+        const g = c.createLinearGradient(0, -r * 0.1, 0, r * 0.1);
+        g.addColorStop(0, "#f2f2ee"); g.addColorStop(1, "#bfc2c0");
+        c.fillStyle = g; c.strokeStyle = "#7d8587"; c.lineWidth = r * 0.03;
+        c.beginPath(); c.roundRect(-r * 0.26, -r * 0.1, r * 0.52, r * 0.2, r * 0.03); c.fill(); c.stroke();
+        c.restore();
+      }
+      c.font = "800 " + Math.round(r * 0.52) + "px " + FONT; c.textAlign = "center"; c.textBaseline = "middle";
+      c.lineWidth = r * 0.14; c.strokeStyle = "#0b1519"; c.lineJoin = "round";
       const txt = String(o && o.hp !== undefined ? o.hp : "");
-      c.strokeText(txt, r * 0.18, 0); c.fillStyle = "#fff"; c.fillText(txt, r * 0.18, 0); // เลข HP
+      c.strokeText(txt, 0, r * 0.03); c.fillStyle = "#fff"; c.fillText(txt, 0, r * 0.03); // เลข HP
     },
   },
   hatsu: {
@@ -1505,6 +1514,18 @@ const BALL_STYLES = {
     },
   },
 };
+// หนวด Sculk พิกเซลแตกกิ่ง (ศูนย์กลางที่ x,y หมุน rot ขนาดรวม size)
+function sculkTendril(c, x, y, size, rot, t) {
+  const u = size * 0.2;
+  const cells = [[0,0],[0,1],[1,1],[1,2],[2,2],[2,3],[-1,1],[-2,1],[-2,0],[3,3],[3,2],[1,3],[0,3],[-1,3],[-1,4],[2,4],[3,4],[4,3],[0,-1],[-1,-1]];
+  c.save(); c.translate(x, y); c.rotate(rot);
+  cells.forEach(([cx, cy], i) => {
+    const w = Math.sin(t * 4 + i * 0.7) * u * 0.15;
+    c.fillStyle = i % 3 === 0 ? "#26b5c4" : "#16899a";
+    c.fillRect((cx - 1.5) * u + w, (cy - 2) * u, u * 0.9, u * 0.9);
+  });
+  c.restore();
+}
 function clockIcon(c, x, y, rr, t) {
   c.save(); c.translate(x, y);
   c.fillStyle = "#fff"; c.strokeStyle = "#222"; c.lineWidth = rr * 0.22;
@@ -3073,7 +3094,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 47";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 48";
   }
 }
 
