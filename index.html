@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=61" />
+  <link rel="stylesheet" href="style.css?v=64" />
 </head>
 <body>
   <main>
@@ -19,41 +19,56 @@
       <div class="menu-title">Ball Battle</div>
       <div class="menu-sub">ตัวละครเด้งไปมาในสนามแล้วสู้กันเอง</div>
       <div class="menu-btns">
-        <button id="menuPlay" class="menu-btn">▶ เริ่มเกม</button>
-        <button id="menuQuick" class="menu-btn secondary">🎲 สุ่มตัวละครแล้วสู้เลย</button>
-        <button id="menuSettings" class="menu-btn secondary">⚙️ ตั้งค่า</button>
+        <button id="menuPlay" class="menu-btn"><span class="mb-ico">▶</span><span class="mb-txt"><b>เริ่มเกม</b><small>เลือกโหมดและตัวละคร</small></span></button>
+        <button id="menuRepeat" class="menu-btn secondary" hidden><span class="mb-ico">⏩</span><span class="mb-txt"><b>สู้ต่อด้วยชุดเดิม</b><small></small></span></button>
+        <button id="menuQuick" class="menu-btn secondary"><span class="mb-ico">🎲</span><span class="mb-txt"><b>สุ่มแล้วสู้เลย</b><small>สุ่มตัวละครตามโหมดที่เลือกไว้</small></span></button>
+        <button id="menuSettings" class="menu-btn secondary"><span class="mb-ico">⚙️</span><span class="mb-txt"><b>ตั้งค่า</b><small>ความเร็ว เสียง เพลงธีม</small></span></button>
       </div>
+      <div id="menuRoster" class="menu-roster" aria-label="ตัวละครทั้งหมด"></div>
     </section>
 
     <!-- หน้าเตรียมสู้: เลือกโหมดและตัวละคร -->
     <section id="setup">
-      <div class="controls">
+      <!-- แถบบน: กลับ / ชื่อหน้า / ปุ่มหลัก -->
+      <div class="setup-top">
         <button id="backMenu" class="secondary">← เมนู</button>
-        <label>โหมด
-          <select id="mode">
+        <div class="setup-title">เตรียมสู้</div>
+        <div class="setup-actions">
+          <button id="randomAll" class="secondary">🎲 สุ่มทั้งหมด</button>
+          <button id="setupSettings" class="secondary">⚙️ ตั้งค่า</button>
+          <button id="fight" class="go-btn">⚔️ เริ่มสู้</button>
+        </div>
+      </div>
+
+      <!-- 3 ช่องเห็นครบในหน้าเดียว: ซ้าย = โหมด+ผู้เล่น | กลาง = ห้องทดลองสกิล | ขวา = รายละเอียดตัวละคร -->
+      <!-- จอแคบ (มือถือ): สลับดูทีละช่องผ่านแท็บ เพื่อให้แต่ละช่องพอดีจอเดียวไม่ต้องเลื่อน -->
+      <nav id="setupTabs" class="setup-tabs" aria-label="ส่วนของหน้าเตรียมสู้">
+        <button type="button" data-tab="left" class="on">👥 โหมด/ผู้เล่น</button>
+        <button type="button" data-tab="center">🧪 ห้องทดลอง</button>
+        <button type="button" data-tab="right">📋 ตัวละคร</button>
+      </nav>
+      <div id="info" class="setup-grid" data-tab="left">
+        <aside class="panel p-left">
+          <div class="panel-t"><span class="step">1</span> โหมด</div>
+          <button id="modeBtn" type="button" class="mode-btn" title="กดเพื่อเลือกโหมด"></button>
+          <!-- select ซ่อนไว้เก็บค่าโหมด/จำนวนผู้เล่น (โค้ดอื่นอ่านจากตรงนี้) เลือกผ่านการ์ดโหมดแทน -->
+          <select id="mode" hidden>
             <option value="1v1">1 ต่อ 1</option>
             <option value="2v2">2 ต่อ 2</option>
             <option value="ffa">ทุกคนสู้กันเอง (FFA)</option>
           </select>
-        </label>
-        <label id="ffaWrap" hidden>จำนวนผู้เล่น
-          <select id="ffaCount">
+          <select id="ffaCount" hidden>
             <option value="3">3</option>
             <option value="4" selected>4</option>
             <option value="5">5</option>
             <option value="6">6</option>
           </select>
-        </label>
-        <button id="fight">เริ่มสู้</button>
-        <button id="randomAll" class="secondary">🎲 สุ่มตัวละคร</button>
-        <button id="setupSettings" class="secondary">⚙️ ตั้งค่า</button>
-      </div>
-      <!-- ช่องเลือกตัวละครของผู้เล่นแต่ละคน: main.js สร้างให้ตามโหมด -->
-      <div class="controls" id="players"></div>
+          <div class="panel-t"><span class="step">2</span> ผู้เล่น</div>
+          <!-- ช่องเลือกตัวละครของผู้เล่นแต่ละคน: main.js สร้างให้ตามโหมด -->
+          <div class="teams" id="players"></div>
+        </aside>
 
-      <!-- รายละเอียดตัวละครที่เลือก (แทนสนามก่อนเริ่มสู้): กราฟค่าพลัง สกิล และห้องทดลองสกิล -->
-      <div id="info" class="info">
-        <div id="labBox" class="lab">
+        <div id="labBox" class="lab panel p-center">
           <div id="labTitle" class="lab-title">🧪 ห้องทดลองสกิล</div>
           <div id="labWrap" class="lab-wrap"></div>
           <div class="lab-btns">
@@ -62,7 +77,12 @@
           </div>
           <div class="lab-hint">กดที่สกิลในการ์ดตัวละครเพื่อดูการจำลองสกิลนั้น (สู้กับหุ่นฝึก)</div>
         </div>
-        <div id="cards" class="cards"></div>
+
+        <aside class="panel p-right">
+          <div class="panel-t"><span class="step">3</span> ตัวละคร</div>
+          <div id="cardTabs" class="card-tabs"></div>
+          <div id="cards" class="cards"></div>
+        </aside>
       </div>
     </section>
 
@@ -89,6 +109,6 @@
   <script src="js/battle.js?v=36"></script>
   <script src="js/audio.js?v=39"></script>
   <script src="js/sound-config.js?v=38"></script>
-  <script src="js/main.js?v=61"></script>
+  <script src="js/main.js?v=64"></script>
 </body>
 </html>
