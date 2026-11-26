@@ -200,6 +200,8 @@ class Battle {
       bleedT: 0, // เลือดไหล (วินาทีที่เหลือ) เสียเลือด bleedDps ต่อวินาที (Red Mist)
       bleedDps: 0,
       bleedAcc: 0,
+      bleedKind: "blood", // "wither" = ติดสถานะ Wither (เลือดลดต่อเนื่องสีดำ)
+      armor: false, // เกราะ (Wither: เลือดต่ำกว่า armorAt แล้วกระสุนโดนน้อยลง)
       blockT: 0, // กำลังยกการ์ด (วินาทีที่เหลือ) / พักการ์ด
       blockCd: 0,
       evadeT: 0, // กำลังหลบ / พักหลบ
@@ -291,7 +293,7 @@ class Battle {
           f.bleedAcc = 0;
           this._damage(f, tick, f.x, f.y, false, true);
         }
-      } else f.bleedAcc = 0;
+      } else { f.bleedAcc = 0; f.bleedKind = "blood"; }
       f.blockT = Math.max(0, f.blockT - fdt);
       f.blockCd = Math.max(0, f.blockCd - fdt);
       f.evadeT = Math.max(0, f.evadeT - fdt);
@@ -1533,6 +1535,11 @@ class Battle {
       r: sk.projectileRadius,
       damage: this._out(f, (sk.threeRange && (hoopShot || !three) && sk.damageNear !== undefined ? sk.damageNear : sk.damage) * this._dmgMult(f, enemy)),
       stunOnHit: sk.stun || 0, // โดนแล้วสตันศัตรูกี่วินาที (Blossom)
+      bleed: sk.bleed || 0, // โดนแล้วติดเลือดไหล/Wither กี่วินาที
+      bleedDps: sk.bleedDps || 0,
+      wither: !!sk.wither,
+      blastR: sk.blastR || 0, // ระเบิดตอนโดน: ศัตรูอื่นในรัศมี (px) โดนดาเมจ blastMult เท่าและกระเด็น
+      blastMult: sk.blastMult || 0.6,
       flowers: sk.flowers || 0, // โดนแล้วดอกไม้ปรากฏรอบเป้าหมายกี่ดอก (Blossom)
       energyRefill: !!sk.energyRefill,
       flowerDist: sk.flowerDist || 64, // ดอกไม้อยู่ห่างจากจุดกึ่งกลางเป้าหมายกี่ px (ใกล้ตัวมาก ให้แทงทะลุไปเก็บได้)
@@ -1580,6 +1587,7 @@ class Battle {
       knockback: sk.knockback || 0,
       bleed: sk.bleed || 0, // โดนแล้วเลือดไหลกี่วินาที (bleedDps ต่อวินาที)
       bleedDps: sk.bleedDps || 0,
+      wither: !!sk.wither,
       cdPenalty: sk.cdPenalty || 0, // โดนแล้วคูลดาวน์ทุกสกิลของศัตรูเพิ่มกี่วินาที (Greater Split: ทำลายสกิลศัตรู)
       style: sk.style || "", // รูปแบบการวาด: "sonicboom" = ลำแสงระเบิด | "roar" = วงคำรามรอบตัว | ไม่ใส่ = ส่วนโค้งปกติ
       mind: sk.waveMind || 0, // โดนคลื่นแล้วสติ/ความมั่นใจลดเท่านี้ (0-100)
@@ -1830,7 +1838,11 @@ class Battle {
         // หลบไปแล้ว (Meta Vision) / อยู่นอกความจริง (ตัดเวลา): กระสุนบินทะลุผ่านไป
         if (this._evaded(p, target) || target === this.eraser) continue;
         if (Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
-          this._damage(target, p.damage, p.x, p.y);
+          // เกราะ (Wither ตอนเลือดต่ำ): กระสุนโดนน้อยลง
+          const armored = target.armor && target.def.armorProjMult !== undefined;
+          this._damage(target, armored ? p.damage * target.def.armorProjMult : p.damage, p.x, p.y);
+          if (p.bleed) this._applyExtras(target, p);
+          if (p.blastR) this._blast(p, target);
           if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
           // ถีบเบาๆ ตามทิศกระสุน
           target.x += p.dx * 6;
@@ -2049,11 +2061,40 @@ class Battle {
     if (src.bleed) {
       t.bleedT = Math.max(t.bleedT, src.bleed);
       t.bleedDps = Math.max(t.bleedDps, src.bleedDps || 2);
-      this.events.push({ type: "bleed", x: t.x, y: t.y });
+      t.bleedKind = src.wither ? "wither" : "blood";
+      this.events.push({ type: "bleed", x: t.x, y: t.y, kind: t.bleedKind });
     }
     if (src.cdPenalty) {
       for (let i = 0; i < t.cds.length; i++) t.cds[i] += src.cdPenalty;
       this.events.push({ type: "cdBreak", x: t.x, y: t.y });
+    }
+  }
+
+  // ระเบิดของกระสุน (กะโหลก Wither): ศัตรูอื่นในรัศมี blastR โดนดาเมจและกระเด็น (ตัวที่โดนตรงไม่โดนซ้ำ)
+  _blast(p, hitTarget) {
+    this.events.push({ type: "explosion", x: p.x, y: p.y, r: p.blastR, blue: p.r > 20 });
+    for (const t of this._foes(p.owner)) {
+      if (t === hitTarget || t.dead || t === this.eraser) continue;
+      const d = Math.hypot(t.x - p.x, t.y - p.y);
+      if (d > p.blastR + t.r) continue;
+      this._damage(t, p.damage * p.blastMult, p.x, p.y);
+      if (p.bleed) this._applyExtras(t, p);
+      this._knock(t, (t.x - p.x) / (d || 1), (t.y - p.y) / (d || 1), p.knockback || 200);
+    }
+  }
+
+  // Wither: เลือดลดถึง armorAt ครั้งแรก = เกราะขึ้น + ระเบิดรอบตัวครั้งเดียว (เหมือนตอน Wither ชาร์จใน Minecraft)
+  _witherArmor(f) {
+    f.armor = true;
+    const b = f.def.armorBurst || {};
+    this.events.push({ type: "witherArmor", x: f.x, y: f.y, r: b.radius || 300 });
+    for (const t of this._foes(f)) {
+      if (t.dead || t === this.eraser) continue;
+      const d = Math.hypot(t.x - f.x, t.y - f.y);
+      if (d > (b.radius || 300) + t.r) continue;
+      this._damage(t, this._out(f, b.damage || 14), t.x, t.y);
+      this._applyExtras(t, { bleed: b.bleed || 4, bleedDps: b.bleedDps || 3, wither: true });
+      this._knock(t, (t.x - f.x) / (d || 1), (t.y - f.y) / (d || 1), b.knockback || 520);
     }
   }
 
@@ -2086,6 +2127,7 @@ class Battle {
     this.events.push({ type: "hit", x, y, amount });
     // กำลังบีบแฮมสเตอร์แล้วโดนดาเมจ = ท่าถูกยกเลิก แฮมสเตอร์หลุดวิ่งหนี
     if (f.cast && f.cast.sk.type === "squeeze" && amount > 0) this._dropHamster(f);
+    if (f.def.armorAt && !f.armor && f.hp > 0 && f.hp <= f.maxHp * f.def.armorAt) this._witherArmor(f);
     // The Red Mist: เลือดต่ำกว่า egoAt = E.G.O. ปรากฏ (ครั้งเดียว) ดาเมจแรงขึ้นและปลดล็อกท่าของ E.G.O.
     if (f.def.egoAt && !f.egoUsed && f.hp > 0 && f.hp <= f.maxHp * f.def.egoAt) {
       f.egoUsed = true;
@@ -2141,6 +2183,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 36;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 37;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

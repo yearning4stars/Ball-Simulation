@@ -825,9 +825,110 @@ const CHARACTERS = {
       },
     ],
   },
+
+  // ---------- Wither (Minecraft) แฟนเกม ----------
+  // ภาพ: assets/characters/wither/  idle.png ยืนปกติ | shoot.png ยิงกะโหลก | blue.png ชาร์จกะโหลกน้ำเงิน | burst.png ระเบิดรอบตัว (ภาพชั่วคราว ใส่ของจริงทับชื่อเดิมได้)
+  // พาสซีฟ "เกราะ Wither": เลือดต่ำกว่า armorAt ครั้งแรก = ระเบิดรอบตัวหนึ่งครั้ง แล้วกระสุนโดนเหลือ armorProjMult เท่า (ใน Minecraft ลูกธนูไม่เข้า)
+  // ตัวเลขเป็นค่าเสนอเริ่มต้น ปรับเองได้ตามใจ
+  wither: {
+    name: "Wither",
+    color: "#3a3f4f",
+    hp: 150,
+    speed: 150,
+    radius: 58,
+    armorAt: 0.5,
+    armorProjMult: 0.35,
+    armorBurst: { radius: 300, damage: 14, knockback: 520, bleed: 4, bleedDps: 3 },
+    frames: {
+      idle: "assets/characters/wither/idle.png",
+      shoot: "assets/characters/wither/shoot.png",
+      blue: "assets/characters/wither/blue.png",
+      burst: "assets/characters/wither/burst.png",
+    },
+    skills: [
+      {
+        // สกิล 1: สามหัวยิงกะโหลก Wither พร้อมกัน 3 ลูก โดนแล้วระเบิดเล็กและติดสถานะ Wither (เลือดลดต่อเนื่อง)
+        type: "projectile",
+        name: "Wither Skull",
+        icon: "💀",
+        desc: "สามหัวยิงกะโหลก 3 ลูก ระเบิด + ติด Wither",
+        cooldown: 3.2,
+        initialCooldown: 1,
+        frame: "shoot",
+        duration: 0.8,
+        fireDelay: 0.25,
+        count: 3,
+        interval: 0.12,
+        spread: 0.35,
+        damage: 7,
+        projectileSpeed: 420,
+        projectileRadius: 14,
+        shape: "witherskull",
+        wither: true,
+        bleed: 3,
+        bleedDps: 2,
+        blastR: 90,
+        blastMult: 0.6,
+        knockback: 140,
+        sound: "shoot",
+      },
+      {
+        // สกิล 2: กะโหลกน้ำเงิน ชาร์จนาน ลูกใหญ่ช้า ทำลายไม่ได้ (ดาบปัด/คลื่นหยุดไม่ได้) ระเบิดแรง ผลักไกล สตันสั้นๆ
+        type: "projectile",
+        name: "Blue Skull",
+        icon: "🔵",
+        desc: "กะโหลกน้ำเงินลูกใหญ่ ทำลายไม่ได้ ระเบิดแรง",
+        cooldown: 9,
+        initialCooldown: 4.5,
+        frame: "blue",
+        duration: 1.2,
+        fireDelay: 0.8,
+        count: 1,
+        spread: 0.02,
+        damage: 22,
+        projectileSpeed: 250,
+        projectileRadius: 26,
+        shape: "witherskull",
+        indestructible: true,
+        wither: true,
+        bleed: 4,
+        bleedDps: 3,
+        stun: 0.6,
+        blastR: 170,
+        blastMult: 0.7,
+        knockback: 480,
+        lead: true,
+        sound: "shoot",
+      },
+      {
+        // สกิล 3: Wither Burst ระเบิดวงกว้างรอบตัว (เหมือนตอน Wither ชาร์จ) ผลักกระสุนศัตรูออก ติด Wither
+        type: "shockwave",
+        style: "roar",
+        name: "Wither Burst",
+        icon: "☠️",
+        desc: "ระเบิดวงกว้างรอบตัว ผลักกระสุน ติด Wither",
+        cooldown: 12,
+        initialCooldown: 7,
+        frame: "burst",
+        duration: 0.9,
+        fireDelay: 0.4,
+        damage: 12,
+        damageFar: 5,
+        waveSpeed: 520,
+        waveRange: 380,
+        waveArcDeg: 360,
+        knockback: 380,
+        projectileEffect: "push",
+        wither: true,
+        bleed: 4,
+        bleedDps: 3,
+        sound: "wave",
+      },
+    ],
+  },
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 36;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 37;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

@@ -317,7 +317,7 @@ const CHAR_CATEGORIES = [
   { id: "alien", label: "Alien Stage", match: ["luka"] },
   { id: "bluelock", label: "Blue Lock", match: ["isagi"] },
   { id: "rov", label: "RoV", match: ["florentino"] },
-  { id: "minecraft", label: "Minecraft", match: ["warden"] },
+  { id: "minecraft", label: "Minecraft", match: ["warden", "wither"] },
 ];
 function categoryOf(key) {
   const hay = (key + " " + (CHARACTERS[key].name || "")).toLowerCase().replace(/[_\-]/g, " ");
@@ -1441,8 +1441,22 @@ function handleEvents(events) {
     } else if (e.type === "block") {
       floaters.push({ x: e.x, y: e.y - 48, text: "ป้องกัน!", life: 0.7, color: "#c3c9dc", size: 24 });
     } else if (e.type === "bleed") {
-      spawnParticles(e.x, e.y, "#b0001c", 8, 160);
-      floaters.push({ x: e.x, y: e.y - 56, text: "เลือดไหล!", life: 0.8, color: "#ff5468", size: 24 });
+      if (e.kind === "wither") {
+        spawnParticles(e.x, e.y, "#1a1a22", 10, 160);
+        floaters.push({ x: e.x, y: e.y - 56, text: "Wither!", life: 0.8, color: "#9aa0b4", size: 24 });
+      } else {
+        spawnParticles(e.x, e.y, "#b0001c", 8, 160);
+        floaters.push({ x: e.x, y: e.y - 56, text: "เลือดไหล!", life: 0.8, color: "#ff5468", size: 24 });
+      }
+    } else if (e.type === "explosion") {
+      spawnParticles(e.x, e.y, e.blue ? "#5ab4ff" : "#2a2a34", e.blue ? 26 : 14, e.blue ? 380 : 260);
+      shake = Math.max(shake, e.blue ? 10 : 5);
+    } else if (e.type === "witherArmor") {
+      screenFlash = 0.3;
+      shake = Math.max(shake, 16);
+      spawnParticles(e.x, e.y, "#5ab4ff", 40, 460);
+      spawnParticles(e.x, e.y, "#14141a", 30, 380);
+      floaters.push({ x: e.x, y: e.y - 80, text: "เกราะ Wither!", life: 1.6, color: "#8fc8ff", size: 36 });
     } else if (e.type === "cdBreak") {
       floaters.push({ x: e.x, y: e.y - 70, text: "สกิลถูกบั่นทอน!", life: 1.0, color: "#ff9aa6", size: 26 });
     } else if (e.type === "hoop") {
@@ -2383,7 +2397,8 @@ function drawEgoAura(f) {
 function drawBleed(f) {
   const t = performance.now() / 1000;
   ctx.save();
-  ctx.fillStyle = "#c4102a";
+  ctx.fillStyle = f.bleedKind === "wither" ? "#15151c" : "#c4102a";
+  if (f.bleedKind === "wither") { ctx.shadowColor = "#6b708a"; ctx.shadowBlur = 6; }
   for (let i = 0; i < 3; i++) {
     const ph = (t * 1.6 + i / 3) % 1;
     ctx.globalAlpha = 1 - ph;
@@ -2596,6 +2611,35 @@ function drawMetaThreats(f) {
 
 // ---------- กรอบคำพูด (กระสุนบั่นทอนสติ) ----------
 // กระสุนเลข 4 ของ Hatsu: ตัวเลข 4 ตัวหนาเรืองแสงหมุนเล็กน้อย
+// กะโหลก Wither: ดำ (ธรรมดา) / น้ำเงิน (ลูกใหญ่ r > 20) ตาเรืองแสง มีหางควันตามหลัง
+function drawWitherSkull(p) {
+  const blue = p.r > 20;
+  const ang = Math.atan2(p.dy, p.dx);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  // หางควัน
+  ctx.fillStyle = blue ? "rgba(90,180,255,0.25)" : "rgba(30,30,40,0.35)";
+  for (let i = 1; i <= 3; i++) {
+    ctx.beginPath();
+    ctx.arc(-p.dx * p.r * 0.9 * i, -p.dy * p.r * 0.9 * i, p.r * (1 - i * 0.2), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.rotate(ang);
+  const s = p.r;
+  ctx.shadowColor = blue ? "#5ab4ff" : "#8a8fa8"; ctx.shadowBlur = blue ? 22 : 10;
+  ctx.fillStyle = blue ? "#1d3f66" : "#1c1c24";
+  ctx.strokeStyle = blue ? "#9fd4ff" : "#4a4f63";
+  ctx.lineWidth = Math.max(2, s * 0.14);
+  ctx.beginPath(); ctx.rect(-s, -s, s * 2, s * 2); ctx.fill(); ctx.stroke();
+  // ตา + ปาก
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = blue ? "#e6f6ff" : "#d8dbe6";
+  ctx.fillRect(s * 0.1, -s * 0.5, s * 0.5, s * 0.35);
+  ctx.fillRect(s * 0.1, s * 0.15, s * 0.5, s * 0.35);
+  ctx.fillRect(-s * 0.55, -s * 0.1, s * 0.3, s * 0.2);
+  ctx.restore();
+}
+
 function drawFour(p) {
   ctx.save();
   ctx.translate(p.x, p.y);
@@ -3328,6 +3372,7 @@ function render() {
       if (p.shape === "note") { drawNote(p); gray(false); continue; }
       if (p.shape === "text") { drawWord(p); gray(false); continue; }
       if (p.shape === "four") { drawFour(p); gray(false); continue; }
+      if (p.shape === "witherskull") { drawWitherSkull(p); gray(false); continue; }
       if (p.shape === "soccer") { drawSoccer(p); gray(false); continue; }
       if (p.shape === "dart") { drawDart(p); gray(false); continue; }
       if (p.shape === "basketball") { drawBasketball(p); gray(false); continue; }
@@ -3445,7 +3490,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 36;
+const EXPECTED_VERSION = 37;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
@@ -3457,7 +3502,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 65";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 66";
   }
 }
 
