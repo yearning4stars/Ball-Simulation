@@ -415,7 +415,8 @@ button.swap-btn, button.rnd-btn { padding: 2px 7px; }
 .setup-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .setup-title { font-weight: 700; font-size: 1rem; color: #d6d0c0; }
 .setup-grid { display: grid; grid-template-columns: 270px minmax(0, 1fr) 310px; gap: 10px; align-items: stretch; text-align: left; height: calc(100vh - 78px); height: calc(100dvh - 78px); min-height: 420px; }
-.panel { background: #1c1c1c; background: #1c1c1c; border: 1px solid #383838; border-radius: 3px; padding: 8px 10px; overflow-y: auto; min-height: 0; min-width: 0; }
+/* ใช้เฉพาะแผงของหน้าเตรียมสู้ (class .panel เดียวกับแผง HUD ในเกม จึงต้องจำกัดขอบเขต ไม่งั้นแผง HUD จะมีแถบเลื่อน) */
+.setup-grid .panel { background: #1c1c1c; border: 1px solid #383838; border-radius: 3px; padding: 8px 10px; overflow-y: auto; min-height: 0; min-width: 0; }
 .panel-t { font-weight: 700; font-size: 0.78rem; color: #b5ae9c; margin: 2px 0 7px; padding-bottom: 4px; border-bottom: 1px solid #383838; }
 .panel-t:not(:first-child) { margin-top: 14px; }
 .p-left .teams { flex-direction: column; flex-wrap: nowrap; align-items: stretch; margin-bottom: 0; }
