@@ -371,6 +371,7 @@ const CHARACTERS = {
         type: "metavision",
         name: "Meta Vision",
         cooldown: 13,
+        hpRush: 4, // ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: เลือดเต็ม 1 เท่า -> เลือดหมด 4 เท่า (13 วิ -> เหลือราว 3 วิ)
         initialCooldown: 8,
         frame: "meta",
         duration: 5, // มองเห็นอนาคต 5 วินาที
