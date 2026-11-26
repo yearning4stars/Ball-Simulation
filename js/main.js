@@ -175,7 +175,7 @@ function openSoundSettings() {
   box.className = "pk-box";
   const head = document.createElement("div");
   head.className = "pk-head";
-  head.innerHTML = '<div class="pk-title">🎵 ตั้งค่าเสียงและเพลงธีม</div>';
+  head.innerHTML = '<div class="pk-title">ตั้งค่าเสียงและเพลงธีม</div>';
   const x = document.createElement("button");
   x.type = "button";
   x.className = "secondary";
@@ -225,7 +225,7 @@ function openSoundSettings() {
     clr.type = "button"; clr.className = "secondary"; clr.textContent = "ล้าง"; clr.title = "กลับไปใช้ค่าเริ่มต้น";
     const refresh = () => {
       const src = sfx.sources[key];
-      st.textContent = src ? (src === "upload" ? "📁 " : "📄 ") + (sfx.names[key] || "") : "ค่าเริ่มต้น";
+      st.textContent = src ? (src === "upload" ? "[ไฟล์] " : "[ลิงก์] ") + (sfx.names[key] || "") : "ค่าเริ่มต้น";
       st.classList.toggle("on", !!src);
       play.disabled = !src;
       clr.disabled = !src;
@@ -385,7 +385,7 @@ function openSkinPicker(i) {
     img.onerror = () => { img.style.visibility = "hidden"; };
     img.src = thumbSrc(key, id); img.alt = SKINS[id].name;
     const nm = document.createElement("div");
-    nm.className = "pk-name"; nm.textContent = SKINS[id].icon + " " + SKINS[id].name;
+    nm.className = "pk-name"; nm.textContent = SKINS[id].name;
     const st = document.createElement("div");
     st.className = "pk-stat"; st.textContent = id === sel.skin ? "กำลังใช้อยู่" : "กดเพื่อใช้สกินนี้";
     card.appendChild(img); card.appendChild(nm); card.appendChild(st);
@@ -421,7 +421,7 @@ function openPicker(i) {
   const rnd = document.createElement("button");
   rnd.type = "button";
   rnd.className = "secondary";
-  rnd.textContent = "🎲 สุ่ม";
+  rnd.textContent = "สุ่ม";
   rnd.addEventListener("click", () => { choose(i, keys[Math.floor(Math.random() * keys.length)]); closePicker(); });
   const x = document.createElement("button");
   x.type = "button";
@@ -456,7 +456,7 @@ function openPicker(i) {
     for (const sk of skillsOf(d)) {
       const it = document.createElement("div");
       it.className = "pk-sk";
-      it.textContent = skillIcon(sk) + " " + (sk.name || sk.type) + " · " + sk.cooldown + " วิ";
+      it.textContent = (sk.name || sk.type) + " · " + sk.cooldown + " วิ";
       sks.appendChild(it);
     }
     card.appendChild(img);
@@ -530,9 +530,9 @@ function openPicker(i) {
 
 // ---------- การ์ดเลือกโหมด ----------
 const MODE_DEFS = [
-  { id: "1v1", icon: "⚔️", name: "1 ต่อ 1", desc: "ดวลตัวต่อตัว" },
-  { id: "2v2", icon: "🤝", name: "2 ต่อ 2", desc: "ทีมแดง vs ทีมฟ้า" },
-  { id: "ffa", icon: "💥", name: "ทุกคนสู้กันเอง", desc: "FFA คนสุดท้ายชนะ" },
+  { id: "1v1", name: "1 ต่อ 1", desc: "ดวลตัวต่อตัว" },
+  { id: "2v2", name: "2 ต่อ 2", desc: "ทีมแดง vs ทีมฟ้า" },
+  { id: "ffa", name: "ทุกคนสู้กันเอง", desc: "FFA คนสุดท้ายชนะ" },
 ];
 const modeDots = (cols) => cols.map((c) => '<i style="background:' + c + '"></i>').join("");
 function modePips(id) {
@@ -563,7 +563,7 @@ function refreshModeCards() {
   const m = MODE_DEFS.find((x) => x.id === selMode.value) || MODE_DEFS[0];
   const extra = m.id === "ffa" ? " · " + selCount.value + " คน" : "";
   modeBtn.innerHTML =
-    '<span class="mc-ico">' + m.icon + '</span><span class="mc-txt"><b>' + m.name + extra + "</b><small>" + m.desc + "</small></span>" +
+    '<span class="mc-txt"><b>' + m.name + extra + "</b><small>" + m.desc + "</small></span>" +
     '<span class="mc-pips">' + modePips(m.id) + '</span><span class="mb-chg">เปลี่ยน ▾</span>';
 }
 function openModePicker() {
@@ -588,7 +588,7 @@ function openModePicker() {
     const card = document.createElement("div");
     card.className = "mode-card" + (on ? " on" : "");
     card.innerHTML =
-      '<button type="button" class="mc-main"><span class="mc-ico">' + m.icon + '</span>' +
+      '<button type="button" class="mc-main">' +
       '<span class="mc-txt"><b>' + m.name + "</b><small>" + m.desc + "</small></span></button>" +
       '<div class="mc-pips">' + modePips(m.id) + "</div>";
     if (m.id === "ffa") {
@@ -721,7 +721,7 @@ function rebuildPlayers() {
     skinBtn.title = "เลือกสกินตัวละคร";
     const fillSkins = () => {
       sel.skin = fixSkin(sel.value, sel.skin);
-      skinBtn.textContent = SKINS[sel.skin].icon + " " + SKINS[sel.skin].name;
+      skinBtn.textContent = SKINS[sel.skin].name;
       skinBtn.hidden = skinsOf(sel.value).length < 2;
     };
     fillSkins();
@@ -747,7 +747,7 @@ function rebuildPlayers() {
     rndBtn.type = "button";
     rndBtn.className = "secondary rnd-btn";
     rndBtn.title = "สุ่มตัวละครช่องนี้";
-    rndBtn.textContent = "🎲";
+    rndBtn.textContent = "สุ่ม";
     rndBtn.addEventListener("click", () => { sfx.unlock(); choose(i, keys[Math.floor(Math.random() * keys.length)]); });
     label.appendChild(rndBtn);
     slotEls.push(label);
@@ -778,38 +778,6 @@ function startBattle() {
   shake = 0;
 }
 
-// ---------- เมนูหลัก: ปุ่ม "สู้ต่อด้วยชุดเดิม" + แถบตัวละครทั้งหมด ----------
-function updateMenuRepeat() {
-  const b = document.getElementById("menuRepeat");
-  if (!b) return;
-  const L = currentLayout();
-  const names = [];
-  for (let i = 0; i < L.n; i++) {
-    const k = savedPick(i);
-    if (!k) { b.hidden = true; return; }
-    names.push(CHARACTERS[k].name);
-  }
-  const mname = (MODE_DEFS.find((m) => m.id === L.mode) || MODE_DEFS[0]).name;
-  b.querySelector("small").textContent = mname + " · " + names.join(" / ");
-  b.hidden = false;
-}
-function buildMenuRoster() {
-  const box = document.getElementById("menuRoster");
-  if (!box) return;
-  box.innerHTML = "";
-  for (const k of Object.keys(CHARACTERS)) {
-    const d = CHARACTERS[k];
-    const im = document.createElement("img");
-    im.alt = d.name;
-    im.title = d.name;
-    im.loading = "lazy";
-    im.style.borderColor = d.color;
-    im.onerror = () => { im.style.visibility = "hidden"; };
-    im.src = thumbSrc(k, "sprite");
-    box.appendChild(im);
-  }
-}
-
 // ---------- หน้าจอ: เมนู / เตรียมสู้ / ในเกม ----------
 let view = "menu";
 function setView(v) {
@@ -823,7 +791,7 @@ function setView(v) {
     refreshInfo();
   } else {
     unmountLab();
-    if (v === "menu") { battle = null; updateMenuRepeat(); }
+    if (v === "menu") battle = null;
   }
   requestAnimationFrame(() => { fitCanvas(); fitCanvas(); });
   fitCanvas();
@@ -860,7 +828,7 @@ function openSettings() {
   box.setAttribute("role", "dialog");
   const head = document.createElement("div");
   head.className = "pk-head";
-  head.innerHTML = '<div class="pk-title">⚙️ ตั้งค่า</div>';
+  head.innerHTML = '<div class="pk-title">ตั้งค่า</div>';
   const x = document.createElement("button");
   x.type = "button"; x.className = "secondary"; x.textContent = "✕"; x.title = "ปิด (Esc)";
   x.addEventListener("click", closeSettings);
@@ -877,8 +845,8 @@ function openSettings() {
     body.appendChild(d);
     return d;
   };
-  const secGame = sec("🎮 เกม");
-  const secSnd = sec("🔊 เสียง");
+  const secGame = sec("เกม");
+  const secSnd = sec("เสียง");
 
   // ความเร็วเกม
   const spRow = document.createElement("div");
@@ -909,7 +877,7 @@ function openSettings() {
   mRow.innerHTML = '<span class="set-label">เสียง</span>';
   const mBtn = document.createElement("button");
   mBtn.type = "button"; mBtn.className = "secondary";
-  const refreshM = () => { mBtn.textContent = sfx.muted ? "🔇 เสียง: ปิด (กดเพื่อเปิด)" : "🔊 เสียง: เปิด (กดเพื่อปิด)"; };
+  const refreshM = () => { mBtn.textContent = sfx.muted ? "เสียง: ปิด (กดเพื่อเปิด)" : "เสียง: เปิด (กดเพื่อปิด)"; };
   refreshM();
   mBtn.addEventListener("click", () => { sfx.unlock(); sfx.toggleMute(); sfx.click(); refreshM(); });
   mRow.appendChild(mBtn);
@@ -935,7 +903,7 @@ function openSettings() {
 
   const custom = document.createElement("button");
   custom.type = "button"; custom.className = "secondary";
-  custom.textContent = "🎵 ตั้งค่าเสียงและเพลงธีมเอง…";
+  custom.textContent = "ตั้งค่าเสียงและเพลงธีมเอง…";
   custom.addEventListener("click", () => { sfx.unlock(); sfx.click(); openSoundSettings(); });
   secSnd.appendChild(custom);
 
@@ -951,8 +919,6 @@ function openSettings() {
 
 const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", () => { sfx.unlock(); sfx.click(); fn(); }); };
 on("menuPlay", () => setView("setup"));
-on("menuQuick", () => { randomizeAll(); goBattle(); });
-on("menuRepeat", () => { setView("setup"); goBattle(); });
 on("menuSettings", openSettings);
 on("backMenu", () => setView("menu"));
 on("setupSettings", openSettings);
@@ -1161,7 +1127,7 @@ function refreshInfo() {
       const top = document.createElement("div");
       top.className = "sk-top";
       const nm = document.createElement("span");
-      nm.textContent = skillIcon(sk) + " " + (sk.name || sk.type);
+      nm.textContent = (sk.name || sk.type);
       const cd = document.createElement("span");
       cd.className = "sk-type"; cd.textContent = (TYPE_NAME[sk.type] || sk.type) + " · " + sk.cooldown + " วิ";
       top.append(nm, cd);
@@ -1205,7 +1171,7 @@ function startLab() {
   const sks = skillsOf(def);
   const sk = labSel.skill >= 0 ? sks[labSel.skill] : null;
   const t = document.getElementById("labTitle");
-  if (t) t.textContent = "🧪 ห้องทดลองสกิล — " + def.name + " · " + (sk ? (sk.name || sk.type) : "ทุกสกิล");
+  if (t) t.textContent = "ห้องทดลองสกิล — " + def.name + " · " + (sk ? (sk.name || sk.type) : "ทุกสกิล");
   const b = document.getElementById("labAll");
   if (b) b.classList.toggle("on", labSel.skill === -1);
 }
@@ -3491,7 +3457,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 64";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 65";
   }
 }
 
@@ -3503,7 +3469,6 @@ try {
   if (sc && ["3", "4", "5", "6"].includes(sc)) selCount.value = sc;
 } catch (e) { /* ข้าม */ }
 buildModeCards();
-buildMenuRoster();
 rebuildPlayers();
 setView("menu");
 checkVersions();
