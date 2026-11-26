@@ -1839,8 +1839,10 @@ class Battle {
         if (this._evaded(p, target) || target === this.eraser) continue;
         if (Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
           // เกราะ (Wither ตอนเลือดต่ำ): กระสุนโดนน้อยลง
+          // เกราะ Wither กันได้เฉพาะ "กระสุน" (ดาบ พุ่งชน คลื่น ฯลฯ ไม่ลดดาเมจ)
           const armored = target.armor && target.def.armorProjMult !== undefined;
           this._damage(target, armored ? p.damage * target.def.armorProjMult : p.damage, p.x, p.y);
+          if (armored) this.events.push({ type: "armorBlock", x: p.x, y: p.y });
           if (p.bleed) this._applyExtras(target, p);
           if (p.blastR) this._blast(p, target);
           if (p.mindDamage) this._hurtMind(target, p.mindDamage, p.x, p.y);
@@ -2077,8 +2079,10 @@ class Battle {
       if (t === hitTarget || t.dead || t === this.eraser) continue;
       const d = Math.hypot(t.x - p.x, t.y - p.y);
       if (d > p.blastR + t.r) continue;
-      this._damage(t, p.damage * p.blastMult, p.x, p.y);
-      if (p.bleed) this._applyExtras(t, p);
+      // ระเบิดไม่ติด Wither (ติดเฉพาะโดนกะโหลกตรงๆ); เกราะ Wither กันกระสุนรวมถึงแรงระเบิดของกระสุน
+      const mult = t.armor && t.def.armorProjMult !== undefined ? t.def.armorProjMult : 1;
+      this._damage(t, p.damage * p.blastMult * mult, p.x, p.y);
+      if (mult < 1) this.events.push({ type: "armorBlock", x: t.x, y: t.y });
       this._knock(t, (t.x - p.x) / (d || 1), (t.y - p.y) / (d || 1), p.knockback || 200);
     }
   }
@@ -2092,8 +2096,7 @@ class Battle {
       if (t.dead || t === this.eraser) continue;
       const d = Math.hypot(t.x - f.x, t.y - f.y);
       if (d > (b.radius || 300) + t.r) continue;
-      this._damage(t, this._out(f, b.damage || 14), t.x, t.y);
-      this._applyExtras(t, { bleed: b.bleed || 4, bleedDps: b.bleedDps || 3, wither: true });
+      this._damage(t, this._out(f, b.damage || 14), t.x, t.y); // ระเบิดตอนเกราะขึ้นไม่ติด Wither
       this._knock(t, (t.x - f.x) / (d || 1), (t.y - f.y) / (d || 1), b.knockback || 520);
     }
   }
@@ -2183,6 +2186,6 @@ class Battle {
 }
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 38;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).battle = 39;
 
 if (typeof module !== "undefined") module.exports = { Battle, skillsOf };

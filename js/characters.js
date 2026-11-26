@@ -828,17 +828,19 @@ const CHARACTERS = {
 
   // ---------- Wither (Minecraft) แฟนเกม ----------
   // ภาพ: assets/characters/wither/  idle.png ยืนปกติ | shoot.png ยิงกะโหลก | blue.png ชาร์จกะโหลกน้ำเงิน | burst.png ระเบิดรอบตัว (ภาพชั่วคราว ใส่ของจริงทับชื่อเดิมได้)
-  // พาสซีฟ "เกราะ Wither": เลือดต่ำกว่า armorAt ครั้งแรก = ระเบิดรอบตัวหนึ่งครั้ง แล้วกระสุนโดนเหลือ armorProjMult เท่า (ใน Minecraft ลูกธนูไม่เข้า)
+  // พาสซีฟ "เกราะ Wither": เลือดต่ำกว่า armorAt ครั้งแรก = ระเบิดรอบตัวหนึ่งครั้ง แล้ว "กระสุน" โดนเหลือ armorProjMult เท่า (กันได้เฉพาะกระสุน)
+  // สถานะ Wither ติดเฉพาะตอนโดนกะโหลกตรงๆ: ระเบิด (แรงระเบิดกะโหลก/ตอนเกราะขึ้น/Wither Burst) ไม่ติด
   // ตัวเลขเป็นค่าเสนอเริ่มต้น ปรับเองได้ตามใจ
   wither: {
     name: "Wither",
-    color: "#3a3f4f",
+    color: "#e6e9f2", // ขาว (ใช้กับชื่อและเอฟเฟกต์)
+    skins: ["sprite", "ball"], // ต้นฉบับ (ภาพกำหนดเอง) + บอลแบบ Warden
     hp: 150,
     speed: 150,
     radius: 58,
     armorAt: 0.5,
     armorProjMult: 0.35,
-    armorBurst: { radius: 300, damage: 9, knockback: 480, bleed: 3, bleedDps: 2 },
+    armorBurst: { radius: 300, damage: 9, knockback: 480 }, // ระเบิดตอนเกราะขึ้น ไม่ติด Wither
     frames: {
       idle: "assets/characters/wither/idle.png",
       shoot: "assets/characters/wither/shoot.png",
@@ -876,7 +878,7 @@ const CHARACTERS = {
         // สกิล 2: กะโหลกน้ำเงิน ชาร์จนาน ลูกใหญ่ช้า ทำลายไม่ได้ (ดาบปัด/คลื่นหยุดไม่ได้) ระเบิดแรง ผลักไกล สตันสั้นๆ
         type: "projectile",
         name: "Blue Skull",
-        icon: "🔵",
+        icon: "⚪",
         desc: "กะโหลกน้ำเงินลูกใหญ่ ทำลายไม่ได้ ระเบิดแรง",
         cooldown: 9,
         initialCooldown: 4.5,
@@ -903,10 +905,10 @@ const CHARACTERS = {
       {
         // สกิล 3: Wither Burst ระเบิดวงกว้างรอบตัว (เหมือนตอน Wither ชาร์จ) ผลักกระสุนศัตรูออก ติด Wither
         type: "shockwave",
-        style: "roar",
+        style: "witherburst",
         name: "Wither Burst",
         icon: "☠️",
-        desc: "ระเบิดวงกว้างรอบตัว ผลักกระสุน ติด Wither",
+        desc: "ระเบิดวงกว้างรอบตัว ผลักกระสุนศัตรู (ไม่ติด Wither)",
         cooldown: 12,
         initialCooldown: 7,
         frame: "burst",
@@ -919,9 +921,6 @@ const CHARACTERS = {
         waveArcDeg: 360,
         knockback: 380,
         projectileEffect: "push",
-        wither: true,
-        bleed: 3,
-        bleedDps: 2,
         sound: "wave",
       },
     ],
@@ -929,6 +928,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 38;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 39;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

@@ -1309,9 +1309,9 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, "#ffffff", 8, 220);
       sfx.deflect();
     } else if (e.type === "wave") {
-      spawnParticles(e.x, e.y, e.style ? "#2de0d0" : "#ffffff", 14, 260);
-      shake = Math.max(shake, e.style === "roar" ? 9 : 5);
-      if (e.style === "roar") screenFlash = Math.max(screenFlash, 0.12);
+      spawnParticles(e.x, e.y, e.style === "witherburst" ? "#ffffff" : e.style ? "#2de0d0" : "#ffffff", 14, 260);
+      shake = Math.max(shake, e.style === "roar" || e.style === "witherburst" ? 9 : 5);
+      if (e.style === "roar" || e.style === "witherburst") screenFlash = Math.max(screenFlash, 0.12);
       sfx.wave();
     } else if (e.type === "hear") {
       // วอร์เดนได้ยินเสียง: วงคลื่นเสียงจางๆ ที่ต้นเสียง + วงหูฟังรอบตัว
@@ -1443,25 +1443,29 @@ function handleEvents(events) {
       floaters.push({ x: e.x, y: e.y - 48, text: "ป้องกัน!", life: 0.7, color: "#c3c9dc", size: 24 });
     } else if (e.type === "bleed") {
       if (e.kind === "wither") {
-        spawnParticles(e.x, e.y, "#1a1a22", 10, 160);
-        floaters.push({ x: e.x, y: e.y - 56, text: "Wither!", life: 0.8, color: "#9aa0b4", size: 24 });
+        spawnParticles(e.x, e.y, "#f4f6fb", 10, 160);
+        floaters.push({ x: e.x, y: e.y - 56, text: "Wither!", life: 0.8, color: "#ffffff", size: 24 });
       } else {
         spawnParticles(e.x, e.y, "#b0001c", 8, 160);
         floaters.push({ x: e.x, y: e.y - 56, text: "เลือดไหล!", life: 0.8, color: "#ff5468", size: 24 });
       }
     } else if (e.type === "explosion") {
-      spawnParticles(e.x, e.y, e.blue ? "#5ab4ff" : "#2a2a34", e.blue ? 26 : 14, e.blue ? 380 : 260);
-      spawnParticles(e.x, e.y, e.blue ? "#e6f6ff" : "#8a8fa8", e.blue ? 12 : 6, e.blue ? 520 : 320);
+      // ระเบิดกะโหลก Wither: โทนขาว (ฝุ่นกระดูก + วงแหวนขาว) ลูกใหญ่ (blue = ลูกใหญ่) แรงกว่า
+      spawnParticles(e.x, e.y, "#ffffff", e.blue ? 24 : 12, e.blue ? 400 : 260);
+      spawnParticles(e.x, e.y, "#b9bfd0", e.blue ? 14 : 7, e.blue ? 300 : 200);
       witherRings.push({ x: e.x, y: e.y, r: e.r || 90, t: 0, life: e.blue ? 0.55 : 0.4, blue: !!e.blue });
       shake = Math.max(shake, e.blue ? 10 : 4);
+    } else if (e.type === "armorBlock") {
+      spawnParticles(e.x, e.y, "#ffffff", 5, 220);
+      floaters.push({ x: e.x, y: e.y - 30, text: "กัน!", life: 0.5, color: "#ffffff", size: 20 });
     } else if (e.type === "witherArmor") {
-      screenFlash = 0.3;
+      screenFlash = 0.35;
       shake = Math.max(shake, 16);
-      spawnParticles(e.x, e.y, "#5ab4ff", 40, 460);
-      spawnParticles(e.x, e.y, "#14141a", 30, 380);
+      spawnParticles(e.x, e.y, "#ffffff", 44, 480);
+      spawnParticles(e.x, e.y, "#b9bfd0", 26, 340);
       witherRings.push({ x: e.x, y: e.y, r: e.r || 300, t: 0, life: 0.8, blue: true, big: true });
       witherRings.push({ x: e.x, y: e.y, r: (e.r || 300) * 0.6, t: -0.12, life: 0.7, blue: false, big: true });
-      floaters.push({ x: e.x, y: e.y - 80, text: "เกราะ Wither!", life: 1.6, color: "#8fc8ff", size: 36 });
+      floaters.push({ x: e.x, y: e.y - 80, text: "เกราะ Wither!", life: 1.6, color: "#ffffff", size: 36 });
     } else if (e.type === "cdBreak") {
       floaters.push({ x: e.x, y: e.y - 70, text: "สกิลถูกบั่นทอน!", life: 1.0, color: "#ff9aa6", size: 26 });
     } else if (e.type === "hoop") {
@@ -1871,6 +1875,53 @@ const BALL_STYLES = {
       c.restore();
     },
   },
+  wither: {
+    // ลักษณะเด่นของ Wither: ลูกบอลดำเทาเข้มขอบขาว มี "สามหัวกะโหลก" โผล่เหนือตัว (กลางใหญ่ ข้างเล็ก) ตาขาวเรืองแสง
+    // ซี่โครงขาวพาดอก และเถ้าขาวลอยรอบตัว; เมื่อมีเกราะ (o.armor) มีโล่ขาวเส้นประหมุนรอบตัว
+    body: "#20222c",
+    rim: "#e6e9f2",
+    eyes: "none",
+    back(c, r, t, o) {
+      const q = r * 0.11;
+      const skull = (x, y, s, bob) => {
+        c.save(); c.translate(x, y + bob);
+        c.fillStyle = "#08080c"; c.fillRect(-s - q * 0.5, -s - q * 0.5, s * 2 + q, s * 2 + q);
+        c.fillStyle = "#2c2f3d"; c.fillRect(-s, -s, s * 2, s * 2);
+        c.shadowColor = "#ffffff"; c.shadowBlur = r * 0.18; c.fillStyle = "#ffffff";
+        c.fillRect(-s * 0.7, -s * 0.45, s * 0.55, s * 0.4); c.fillRect(s * 0.15, -s * 0.45, s * 0.55, s * 0.4); // ตาขาวเรืองแสง
+        c.shadowBlur = 0; c.fillStyle = "#b9bfd0";
+        for (let i = 0; i < 3; i++) c.fillRect(-s * 0.6 + i * s * 0.45, s * 0.35, s * 0.28, s * 0.3); // ฟัน
+        c.restore();
+      };
+      skull(-r * 0.72, -r * 0.92, r * 0.27, Math.sin(t * 2.1) * r * 0.04);
+      skull(r * 0.72, -r * 0.92, r * 0.27, Math.sin(t * 2.1 + 2) * r * 0.04);
+      skull(0, -r * 1.12, r * 0.36, Math.sin(t * 2.1 + 1) * r * 0.05);
+      for (let i = 0; i < 5; i++) { // เถ้าขาวลอย
+        const ph = (t * 0.6 + i / 5) % 1;
+        c.globalAlpha = 0.6 * (1 - ph); c.fillStyle = "#ffffff";
+        const sz = r * (0.08 + 0.08 * ph);
+        c.fillRect(Math.cos(i * 2.4) * r * 0.9 - sz / 2, r * 0.5 - ph * r * 1.5 - sz / 2, sz, sz);
+      }
+      c.globalAlpha = 1;
+      if (o && o.armor) { // โล่เกราะ (กันกระสุน)
+        c.save(); c.strokeStyle = "rgba(255,255,255," + (0.55 + 0.25 * Math.sin(t * 6)).toFixed(2) + ")";
+        c.lineWidth = r * 0.07; c.setLineDash([r * 0.3, r * 0.22]); c.lineDashOffset = -t * r;
+        c.beginPath(); c.arc(0, 0, r * 1.18, 0, Math.PI * 2); c.stroke(); c.restore();
+      }
+    },
+    front(c, r) {
+      // ซี่โครงขาวพาดอก + กระดูกสันหลังกลางตัว
+      c.fillStyle = "#e6e9f2";
+      const h = r * 0.09;
+      c.fillRect(-r * 0.08, -r * 0.1, r * 0.16, r * 0.95);
+      for (let i = 0; i < 4; i++) {
+        const y = r * (0.0 + i * 0.2), w = r * (0.62 - i * 0.07);
+        c.fillRect(-w, y, w * 2, h);
+      }
+      c.fillStyle = "#14161e";
+      c.fillRect(-r * 0.28, -r * 0.42, r * 0.2, r * 0.14); c.fillRect(r * 0.08, -r * 0.42, r * 0.2, r * 0.14); // เบ้าตาบนตัว
+    },
+  },
   hatsu: {
     front(c, r, t, o) {
       c.scale((o && o.facing) || 1, 1);
@@ -1982,7 +2033,7 @@ function drawFighter(f, key) {
   ctx.scale(f.facing, 1);
 
   if (skinKind(f.skin || skinForKey(key)) === "ball") {
-    drawCodeBall(ctx, key, f.def, f.r, { flash: f.hitFlash > 0, casting: !!f.cast, hp: Math.ceil(f.hp), facing: f.facing, horn: f.hornT || 0 });
+    drawCodeBall(ctx, key, f.def, f.r, { flash: f.hitFlash > 0, casting: !!f.cast, hp: Math.ceil(f.hp), facing: f.facing, horn: f.hornT || 0, armor: !!f.armor });
   } else if (img) {
     if (f.hitFlash > 0) {
       // วาบขาวตอนโดนตี: ทาสีขาวบนสำเนาของภาพ (canvas แยก) เพื่อให้ทาเฉพาะส่วนตัวละคร ไม่ทาทั้งกล่อง
@@ -2403,22 +2454,23 @@ function drawBleed(f) {
   const t = performance.now() / 1000;
   ctx.save();
   if (f.bleedKind === "wither") {
-    // ติด Wither: หมอกดำรอบตัว + เถ้าดำลอยขึ้น + กะโหลกเล็กวนรอบตัว
+    // ติด Wither: เถ้ากระดูกสีขาวลอยขึ้น + หมอกขาวจางๆ + กะโหลกเล็กขาววนรอบตัว
     const g = ctx.createRadialGradient(f.x, f.y, f.r * 0.3, f.x, f.y, f.r * 1.25);
-    g.addColorStop(0, "rgba(10,10,16,0)");
-    g.addColorStop(1, "rgba(10,10,16," + (0.35 + 0.1 * Math.sin(t * 5)).toFixed(2) + ")");
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(1, "rgba(255,255,255," + (0.22 + 0.08 * Math.sin(t * 5)).toFixed(2) + ")");
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.25, 0, Math.PI * 2); ctx.fill();
-    for (let i = 0; i < 7; i++) {
-      const ph = (t * 0.9 + i / 7) % 1;
+    for (let i = 0; i < 8; i++) {
+      const ph = (t * 0.9 + i / 8) % 1;
       const ang = i * 2.4 + t * 0.7;
       const rr = f.r * (0.55 + 0.4 * Math.sin(i * 1.7));
       const sz = 3 + 4 * (1 - ph);
-      ctx.globalAlpha = 0.9 * (1 - ph);
-      ctx.fillStyle = i % 3 === 0 ? "#6b708a" : "#15151c";
+      ctx.globalAlpha = 0.95 * (1 - ph);
+      ctx.fillStyle = i % 3 === 0 ? "#b9bfd0" : "#ffffff";
       ctx.fillRect(f.x + Math.cos(ang) * rr - sz / 2, f.y + Math.sin(ang) * rr * 0.6 - ph * f.r * 1.1 - sz / 2, sz, sz);
     }
-    ctx.globalAlpha = 0.85;
+    ctx.globalAlpha = 0.9;
+    ctx.shadowColor = "#ffffff"; ctx.shadowBlur = 8;
     ctx.font = Math.round(f.r * 0.45) + "px " + FONT;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("💀", f.x + Math.cos(t * 2.2) * f.r * 0.95, f.y - f.r * 0.9 + Math.sin(t * 2.2) * 4);
@@ -2638,104 +2690,134 @@ function drawMetaThreats(f) {
 
 // ---------- กรอบคำพูด (กระสุนบั่นทอนสติ) ----------
 // กระสุนเลข 4 ของ Hatsu: ตัวเลข 4 ตัวหนาเรืองแสงหมุนเล็กน้อย
-// กะโหลก Wither: ลูกธรรมดา = ดำ ตาขาว | ลูกน้ำเงิน (r > 20) = ฟ้าเรืองแสง มีประกายวนรอบ
-// หางเป็นเศษสี่เหลี่ยมพิกเซลที่ลอยตามหลัง และกะโหลกหมุนส่ายเบาๆ
+// กะโหลก Wither (โทนขาวทั้งหมด): ลูกธรรมดา = กะโหลกกระดูกขาว ตาดำ | ลูกใหญ่ (r > 20) = ขาวสว่างเรืองแสง มีวงเศษกระดูกหมุนรอบ
+// หางเป็นเศษพิกเซลสีขาว/เทาลอยตามหลัง ตัวกะโหลกหมุนส่ายเบาๆ
 function drawWitherSkull(p) {
-  const blue = p.r > 20;
+  const big = p.r > 20;
   const t = performance.now() / 1000;
   ctx.save();
   ctx.translate(p.x, p.y);
-  // หางพิกเซล
   for (let i = 1; i <= 6; i++) {
     const k = i / 6;
     const sz = p.r * (0.7 - 0.5 * k);
     const jx = Math.sin(t * 20 + i * 2.3 + p.phase) * p.r * 0.25;
     const jy = Math.cos(t * 17 + i * 1.9 + p.phase) * p.r * 0.25;
-    ctx.globalAlpha = 0.65 * (1 - k);
-    ctx.fillStyle = blue ? (i % 2 ? "#5ab4ff" : "#1d3f66") : (i % 2 ? "#4a4f63" : "#14141a");
+    ctx.globalAlpha = 0.7 * (1 - k);
+    ctx.fillStyle = i % 2 ? "#ffffff" : "#aab0c2";
     ctx.fillRect(-p.dx * p.r * 0.95 * i + jx - sz / 2, -p.dy * p.r * 0.95 * i + jy - sz / 2, sz, sz);
   }
   ctx.globalAlpha = 1;
-  if (blue) {
-    // รัศมีเรืองแสง + ประกายวน
-    const g = ctx.createRadialGradient(0, 0, p.r * 0.4, 0, 0, p.r * 2.2);
-    g.addColorStop(0, "rgba(120,200,255,0.45)");
-    g.addColorStop(1, "rgba(120,200,255,0)");
+  if (big) {
+    const g = ctx.createRadialGradient(0, 0, p.r * 0.4, 0, 0, p.r * 2.3);
+    g.addColorStop(0, "rgba(255,255,255,0.5)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, 0, p.r * 2.2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#e6f6ff";
-    for (let i = 0; i < 4; i++) {
-      const a = t * 4 + i * Math.PI / 2;
-      ctx.fillRect(Math.cos(a) * p.r * 1.5 - 2, Math.sin(a) * p.r * 1.5 - 2, 4, 4);
+    ctx.beginPath(); ctx.arc(0, 0, p.r * 2.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    for (let i = 0; i < 6; i++) { // เศษกระดูกวนรอบ
+      const a = -t * 3.5 + i * Math.PI / 3;
+      ctx.fillRect(Math.cos(a) * p.r * 1.55 - 3, Math.sin(a) * p.r * 1.55 - 3, 6, 6);
     }
   }
   ctx.rotate(Math.atan2(p.dy, p.dx) + Math.sin(t * 8 + p.phase) * 0.12);
   const s = p.r;
-  const px = s / 4; // 1 พิกเซลของกะโหลก (กริด 8x8)
-  ctx.shadowColor = blue ? "#5ab4ff" : "#8a8fa8"; ctx.shadowBlur = blue ? 20 : 8;
-  ctx.fillStyle = "#08080c"; ctx.fillRect(-s - px * 0.5, -s - px * 0.5, s * 2 + px, s * 2 + px);
+  const px = s / 4;
+  ctx.shadowColor = "#ffffff"; ctx.shadowBlur = big ? 22 : 10;
+  ctx.fillStyle = "#2a2d3a"; ctx.fillRect(-s - px * 0.5, -s - px * 0.5, s * 2 + px, s * 2 + px); // ขอบเข้ม
   ctx.shadowBlur = 0;
-  ctx.fillStyle = blue ? "#1d3f66" : "#262832"; ctx.fillRect(-s, -s, s * 2, s * 2);
-  ctx.fillStyle = blue ? "#2f6aa8" : "#3d4050"; ctx.fillRect(-s, -s, s * 2, px); // คิ้ว
-  ctx.fillStyle = blue ? "#e6f6ff" : "#dfe2ee";
-  ctx.fillRect(px * 0.2, -s * 0.55, px * 1.6, px * 1.2); // ตาบน
-  ctx.fillRect(px * 0.2, s * 0.2, px * 1.6, px * 1.2); // ตาล่าง
-  ctx.fillStyle = "#08080c";
+  ctx.fillStyle = big ? "#ffffff" : "#e4e7f1"; ctx.fillRect(-s, -s, s * 2, s * 2);
+  ctx.fillStyle = big ? "#dfe3f0" : "#c3c8d8"; ctx.fillRect(-s, s - px, s * 2, px); // เงาใต้คาง
+  ctx.fillStyle = "#14161e";
+  ctx.fillRect(px * 0.1, -s * 0.55, px * 1.7, px * 1.3); // เบ้าตาบน
+  ctx.fillRect(px * 0.1, s * 0.15, px * 1.7, px * 1.3); // เบ้าตาล่าง
   ctx.fillRect(-s * 0.6, -px * 0.5, px, px); // จมูก
-  ctx.fillStyle = blue ? "#9fd4ff" : "#b0b4c6"; // ฟัน
-  for (let i = 0; i < 3; i++) ctx.fillRect(-s + px * (0.5 + i * 1.3), s - px * 1.2, px * 0.7, px * 0.8);
+  ctx.fillRect(-s + px * 0.5, s - px * 2.1, s * 2 - px, px * 0.6); // ปาก
   ctx.restore();
 }
 
-// วงระเบิดของ Wither: วงแหวนขยายตัว + วงสว่างชั่ววูบ จางหายไป
+// วงระเบิดของกะโหลก Wither / เกราะขึ้น: วงขาวขยายตัว + เส้นรัศมีสั้นๆ พุ่งออก (ไม่ใช่วงฟ้าแบบ Warden)
 function drawWitherRings(dt) {
   for (const w of witherRings) w.t += dt;
   witherRings = witherRings.filter((w) => w.t < w.life);
   for (const w of witherRings) {
     if (w.t < 0) continue;
     const k = w.t / w.life;
-    const e = 1 - Math.pow(1 - k, 3); // ขยายเร็วแล้วช้าลง
+    const e = 1 - Math.pow(1 - k, 3);
     ctx.save();
     ctx.globalAlpha = 1 - k;
-    ctx.fillStyle = w.blue ? "rgba(120,200,255,0.18)" : "rgba(20,20,30,0.3)";
+    ctx.fillStyle = "rgba(255,255,255," + (w.big ? 0.18 : 0.14) + ")";
     ctx.beginPath(); ctx.arc(w.x, w.y, w.r * e, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = w.blue ? "#9fd4ff" : "#4a4f63";
-    ctx.lineWidth = (w.big ? 8 : 5) * (1 - k) + 1;
+    ctx.strokeStyle = "#ffffff";
+    ctx.shadowColor = "#ffffff"; ctx.shadowBlur = 14;
+    ctx.lineWidth = (w.big ? 7 : 4) * (1 - k) + 1;
     ctx.beginPath(); ctx.arc(w.x, w.y, w.r * e, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = "#e6f6ff";
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#b9bfd0";
     ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(w.x, w.y, w.r * e * 0.82, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 12; i++) { // เส้นรัศมี
+      const a = i * Math.PI / 6 + (w.big ? 0.13 : 0);
+      ctx.beginPath();
+      ctx.moveTo(w.x + Math.cos(a) * w.r * e * 0.55, w.y + Math.sin(a) * w.r * e * 0.55);
+      ctx.lineTo(w.x + Math.cos(a) * w.r * e * 0.9, w.y + Math.sin(a) * w.r * e * 0.9);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 }
 
-// ออร่าของ Wither เอง: หมอกควันดำลอยรอบตัว และเมื่อมีเกราะ (เลือดต่ำกว่าครึ่ง) = โล่ฟ้ากะพริบ + ประกายไฟฟ้า
+// ท่า Wither Burst (คลื่นรอบตัว): วงสว่างขาวขยายออก + เส้นรัศมีเป็นเศษพิกเซลกระดูกพุ่งออก + เถ้าขาวค้างในวง
+function drawWitherBurst(w) {
+  const fade = Math.max(0, 1 - w.r / w.maxR);
+  ctx.save();
+  const g = ctx.createRadialGradient(w.x, w.y, w.r * 0.2, w.x, w.y, w.r);
+  g.addColorStop(0, "rgba(255,255,255,0)");
+  g.addColorStop(1, "rgba(255,255,255," + (0.3 * fade).toFixed(3) + ")");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = Math.min(1, fade * 1.5);
+  ctx.shadowColor = "#ffffff"; ctx.shadowBlur = 20;
+  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 10;
+  ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#ffffff";
+  const n = 28;
+  for (let i = 0; i < n; i++) { // เศษพิกเซลกระดูกพุ่งออกตามรัศมี
+    const a = (i / n) * Math.PI * 2;
+    const rr = w.r * (0.62 + 0.3 * ((i * 37) % 10) / 10);
+    const sz = 4 + ((i * 13) % 4);
+    ctx.fillRect(w.x + Math.cos(a) * rr - sz / 2, w.y + Math.sin(a) * rr - sz / 2, sz, sz);
+  }
+  ctx.restore();
+}
+
+// ออร่าของ Wither เอง: เถ้ากระดูกขาวลอยรอบตัว และเมื่อมีเกราะ (เลือดต่ำกว่าครึ่ง) = โล่ขาวกะพริบเป็นเส้นประหมุน + ประกาย
+// (เกราะกันได้เฉพาะ "กระสุน")
 function drawWitherSelf(f) {
   const t = performance.now() / 1000;
   ctx.save();
   for (let i = 0; i < 6; i++) {
     const ph = (t * 0.7 + i / 6) % 1;
     const a = i * 1.05 + t * 0.5;
-    const sz = 5 + 6 * ph;
-    ctx.globalAlpha = 0.5 * (1 - ph);
-    ctx.fillStyle = i % 2 ? "#1b1b24" : "#3a3d4d";
+    const sz = 4 + 5 * ph;
+    ctx.globalAlpha = 0.55 * (1 - ph);
+    ctx.fillStyle = i % 2 ? "#ffffff" : "#b9bfd0";
     ctx.fillRect(f.x + Math.cos(a) * f.r * 0.9 - sz / 2, f.y + f.r * 0.3 - ph * f.r * 1.2 + Math.sin(a) * 6 - sz / 2, sz, sz);
   }
   if (f.armor) {
     const pulse = 0.55 + 0.25 * Math.sin(t * 6);
     const g = ctx.createRadialGradient(f.x, f.y, f.r * 0.7, f.x, f.y, f.r * 1.3);
-    g.addColorStop(0, "rgba(120,200,255,0)");
-    g.addColorStop(1, "rgba(120,200,255," + (pulse * 0.5).toFixed(2) + ")");
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(1, "rgba(255,255,255," + (pulse * 0.4).toFixed(2) + ")");
     ctx.globalAlpha = 1;
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.3, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "rgba(190,230,255," + pulse.toFixed(2) + ")";
+    ctx.strokeStyle = "rgba(255,255,255," + pulse.toFixed(2) + ")";
     ctx.lineWidth = 3;
     ctx.setLineDash([10, 8]);
     ctx.lineDashOffset = -t * 40;
     ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.12, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = "#e6f6ff";
+    ctx.fillStyle = "#ffffff";
     for (let i = 0; i < 3; i++) {
       const a = t * 3 + i * 2.1;
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 9 + i);
@@ -3039,6 +3121,7 @@ function drawWaves(b) {
   for (const w of b.waves) {
     if (w.style === "sonicboom") { drawSonicBeam(w); continue; }
     if (w.style === "roar") { drawRoarRing(w); continue; }
+    if (w.style === "witherburst") { drawWitherBurst(w); continue; }
     const fade = Math.max(0, 1 - w.r / w.maxR);
     for (let k = 0; k < 4; k++) {
       const rr = w.r - k * 24;
@@ -3597,7 +3680,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 38;
+const EXPECTED_VERSION = 39;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
@@ -3609,7 +3692,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 67";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 68";
   }
 }
 
