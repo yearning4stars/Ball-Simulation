@@ -827,7 +827,7 @@ const CHARACTERS = {
   },
 
   // ---------- Wither (Minecraft) แฟนเกม ----------
-  // ภาพ: assets/characters/wither/  idle.png ยืนปกติ | shoot.png ยิงกะโหลก | blue.png ชาร์จกะโหลกน้ำเงิน | burst.png ระเบิดรอบตัว (ภาพชั่วคราว ใส่ของจริงทับชื่อเดิมได้)
+  // ภาพ: assets/characters/wither/ idle/shoot/blue/burst.png — ตัวเดียวกันไม่มีเอฟเฟกต์ในภาพ (เอฟเฟกต์วาดด้วยโค้ด); ใส่ภาพจริงทับชื่อเดิมได้
   // พาสซีฟ "เกราะ Wither": เลือดต่ำกว่า armorAt ครั้งแรก = ระเบิดรอบตัวหนึ่งครั้ง แล้ว "กระสุน" โดนเหลือ armorProjMult เท่า (กันได้เฉพาะกระสุน)
   // สถานะ Wither ติดเฉพาะตอนโดนกะโหลกตรงๆ: ระเบิด (แรงระเบิดกะโหลก/ตอนเกราะขึ้น/Wither Burst) ไม่ติด
   // ตัวเลขเป็นค่าเสนอเริ่มต้น ปรับเองได้ตามใจ
@@ -853,7 +853,7 @@ const CHARACTERS = {
         type: "projectile",
         name: "Wither Skull",
         icon: "💀",
-        desc: "สามหัวยิงกะโหลก 3 ลูก ระเบิด + ติด Wither",
+        desc: "ปล่อยหัว 3 หัวพุ่งไปพร้อมควัน ระเบิด + ติด Wither",
         cooldown: 3.2,
         initialCooldown: 1,
         frame: "shoot",
@@ -878,8 +878,8 @@ const CHARACTERS = {
         // สกิล 2: กะโหลกน้ำเงิน ชาร์จนาน ลูกใหญ่ช้า ทำลายไม่ได้ (ดาบปัด/คลื่นหยุดไม่ได้) ระเบิดแรง ผลักไกล สตันสั้นๆ
         type: "projectile",
         name: "Blue Skull",
-        icon: "⚪",
-        desc: "กะโหลกน้ำเงินลูกใหญ่ ทำลายไม่ได้ ระเบิดแรง",
+        icon: "🔵",
+        desc: "ปล่อยหัวเดียวเคลือบสีน้ำเงิน ลูกใหญ่ ทำลายไม่ได้ ระเบิดแรง",
         cooldown: 9,
         initialCooldown: 4.5,
         frame: "blue",
@@ -928,6 +928,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 39;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 40;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

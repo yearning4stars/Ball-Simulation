@@ -413,6 +413,6 @@ const CustomStore = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 39;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).audio = 40;
 
 if (typeof module !== "undefined") module.exports = { SoundFX, SFX_LABELS, CustomStore };

@@ -2690,48 +2690,42 @@ function drawMetaThreats(f) {
 
 // ---------- กรอบคำพูด (กระสุนบั่นทอนสติ) ----------
 // กระสุนเลข 4 ของ Hatsu: ตัวเลข 4 ตัวหนาเรืองแสงหมุนเล็กน้อย
-// กะโหลก Wither (โทนขาวทั้งหมด): ลูกธรรมดา = กะโหลกกระดูกขาว ตาดำ | ลูกใหญ่ (r > 20) = ขาวสว่างเรืองแสง มีวงเศษกระดูกหมุนรอบ
-// หางเป็นเศษพิกเซลสีขาว/เทาลอยตามหลัง ตัวกะโหลกหมุนส่ายเบาๆ
+// กะโหลก Wither = "หัว" ของ Wither ที่ถูกปล่อยออกไป: ลูกบาศก์เทาเข้มเหมือนหัวในเกม ตาขาว ปากขาว มีควันเทา-ขาวลอยตามหลัง
+// ลูกใหญ่ (r > 20 = Blue Skull) คือหัวเดียวกันที่เคลือบสีน้ำเงิน มีรัศมีและควันสีน้ำเงิน
 function drawWitherSkull(p) {
-  const big = p.r > 20;
+  const blue = p.r > 20;
   const t = performance.now() / 1000;
   ctx.save();
   ctx.translate(p.x, p.y);
-  for (let i = 1; i <= 6; i++) {
-    const k = i / 6;
-    const sz = p.r * (0.7 - 0.5 * k);
-    const jx = Math.sin(t * 20 + i * 2.3 + p.phase) * p.r * 0.25;
-    const jy = Math.cos(t * 17 + i * 1.9 + p.phase) * p.r * 0.25;
-    ctx.globalAlpha = 0.7 * (1 - k);
-    ctx.fillStyle = i % 2 ? "#ffffff" : "#aab0c2";
-    ctx.fillRect(-p.dx * p.r * 0.95 * i + jx - sz / 2, -p.dy * p.r * 0.95 * i + jy - sz / 2, sz, sz);
+  // ควัน: กลุ่มก้อนกลมซ้อนกัน ลอยตามหลังหัวและค่อยๆ ขยายจางหาย
+  for (let i = 1; i <= 9; i++) {
+    const k = i / 9;
+    const wob = Math.sin(t * 9 + i * 1.7 + p.phase) * p.r * 0.3;
+    const rr = p.r * (0.45 + 0.75 * k);
+    ctx.globalAlpha = 0.55 * (1 - k);
+    ctx.fillStyle = blue ? (i % 2 ? "#9fc4ff" : "#4f7fc4") : (i % 2 ? "#e4e7f1" : "#8e919e");
+    ctx.beginPath();
+    ctx.arc(-p.dx * p.r * 0.85 * i - p.dy * wob, -p.dy * p.r * 0.85 * i + p.dx * wob, rr, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.globalAlpha = 1;
-  if (big) {
-    const g = ctx.createRadialGradient(0, 0, p.r * 0.4, 0, 0, p.r * 2.3);
-    g.addColorStop(0, "rgba(255,255,255,0.5)");
-    g.addColorStop(1, "rgba(255,255,255,0)");
+  if (blue) {
+    const g = ctx.createRadialGradient(0, 0, p.r * 0.5, 0, 0, p.r * 2.1);
+    g.addColorStop(0, "rgba(90,150,255,0.5)");
+    g.addColorStop(1, "rgba(90,150,255,0)");
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, 0, p.r * 2.3, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    for (let i = 0; i < 6; i++) { // เศษกระดูกวนรอบ
-      const a = -t * 3.5 + i * Math.PI / 3;
-      ctx.fillRect(Math.cos(a) * p.r * 1.55 - 3, Math.sin(a) * p.r * 1.55 - 3, 6, 6);
-    }
+    ctx.beginPath(); ctx.arc(0, 0, p.r * 2.1, 0, Math.PI * 2); ctx.fill();
   }
-  ctx.rotate(Math.atan2(p.dy, p.dx) + Math.sin(t * 8 + p.phase) * 0.12);
-  const s = p.r;
-  const px = s / 4;
-  ctx.shadowColor = "#ffffff"; ctx.shadowBlur = big ? 22 : 10;
-  ctx.fillStyle = "#2a2d3a"; ctx.fillRect(-s - px * 0.5, -s - px * 0.5, s * 2 + px, s * 2 + px); // ขอบเข้ม
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = big ? "#ffffff" : "#e4e7f1"; ctx.fillRect(-s, -s, s * 2, s * 2);
-  ctx.fillStyle = big ? "#dfe3f0" : "#c3c8d8"; ctx.fillRect(-s, s - px, s * 2, px); // เงาใต้คาง
-  ctx.fillStyle = "#14161e";
-  ctx.fillRect(px * 0.1, -s * 0.55, px * 1.7, px * 1.3); // เบ้าตาบน
-  ctx.fillRect(px * 0.1, s * 0.15, px * 1.7, px * 1.3); // เบ้าตาล่าง
-  ctx.fillRect(-s * 0.6, -px * 0.5, px, px); // จมูก
-  ctx.fillRect(-s + px * 0.5, s - px * 2.1, s * 2 - px, px * 0.6); // ปาก
+  ctx.rotate(Math.atan2(p.dy, p.dx) + Math.sin(t * 8 + p.phase) * 0.1);
+  const s = p.r, q = s / 5; // 1 พิกเซลของหัว (กริด 10x10)
+  ctx.fillStyle = "#101014"; ctx.fillRect(-s - q * 0.6, -s - q * 0.6, s * 2 + q * 1.2, s * 2 + q * 1.2); // ขอบ
+  ctx.fillStyle = blue ? "#3d5f94" : "#3a3a40"; ctx.fillRect(-s, -s, s * 2, s * 2); // หน้า
+  ctx.fillStyle = blue ? "#4a72ad" : "#47474f"; // ลายพิกเซลให้ดูเป็นก้อนหิน
+  for (const [x, y] of [[-3, -4], [2, -3], [-4, 1], [3, 3], [0, 4], [-1, -1]]) ctx.fillRect(x * q, y * q, q * 1.4, q * 1.4);
+  ctx.fillStyle = "#101014"; ctx.fillRect(-q * 3.6, -q * 2.6, q * 7.2, q * 0.9); // คิ้ว
+  ctx.fillStyle = "#ffffff"; // ตาขาว
+  ctx.fillRect(-q * 3.4, -q * 1.7, q * 2.6, q * 1.7); ctx.fillRect(q * 0.8, -q * 1.7, q * 2.6, q * 1.7);
+  ctx.fillRect(-q * 2.4, q * 2.2, q * 4.8, q * 1.3); // ปาก
   ctx.restore();
 }
 
@@ -3680,7 +3674,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 39;
+const EXPECTED_VERSION = 40;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
@@ -3692,7 +3686,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 68";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 69";
   }
 }
 
