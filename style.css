@@ -422,9 +422,15 @@ button.swap-btn, button.rnd-btn { padding: 2px 7px; }
 .p-left .teams { flex-direction: column; flex-wrap: nowrap; align-items: stretch; margin-bottom: 0; }
 .p-left .team-slots { align-items: stretch; }
 .p-left .team.ffa .team-slots { flex-direction: column; }
-.p-left .pslot { display: flex; }
-.p-left .plabel { width: 4.6em; flex: none; }
-.p-left button.pick { flex: 1; width: auto; min-width: 0; }
+/* แถวผู้เล่น: ป้าย | ปุ่มตัวละคร | สุ่ม  — ปุ่มสกิน (ถ้ามี) ขึ้นบรรทัดล่างใต้ปุ่มตัวละคร ไม่ล้นขอบแผง */
+.p-left .pslot { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; grid-template-rows: auto; align-items: center; gap: 5px 8px; width: 100%; box-sizing: border-box; }
+.p-left .pslot [hidden] { display: none !important; }
+.p-left .plabel { grid-column: 1; grid-row: 1; }
+.p-left button.pick { grid-column: 2; grid-row: 1; width: auto; min-width: 0; }
+.p-left button.rnd-btn { grid-column: 3; grid-row: 1; }
+.p-left button.skin-btn { grid-column: 2 / 4; grid-row: 2; justify-self: start; padding: 3px 10px; font-size: 0.74rem; }
+.p-left .team { min-width: 0; }
+.p-left .team-slots { min-width: 0; }
 .p-left .vs-wrap { flex-direction: row; gap: 10px; }
 .p-center.lab { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8px; }
 .card-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
