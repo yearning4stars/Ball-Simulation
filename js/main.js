@@ -2810,6 +2810,12 @@ function drawMetaAura(f) {
       ctx.fill();
       ctx.strokeStyle = "rgba(143,224,255,0.8)"; ctx.lineWidth = 1; ctx.stroke();
     }
+    // แถบคูลดาวน์การปรับตัว: ใต้เม็ดเพชร ค่อยๆ หดจนหมด = เรียนรู้ท่าต่อไปได้
+    if (mem.cd > 0 && mem.cdMax > 0 && mem.level < adaptMax) {
+      const w = 50 * Math.min(1, mem.cd / mem.cdMax);
+      ctx.fillStyle = "rgba(8,24,52,0.8)"; ctx.fillRect(-25, ey - 17, 50, 3);
+      ctx.fillStyle = "rgba(143,224,255,0.95)"; ctx.fillRect(-25, ey - 17, w, 3);
+    }
   }
   // วงนับเวลาที่เหลือรอบดวงตา
   const left = Math.max(0, Math.min(1, (c.sk.duration - c.t) / c.sk.duration));

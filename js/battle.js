@@ -1032,6 +1032,7 @@ class Battle {
     }
     // ความจำการวิเคราะห์ (อยู่ตลอดการต่อสู้): ยิ่งอ่านท่าศัตรูได้มาก ad ยิ่งเข้าใกล้ 1 -> มองไกลขึ้น หลบถี่ขึ้น สไลด์ไกลขึ้น สวนเตะไวขึ้น
     const mem = this._metaMem(f);
+    mem.cd = Math.max(0, (mem.cd || 0) - dt); // คูลดาวน์ระหว่างการปรับตัว (นับลงเรื่อยๆ)
     const adaptMax = sk.adaptMax || 10;
     const ad = Math.min(1, mem.level / adaptMax);
     const look = (sk.lookahead || 0.9) * (1 + (sk.adaptLook !== undefined ? sk.adaptLook : 0.5) * ad);
@@ -1139,9 +1140,11 @@ class Battle {
       else this._markEvaded(th.ref, f);
     }
     // วิเคราะห์ท่าที่เพิ่งหลบ: ท่าใหม่ได้ความรู้ +2 ท่าที่เคยเห็นแล้ว +1
+    // ยังอยู่ในคูลดาวน์ปรับตัว (analyzeCd) = หลบได้ตามปกติแต่ยังไม่ได้ความรู้เพิ่ม
     const learned = new Set();
+    const canLearn = mem.cd <= 0;
     for (const th of threats) {
-      if (th.t - first.t > 0.35 || !th.own || !th.own.def) continue;
+      if (!canLearn || th.t - first.t > 0.35 || !th.own || !th.own.def) continue;
       const key = th.own.def.name + "|" + th.label;
       if (learned.has(key)) continue;
       learned.add(key);
@@ -1149,6 +1152,10 @@ class Battle {
       mem.seen[key] = (mem.seen[key] || 0) + 1;
       mem.level = Math.min(adaptMax, mem.level + (isNew ? 2 : 1));
       this.events.push({ type: "metaAnalyze", x: f.x, y: f.y, text: th.label, isNew, level: mem.level, max: adaptMax });
+    }
+    if (learned.size) {
+      mem.cdMax = sk.analyzeCd !== undefined ? sk.analyzeCd : 1.5;
+      mem.cd = mem.cdMax;
     }
     c.dodges++;
     c.dodgeCd = (sk.dodgeCd !== undefined ? sk.dodgeCd : 0.28) * (1 - (sk.adaptCd !== undefined ? sk.adaptCd : 0.6) * ad);

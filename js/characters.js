@@ -67,7 +67,7 @@
 //        duration (เวลาพุ่งหาบอลสูงสุด), chaseSpeed, kickSpeed, ballRadius
 //        ใส่ใน metavision: kickCd, kickSpeedMult, kickDamageMult, kickKnockMult = เตะบอลระหว่าง Meta Vision ได้ แรงกว่าปกติ
 //        วอลเลย์: บอลที่พุ่งเข้าหาด้วยความเร็วถึง volleySpeed (ศัตรูเตะ/สะท้อนมา) จะถูกเตะสวนแรงกว่าเดิม (volleyAbsorb/SpeedMult/DamageMult/KnockMult)
-//        ใส่ใน metavision: adaptMax, adaptLook, adaptDodges, adaptCd, adaptPower, adaptKick = วิเคราะห์ท่าศัตรูที่หลบได้แล้วปรับตัว (ดู characters.js)
+//        ใส่ใน metavision: analyzeCd (คูลดาวน์ระหว่างการปรับตัว), adaptMax, adaptLook, adaptDodges, adaptCd, adaptPower, adaptKick = วิเคราะห์ท่าศัตรูที่หลบได้แล้วปรับตัว (ดู characters.js)
 //        projectile เพิ่ม: lead (เล็งนำหน้าศัตรูที่กำลังเคลื่อนที่), bounces (กระสุนสะท้อนกำแพงได้กี่ครั้ง), shape: "soccer" (ลูกฟุตบอล)
 //   "summon"      เรียกเพื่อน (Solar): ถึง fireDelay แล้วสุ่ม 1 คนจาก guests [{name (ตรงกับ name ใน CHARACTERS), say, damage, silence, slow, slowMult, knockback}]
 //        เพื่อนพุ่งมาหาศัตรูโจมตี 1 ครั้งแล้วหายไป  เรียกคนที่ศัตรูฝั่งตรงข้ามเป็นตัวนั้นอยู่ไม่ได้ (ไม่มีใครให้เรียก = ไม่ใช้สกิล)
@@ -391,6 +391,7 @@ const CHARACTERS = {
         counterKick: true, // จบ Meta Vision แล้วเตะสวนทันที (รีเซ็ตคูลดาวน์ลูกเตะ)
         // ปรับตัวตามที่วิเคราะห์ได้ (จำท่าศัตรูที่หลบได้ตลอดการต่อสู้ ท่าใหม่ +2 ท่าเดิม +1 ถึง adaptMax = เต็ม)
         adaptMax: 10,
+        analyzeCd: 1.5, // คูลดาวน์ระหว่างการปรับตัว: เรียนรู้ได้ 1 ก้าวต่อกี่วินาที (ช่วงนี้หลบได้ปกติ แต่ยังไม่ได้ระดับเพิ่ม)
         adaptLook: 0.5, // เต็มแล้วมองล่วงหน้าไกลขึ้นกี่เท่า (+50%)
         adaptDodges: 4, // เต็มแล้วหลบได้เพิ่มต่อการใช้ 1 ครั้ง
         adaptCd: 0.6, // เต็มแล้วพักระหว่างหลบสั้นลง 60%
