@@ -191,6 +191,10 @@ class Battle {
         sk.initialCooldown !== undefined ? sk.initialCooldown : 0.8 + this.rng() * 0.6 + i * 0.9
       ),
       kickCd: 0, // พักก่อนเตะบอลซ้ำระหว่าง Meta Vision
+      stamina: def.staminaMax || 0, // สตามินา (Isagi): ใช้สกิล/หลบ/เตะแล้วลด ต่ำ = เหนื่อย (ช้าลง เตะอ่อนลง หลบแย่ลง) หมด = หมดแรง ใช้สกิลไม่ได้
+      staminaDelay: 0, // พักก่อนเริ่มฟื้นหลังใช้แรงล่าสุด
+      exhausted: false,
+      tiredShown: false,
       energy: def.energyMax || 0, // พลังงาน (Florentino): สกิลที่มี energyCost ต้องมีพลังงานพอ
       combatT: 99, // วินาทีนับจากที่ตัวเองโดน/ทำดาเมจครั้งล่าสุด (ออกจากการต่อสู้นานพอ = Lunge พร้อมใช้อีกครั้ง)
       lunge: true, // การโจมตีปกติครั้งถัดไปเป็นท่าแทง (Lunge) พร้อมใช้หรือยัง
@@ -285,6 +289,7 @@ class Battle {
       f.silence = Math.max(0, f.silence - fdt);
       f.combatT += fdt;
       if (f.def.energyMax) f.energy = Math.min(f.def.energyMax, f.energy + (f.def.energyRegen || 0) * fdt);
+      if (f.def.staminaMax) this._updateStamina(f, fdt);
       if (f.bleedT > 0) {
         f.bleedT -= fdt;
         f.bleedAcc += fdt;
@@ -312,9 +317,10 @@ class Battle {
       f.gcd = Math.max(0, f.gcd - fdt * slow);
       // hpRush: ยิ่งเลือดน้อย คูลดาวน์ของสกิลนั้นยิ่งเดินเร็ว (1 เท่าตอนเลือดเต็ม -> hpRush เท่าตอนเลือดหมด)
       const lost = 1 - Math.max(0, f.hp) / f.maxHp;
+      const tcd = 1 - (f.def.tiredCd !== undefined ? f.def.tiredCd : 0.5) * this._fatigue(f); // เหนื่อย = คูลดาวน์เดินช้าลง
       for (let i = 0; i < f.cds.length; i++) {
         const rush = f.skills[i].hpRush ? 1 + (f.skills[i].hpRush - 1) * lost : 1;
-        f.cds[i] -= fdt * slow * rush;
+        f.cds[i] -= fdt * slow * rush * tcd;
       }
       f.kickCd = Math.max(0, f.kickCd - fdt);
       f.ramCd = Math.max(0, f.ramCd - fdt);
@@ -497,6 +503,7 @@ class Battle {
       if (s2.type === "summon" && !this._summonChoices(f, s2).length) continue; // ไม่มีเพื่อนให้เรียก (ต้องสู้กับคนนั้นอยู่)
       if (s2.requires === "ego" && !f.ego) continue; // ท่าของ E.G.O. ใช้ได้หลังปรากฏเท่านั้น
       if (s2.energyCost && f.energy < s2.energyCost) continue; // พลังงานไม่พอ
+      if (s2.staminaCost && f.def.staminaMax && f.exhausted) continue; // หมดแรง: ใช้สกิลไม่ได้จนกว่าจะฟื้น
       if (s2.maxRange && Math.hypot(enemy.x - f.x, enemy.y - f.y) > s2.maxRange) continue; // ศัตรูไกลเกินระยะ
       // เตะบอลได้เมื่อมีบอลเปล่าให้เตะ (ถ้าบอลกำลังลอยเป็นอันตรายอยู่ ต้องรอ)
       if (s2.type === "ballkick" && (!this.balls.length || (this.balls[0].hot && !this._volleyable(f, this.balls[0], s2)))) continue; // บอลลอยอยู่ต้องรอ ยกเว้นพุ่งเข้าหาแรงพอ = เตะวอลเลย์สวนได้
@@ -507,6 +514,7 @@ class Battle {
     const sk = f.skills[pick];
     f.cds[pick] = sk.cooldown;
     if (sk.energyCost) f.energy -= sk.energyCost;
+    if (sk.staminaCost) this._spendStamina(f, sk.staminaCost);
     if (sk.requires === "lunge") f.lunge = false;
     f.cast = { i: pick, sk, t: 0, shots: 0, fired: false, hit: false };
     f.frame = sk.frame || "idle";
@@ -921,6 +929,13 @@ class Battle {
       dmgMult *= ks.volleyDamageMult || 1.6;
       knockMult *= ks.volleyKnockMult || 1.4;
     }
+    const fat = this._fatigue(f);
+    if (fat > 0) { // เหนื่อย: เตะเบาลง เร็วลดลง
+      speed *= 1 - (f.def.tiredKick !== undefined ? f.def.tiredKick : 0.3) * fat;
+      dmgMult *= 1 - 0.35 * fat;
+    }
+    const kcost = (meta ? (ks.metaKickStamina !== undefined ? ks.metaKickStamina : 5) : 0) + (volley ? (ks.volleyStamina !== undefined ? ks.volleyStamina : 10) : 0);
+    if (kcost) this._spendStamina(f, kcost);
     const aim = this._leadPoint(b, enemy, speed);
     const ang = Math.atan2(aim.y - b.y, aim.x - b.x);
     b.vx = Math.cos(ang) * speed;
@@ -1009,6 +1024,50 @@ class Battle {
   // ---------- Meta Vision (Isagi) ----------
   // ทุกก้าว: จำลองอนาคต lookahead วินาที ถ้ากระสุน/คลื่น/การพุ่งของศัตรูจะโดนตัว ก็สไลด์หลบแล้วทำให้ท่านั้นพลาดเป้า
   // (เก็บจำนวนครั้งที่หลบใน c.dodges และพักสั้นๆ ระหว่างหลบ ถ้าท่ามาถี่เกินไปก็อาจโดนบ้าง)
+  // ---------- สตามินา (Isagi) ----------
+  // 0 = ไม่เหนื่อย ... 1 = เหนื่อยสุด (เริ่มเหนื่อยเมื่อสตามินาต่ำกว่า tiredBelow ของตัวละคร) หมดแรงนับเป็นอย่างน้อย 0.6
+  _fatigue(f) {
+    const d = f.def;
+    if (!d.staminaMax) return 0;
+    const fr = f.stamina / d.staminaMax;
+    const tb = d.tiredBelow || 0.35;
+    return Math.max(fr >= tb ? 0 : (tb - fr) / tb, f.exhausted ? 0.6 : 0);
+  }
+
+  _moveFatigue(f) {
+    if (!f.def.staminaMax) return 1;
+    return (1 - (f.def.tiredSlow !== undefined ? f.def.tiredSlow : 0.35) * this._fatigue(f)) * (f.exhausted ? 0.7 : 1);
+  }
+
+  _spendStamina(f, amount) {
+    const d = f.def;
+    if (!d.staminaMax || amount <= 0) return;
+    f.stamina = Math.max(0, f.stamina - amount);
+    f.staminaDelay = d.staminaRegenDelay !== undefined ? d.staminaRegenDelay : 1.2;
+    if (f.stamina <= 0 && !f.exhausted) {
+      f.exhausted = true;
+      this.events.push({ type: "exhausted", x: f.x, y: f.y });
+    } else if (!f.tiredShown && this._fatigue(f) > 0) {
+      f.tiredShown = true;
+      this.events.push({ type: "tired", x: f.x, y: f.y });
+    }
+  }
+
+  _updateStamina(f, dt) {
+    const d = f.def;
+    f.staminaDelay = Math.max(0, f.staminaDelay - dt);
+    if (f.staminaDelay <= 0) {
+      // กำลังร่ายสกิลอยู่ฟื้นช้ากว่า (หอบ) ตอนหมดแรงนั่งพักฟื้นเร็วขึ้นนิดหน่อย
+      const rate = (d.staminaRegen || 8) * (f.cast ? 0.5 : 1) * (f.exhausted ? 1.2 : 1);
+      f.stamina = Math.min(d.staminaMax, f.stamina + rate * dt);
+    }
+    if (f.exhausted && f.stamina >= d.staminaMax * (d.exhaustRecover || 0.4)) {
+      f.exhausted = false;
+      this.events.push({ type: "staminaRecover", x: f.x, y: f.y });
+    }
+    if (f.tiredShown && this._fatigue(f) <= 0) f.tiredShown = false;
+  }
+
   _metaMem(f) {
     if (!f.metaMem) f.metaMem = { level: 0, seen: {} };
     return f.metaMem;
@@ -1021,7 +1080,7 @@ class Battle {
     const ks = f.skills.find((k) => k.type === "ballkick");
     c.kickFlash = Math.max(0, (c.kickFlash || 0) - dt);
     f.frame = c.kickFlash > 0 ? "kick" : sk.frame || "idle";
-    if (ks && f.kickCd <= 0) {
+    if (ks && f.kickCd <= 0 && !f.exhausted) {
       const st = this._chaseBall(f, ks, dt);
       if (st === "reach") {
         this._kickBall(f, enemy, ks, sk.kickSpeedMult || 1.5, sk.kickDamageMult || 1.8, sk.kickKnockMult || 1.6, true);
@@ -1060,7 +1119,7 @@ class Battle {
       if (!b.hot || b.owner.team === f.team || this._evaded(b, f)) continue;
       const sp = Math.hypot(b.vx, b.vy);
       if (sp < 1) continue;
-      if (ks && f.kickCd <= 0 && this._volleyable(f, b, ks)) continue; // พร้อมเตะ: จะวอลเลย์สวนแทนการหลบ
+      if (ks && f.kickCd <= 0 && !f.exhausted && this._volleyable(f, b, ks)) continue; // พร้อมเตะ: จะวอลเลย์สวนแทนการหลบ
       const bdx = b.vx / sp;
       const bdy = b.vy / sp;
       const tc = ((f.x - b.x) * bdx + (f.y - b.y) * bdy) / sp;
@@ -1116,6 +1175,12 @@ class Battle {
     }
 
     if (!threats.length || c.dodgeCd > 0 || c.dodges >= maxD) return;
+    // หลบต้องใช้แรง (ปรับตัวได้มาก = ประหยัดแรงขึ้น) ถ้าแรงไม่พอ/หมดแรง = หลบไม่ได้
+    const dodgeCost = (sk.dodgeStamina !== undefined ? sk.dodgeStamina : 6) * (1 - (sk.adaptStamina !== undefined ? sk.adaptStamina : 0.4) * ad);
+    if (f.def.staminaMax && (f.exhausted || f.stamina < dodgeCost)) {
+      if (!c.failShown) { c.failShown = true; this.events.push({ type: "dodgeFail", x: f.x, y: f.y }); }
+      return;
+    }
 
     // หลบ: สไลด์ตั้งฉากกับทิศที่ท่ามา เลือกฝั่งที่ไม่ชนกำแพง (ไม่ชอบฝั่งที่อยู่ติดกำแพง)
     const first = threats.reduce((a, b) => (b.t < a.t ? b : a));
@@ -1131,7 +1196,7 @@ class Battle {
     if (room(sign) < margin && room(-sign) > room(sign)) sign = -sign;
     nx *= sign;
     ny *= sign;
-    const power = (sk.dodgePower || 620) * (1 + (sk.adaptPower !== undefined ? sk.adaptPower : 0.4) * ad);
+    const power = (sk.dodgePower || 620) * (1 + (sk.adaptPower !== undefined ? sk.adaptPower : 0.4) * ad) * (1 - (f.def.tiredDodge !== undefined ? f.def.tiredDodge : 0.4) * this._fatigue(f));
     this._knock(f, nx, ny, power);
     // ท่าทั้งหมดที่เห็นว่าจะโดนในช่วงเวลาใกล้กัน (ภายใน 0.35 วินาทีจากท่าแรก) ถือว่าหลบพร้อมกัน
     for (const th of threats) {
@@ -1157,8 +1222,9 @@ class Battle {
       mem.cdMax = sk.analyzeCd !== undefined ? sk.analyzeCd : 1.5;
       mem.cd = mem.cdMax;
     }
+    this._spendStamina(f, dodgeCost);
     c.dodges++;
-    c.dodgeCd = (sk.dodgeCd !== undefined ? sk.dodgeCd : 0.28) * (1 - (sk.adaptCd !== undefined ? sk.adaptCd : 0.6) * ad);
+    c.dodgeCd = (sk.dodgeCd !== undefined ? sk.dodgeCd : 0.28) * (1 - (sk.adaptCd !== undefined ? sk.adaptCd : 0.6) * ad) * (1 + 0.8 * this._fatigue(f));
     this.events.push({ type: "dodge", x: f.x, y: f.y, nx, ny, left: maxD - c.dodges });
   }
 
@@ -1651,7 +1717,7 @@ class Battle {
   _move(f, dt) {
     const dashing = f.dashTimer > 0;
     if (dashing) f.dashTimer -= dt;
-    const target = f.def.speed * (dashing ? f.dashMult : 1) * (f.stun > 0 ? 0.25 : 1) * (f.slowT > 0 ? f.slowMult : 1) * (f.boostT > 0 ? 1.5 : 1);
+    const target = f.def.speed * (dashing ? f.dashMult : 1) * (f.stun > 0 ? 0.25 : 1) * (f.slowT > 0 ? f.slowMult : 1) * (f.boostT > 0 ? 1.5 : 1) * this._moveFatigue(f);
     const cur = Math.hypot(f.vx, f.vy) || 1;
     f.vx = (f.vx / cur) * target;
     f.vy = (f.vy / cur) * target;

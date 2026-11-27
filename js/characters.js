@@ -348,6 +348,18 @@ const CHARACTERS = {
     hp: 90,
     speed: 190,
     radius: 36,
+    // สตามินา: ใช้สกิล/หลบ/เตะแล้วลด ฟื้นเองวินาทีละ staminaRegen (เริ่มฟื้นหลังพัก staminaRegenDelay วินาที)
+    // ต่ำกว่า tiredBelow (เศษส่วน) = เหนื่อย: เดินช้า(tiredSlow) คูลดาวน์เดินช้า(tiredCd) เตะอ่อน(tiredKick) สไลด์หลบสั้น(tiredDodge)
+    // เหลือ 0 = หมดแรง: ใช้สกิลไม่ได้ เดินช้าลงอีก จนฟื้นถึง exhaustRecover (เศษส่วน)
+    staminaMax: 100,
+    staminaRegen: 10,
+    staminaRegenDelay: 1.2,
+    tiredBelow: 0.35,
+    exhaustRecover: 0.4,
+    tiredSlow: 0.35,
+    tiredCd: 0.5,
+    tiredKick: 0.3,
+    tiredDodge: 0.4,
     frames: {
       idle: "assets/characters/isagi/idle.png",
       kick: "assets/characters/isagi/kick.png",
@@ -359,6 +371,9 @@ const CHARACTERS = {
         // ศัตรูปัดด้วยอาวุธหรือคลื่นเสียง = บอลสะท้อนกลับมาหา Isagi แทน (ยังโดนดาเมจได้)
         type: "ballkick",
         name: "พุ่งเตะบอล",
+        staminaCost: 12, // เสียสตามินาเมื่อใช้สกิลนี้
+        metaKickStamina: 5, // เตะระหว่าง Meta Vision เสียเท่านี้ต่อครั้ง
+        volleyStamina: 10, // วอลเลย์เสียเพิ่มเท่านี้
         cooldown: 3.2,
         initialCooldown: 0.8,
         frame: "idle",
@@ -379,6 +394,9 @@ const CHARACTERS = {
       {
         type: "metavision",
         name: "Meta Vision",
+        staminaCost: 18,
+        dodgeStamina: 6, // หลบ 1 ครั้งเสียเท่านี้ (ไม่พอ = หลบไม่ได้)
+        adaptStamina: 0.4, // ปรับตัวเต็มที่แล้วหลบประหยัดแรงลง 40%
         cooldown: 13,
         hpRush: 4, // ยิ่งเลือดน้อยคูลดาวน์ยิ่งเดินเร็ว: เลือดเต็ม 1 เท่า -> เลือดหมด 4 เท่า (13 วิ -> เหลือราว 3 วิ)
         initialCooldown: 8,

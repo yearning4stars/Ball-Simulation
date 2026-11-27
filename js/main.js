@@ -30,6 +30,13 @@ let sonicBlasts = []; // วงระเบิดตอน Sonic Boom โดน�
 let screenFlash = 0; // วาบขาวทั้งจอ (ตอนเริ่มตัดเวลา)
 let ghosts = []; // ภาพติดตาของคนที่กำลังเร่งเวลา (Johan)
 let ghostAcc = 0;
+// ความเหนื่อย 0..1 ของตัวละครที่มีสตามินา (ให้ตรงกับ _fatigue ใน battle.js)
+function fatigueOf(f) {
+  const d = f.def;
+  if (!d || !d.staminaMax) return 0;
+  const fr = f.stamina / d.staminaMax, tb = d.tiredBelow || 0.35;
+  return Math.max(fr >= tb ? 0 : (tb - fr) / tb, f.exhausted ? 0.6 : 0);
+}
 let metaFx = []; // เอฟเฟกต์ของ Isagi: วงคลื่น / เส้นความเร็ว / ประกาย {k,x,y,t,life,...}
 let ballTrail = []; // ภาพติดตาของลูกบอลที่ถูกเตะ {x,y,r,life,meta}
 let ballTrailAcc = 0;
@@ -1421,6 +1428,16 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, "#6fd3ff", 14, 280);
       floaters.push({ x: e.x, y: e.y - 56, text: "หลบ!", life: 0.8, color: "#8fe0ff", size: 28 });
       sfx.dodge();
+    } else if (e.type === "tired") {
+      floaters.push({ x: e.x, y: e.y - 70, text: "เหนื่อยแล้ว…", life: 1.1, color: "#ffd65a", size: 22 });
+    } else if (e.type === "exhausted") {
+      spawnParticles(e.x, e.y, "#9fd8ff", 14, 160);
+      shake = Math.max(shake, 5);
+      floaters.push({ x: e.x, y: e.y - 70, text: "หมดแรง!", life: 1.4, color: "#ff7a5a", size: 30 });
+    } else if (e.type === "staminaRecover") {
+      floaters.push({ x: e.x, y: e.y - 70, text: "ฟื้นแรงแล้ว", life: 1.0, color: "#7dde6a", size: 22 });
+    } else if (e.type === "dodgeFail") {
+      floaters.push({ x: e.x, y: e.y - 70, text: "แรงไม่พอหลบ!", life: 1.0, color: "#ff9d7a", size: 24 });
     } else if (e.type === "metaAnalyze") {
       // วิเคราะห์ท่าศัตรู: ท่าใหม่ขึ้นข้อความ + วงสแกนฟ้า-ขาว (ท่าที่เคยเห็นแล้วแค่วงเล็ก)
       metaRing(e.x, e.y, e.isNew ? 140 : 90, e.isNew ? "255,255,255" : "143,224,255", 0.4, e.isNew ? 3 : 2, 0.05);
@@ -1644,6 +1661,15 @@ function updateEffects(dt) {
     }
   }
   metaDim = Math.max(0, Math.min(1, metaDim + (metaOn ? 3 : -2.5) * dt));
+  if (battle) {
+    for (const f of battle.fighters) { // เหนื่อย: เหงื่อกระเซ็นรอบตัว ยิ่งเหนื่อยยิ่งถี่
+      const fat = fatigueOf(f);
+      if (f.hp > 0 && fat > 0 && Math.random() < (0.08 + fat * 0.3) * dt * 60 * 0.5) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+        particles.push({ x: f.x + Math.cos(a) * f.r * 0.8, y: f.y - f.r * 0.6, vx: Math.cos(a) * 50, vy: Math.sin(a) * 60 - 20, life: 0.5, color: "#9fd8ff" });
+      }
+    }
+  }
   if (battle) {
     ghostAcc += dt;
     for (const f of battle.fighters) {
@@ -2714,7 +2740,7 @@ function drawMetaAura(f) {
   const t = performance.now() / 1000;
   const c = f.cast;
   const lost = 1 - Math.max(0, f.hp) / f.maxHp;
-  const fade = Math.max(0, Math.min(1, c.t / 0.25, (c.sk.duration - c.t) / 0.3));
+  const fade = Math.max(0, Math.min(1, c.t / 0.25, (c.sk.duration - c.t) / 0.3)) * (1 - 0.45 * fatigueOf(f) * (0.65 + 0.35 * Math.sin(t * 14))); // เหนื่อย = ออร่าแกว่งจางลง
   const R = f.r * 1.5;
   const spin = 1 + lost * 1.5;
   ctx.save();
@@ -3515,7 +3541,13 @@ function setIdleHud() {
     h.fill.style.background = hpColor(1);
     h.hpVal.textContent = def.hp + " / " + def.hp;
     if (h.mind) h.mind.style.width = "0%";
-    if (h.ebar) { h.ebar.style.visibility = def.energyMax ? "visible" : "hidden"; h.energy.style.width = "100%"; }
+    if (h.ebar) {
+      h.ebar.style.visibility = def.energyMax || def.staminaMax ? "visible" : "hidden";
+      h.ebar.classList.toggle("stam", !!def.staminaMax);
+      h.ebar.title = def.staminaMax ? "สตามินา" : "พลังงาน";
+      h.energy.style.background = "";
+      h.energy.style.width = "100%";
+    }
     skillsOf(def).forEach((sk, j) => {
       const row = h.rows[j];
       if (row) setSkillRow(row, "", 0, sk.cooldown);
@@ -3544,8 +3576,13 @@ function updateHud(b) {
     h.hpVal.textContent = Math.ceil(f.hp) + " / " + f.maxHp;
     if (h.mind) h.mind.style.width = Math.min(100, f.mind) + "%";
     if (h.ebar) {
-      h.ebar.style.visibility = f.def.energyMax ? "visible" : "hidden";
+      h.ebar.style.visibility = f.def.energyMax || f.def.staminaMax ? "visible" : "hidden";
       if (f.def.energyMax) h.energy.style.width = Math.max(0, Math.min(100, (f.energy / f.def.energyMax) * 100)) + "%";
+      else if (f.def.staminaMax) {
+        const fr = Math.max(0, Math.min(1, f.stamina / f.def.staminaMax));
+        h.energy.style.width = fr * 100 + "%";
+        h.energy.style.background = f.exhausted ? "#ff5a4a" : fr > 0.5 ? "#7dde6a" : fr > (f.def.tiredBelow || 0.35) ? "#ffd65a" : "#ff8a4a";
+      }
     }
 
     f.skills.forEach((sk, j) => {
