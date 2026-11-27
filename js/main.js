@@ -30,6 +30,10 @@ let sonicBlasts = []; // วงระเบิดตอน Sonic Boom โดน�
 let screenFlash = 0; // วาบขาวทั้งจอ (ตอนเริ่มตัดเวลา)
 let ghosts = []; // ภาพติดตาของคนที่กำลังเร่งเวลา (Johan)
 let ghostAcc = 0;
+let metaFx = []; // เอฟเฟกต์ของ Isagi: วงคลื่น / เส้นความเร็ว / ประกาย {k,x,y,t,life,...}
+let ballTrail = []; // ภาพติดตาของลูกบอลที่ถูกเตะ {x,y,r,life,meta}
+let ballTrailAcc = 0;
+let metaDim = 0; // 0..1 ความมืดฟ้ารอบสนามตอน Meta Vision (ค่อยๆ เข้า/ออก)
 const charKey = (def) => (def && def.__dummy ? "__dummy" : Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def));
 
 // ---------- โหลดภาพ ----------
@@ -775,6 +779,7 @@ function startBattle() {
   floaters = [];
   slashFxList = [];
   ghosts = [];
+  metaFx = []; ballTrail = []; metaDim = 0;
   sonicBlasts = [];
   shake = 0;
 }
@@ -1185,7 +1190,7 @@ function labBattle_new(def) {
   d.x = W * 0.73; d.y = H * 0.55;
   d.vx = d.vy = 0;
   labHome = { x: d.x, y: d.y };
-  particles = []; shards = []; floaters = []; witherRings = []; slashFxList = []; ghosts = []; sonicBlasts = []; shake = 0;
+  particles = []; shards = []; floaters = []; witherRings = []; slashFxList = []; ghosts = []; metaFx = []; ballTrail = []; metaDim = 0; sonicBlasts = []; shake = 0;
 }
 // ทุกเฟรมในห้องทดลอง: เลือดเต็มเสมอ, หุ่นอยู่กับที่, ให้ใช้เฉพาะสกิลที่เลือก
 function labTick(dt) {
@@ -1391,18 +1396,43 @@ function handleEvents(events) {
     } else if (e.type === "metaStart") {
       screenFlash = 0.2;
       spawnParticles(e.x, e.y, "#6fd3ff", 22, 300);
+      // คลื่นวงฟ้าซ้อน 3 ชั้น + วงตาที่ขยายออกจากตัว + เส้นรัศมีพุ่งออก
+      metaRing(e.x, e.y, 260, "143,224,255", 0.7, 5, 0);
+      metaRing(e.x, e.y, 190, "79,184,255", 0.6, 3, 0.1);
+      metaRing(e.x, e.y, 150, "255,255,255", 0.45, 2, 0.2);
+      for (let i = 0; i < 18; i++) metaFx.push({ k: "ray", x: e.x, y: e.y, ang: (i / 18) * Math.PI * 2 + Math.random() * 0.2, len: 60 + Math.random() * 90, r0: 50, col: "143,224,255", t: 0, life: 0.5 });
       floaters.push({ x: e.x, y: e.y - 62, text: "Meta Vision!", life: 1.2, color: "#8fe0ff", size: 30 });
       sfx.meta();
     } else if (e.type === "metaEnd") {
       spawnParticles(e.x, e.y, "#6fd3ff", 12, 220);
+      metaFx.push({ k: "in", x: e.x, y: e.y, r: 200, col: "143,224,255", t: 0, life: 0.45 }); // วงหดเข้าหาตัว = สิ้นสุดการมองเห็น
+      metaRing(e.x, e.y, 120, "255,214,90", 0.4, 3, 0.25); // วงทองตอนพร้อมเตะสวน
       floaters.push({ x: e.x, y: e.y - 62, text: "เห็นช่องว่างแล้ว!", life: 1.0, color: "#8fe0ff", size: 26 });
     } else if (e.type === "dodge") {
       const f = battle.fighters.find((g) => g.hp > 0 && Math.hypot(g.x - e.x, g.y - e.y) < 1);
-      if (f) for (let i = 0; i < 4; i++) ghosts.push({ key: charKey(f.def), x: f.x - e.nx * i * 14, y: f.y - e.ny * i * 14, r: f.r, vy: f.vy, facing: f.facing, frame: f.frame, life: 0.35, tint: "blue" });
+      // ภาพติดตา 6 ภาพเรียงถอยหลังตามทิศที่สไลด์ (ใสลงเรื่อยๆ) + เส้นความเร็ว + วงที่จุดเริ่มหลบ
+      if (f) for (let i = 1; i <= 6; i++) ghosts.push({ key: charKey(f.def), x: f.x - e.nx * i * 16, y: f.y - e.ny * i * 16, r: f.r, vy: f.vy, facing: f.facing, frame: f.frame, life: 0.2 + i * 0.06, tint: "blue" });
+      const da = Math.atan2(e.ny, e.nx);
+      for (let i = 0; i < 9; i++) {
+        const off = (Math.random() - 0.5) * (f ? f.r * 1.8 : 50);
+        metaFx.push({ k: "streak", x: e.x - e.ny * off, y: e.y + e.nx * off, ang: da + Math.PI, len: 70 + Math.random() * 90, col: "180,235,255", t: 0, life: 0.3 });
+      }
+      metaRing(e.x - e.nx * 24, e.y - e.ny * 24, 90, "143,224,255", 0.35, 3, 0);
       spawnParticles(e.x, e.y, "#6fd3ff", 14, 280);
       floaters.push({ x: e.x, y: e.y - 56, text: "หลบ!", life: 0.8, color: "#8fe0ff", size: 28 });
       sfx.dodge();
     } else if (e.type === "kick") {
+      // ทิศของลูกที่เพิ่งถูกเตะ ใช้พ่นประกายเป็นรูปกรวยไปทางเดียวกับบอล
+      let kb = null, kd = 1e9;
+      for (const b of battle.balls) { const d = Math.hypot(b.x - e.x, b.y - e.y); if (d < kd) { kd = d; kb = b; } }
+      const ka = kb && Math.hypot(kb.vx, kb.vy) > 1 ? Math.atan2(kb.vy, kb.vx) : Math.random() * Math.PI * 2;
+      const kcol = e.meta ? "255,214,90" : "190,230,255";
+      metaRing(e.x, e.y, e.meta ? 130 : 80, kcol, e.meta ? 0.45 : 0.3, e.meta ? 5 : 3, 0);
+      if (e.meta) metaRing(e.x, e.y, 200, "255,255,255", 0.5, 2, 0.06);
+      for (let i = 0; i < (e.meta ? 16 : 9); i++) {
+        const a = ka + (Math.random() - 0.5) * (e.meta ? 1.1 : 0.8);
+        metaFx.push({ k: "streak", x: e.x, y: e.y, ang: a, len: 50 + Math.random() * (e.meta ? 130 : 80), col: kcol, t: 0, life: e.meta ? 0.4 : 0.28, out: true });
+      }
       spawnParticles(e.x, e.y, e.meta ? "#ffd65a" : "#ffffff", e.meta ? 22 : 12, e.meta ? 380 : 260);
       shake = Math.max(shake, e.meta ? 9 : 5);
       if (e.meta) floaters.push({ x: e.x, y: e.y - 40, text: "Meta Kick!", life: 1.0, color: "#ffd65a", size: 30 });
@@ -1571,6 +1601,32 @@ function updateEffects(dt) {
   // เร่งเวลา: ทิ้งภาพติดตาสีเหลืองตามหลัง Johan
   for (const g of ghosts) g.life -= dt;
   ghosts = ghosts.filter((g) => g.life > 0);
+  // เอฟเฟกต์ Isagi: วงคลื่น/เส้นความเร็ว, รอยบอลที่ถูกเตะ, ความมืดฟ้ารอบสนามตอน Meta Vision
+  for (const m of metaFx) m.t += dt;
+  metaFx = metaFx.filter((m) => m.t < m.life);
+  for (const bt of ballTrail) bt.life -= dt;
+  ballTrail = ballTrail.filter((bt) => bt.life > 0);
+  let metaOn = false;
+  if (battle) {
+    ballTrailAcc += dt;
+    for (const b of battle.balls) {
+      if (b.hot && Math.hypot(b.vx, b.vy) > 60 && ballTrailAcc >= 0.02) ballTrail.push({ x: b.x, y: b.y, r: b.r, life: b.meta ? 0.35 : 0.24, max: b.meta ? 0.35 : 0.24, meta: !!b.meta });
+    }
+    if (ballTrailAcc >= 0.02) ballTrailAcc = 0;
+    for (const f of battle.fighters) {
+      if (f.hp > 0 && f.cast && f.cast.sk.type === "metavision") {
+        metaOn = true;
+        // เลือดน้อย = โหมดตื่นตัว: ประกายทองไหลรอบตัวมากขึ้น (คูลดาวน์เดินเร็วขึ้นตามเลือดที่หาย)
+        const lost = 1 - Math.max(0, f.hp) / f.maxHp;
+        if (Math.random() < 0.5 + lost * 0.8) {
+          const a = Math.random() * Math.PI * 2;
+          const rr = f.r * (0.9 + Math.random() * 0.5);
+          particles.push({ x: f.x + Math.cos(a) * rr, y: f.y + Math.sin(a) * rr, vx: Math.cos(a) * 30, vy: -60 - Math.random() * 70, life: 0.5 + Math.random() * 0.4, color: lost > 0.55 && Math.random() < lost ? "#ffd65a" : "#8fe0ff" });
+        }
+      }
+    }
+  }
+  metaDim = Math.max(0, Math.min(1, metaDim + (metaOn ? 3 : -2.5) * dt));
   if (battle) {
     ghostAcc += dt;
     for (const f of battle.fighters) {
@@ -2298,7 +2354,7 @@ function drawAccelAura(f) {
 function drawGhosts() {
   for (const g of ghosts) {
     ctx.save();
-    ctx.globalAlpha = Math.max(0, g.life / 0.3) * 0.35;
+    ctx.globalAlpha = Math.min(1, Math.max(0, g.life / 0.3)) * 0.35;
     ctx.filter = g.tint === "blue" ? "sepia(1) hue-rotate(160deg) saturate(5) brightness(1.2)" : "sepia(1) saturate(4) brightness(1.1)";
     drawFighter({ x: g.x, y: g.y, r: g.r, vy: g.vy, facing: g.facing, frame: g.frame, hitFlash: 0, def: CHARACTERS[g.key] }, g.key);
     ctx.restore();
@@ -2630,62 +2686,222 @@ function drawBall(b) {
 }
 
 // ---------- Meta Vision: ออร่าฟ้า ตา และเส้น "อนาคตที่มองเห็น" ----------
+// เพิ่มวงคลื่นของ Isagi (สร้างตอน metaStart / dodge / kick) delay = รอกี่วินาทีก่อนเริ่มขยาย
+function metaRing(x, y, r, col, life, lw, delay) {
+  metaFx.push({ k: "ring", x, y, r, col, lw: lw || 3, d: delay || 0, t: 0, life: life + (delay || 0), dur: life });
+}
+
+// ออร่า: แสงเรืองฟ้า, วงประหมุนสวนทางกัน, เปลวฟ้าลอยขึ้น, ดวงตาเหนือหัวที่มองตามศัตรู + วงนับเวลาที่เหลือ
+// ยิ่งเลือดน้อย (ซึ่งคูลดาวน์เดินเร็วขึ้น) ยิ่งมีสีทองปนและหมุนไวขึ้น = ตื่นตัว
 function drawMetaAura(f) {
   const t = performance.now() / 1000;
-  const R = f.r * 1.45;
+  const c = f.cast;
+  const lost = 1 - Math.max(0, f.hp) / f.maxHp;
+  const fade = Math.max(0, Math.min(1, c.t / 0.25, (c.sk.duration - c.t) / 0.3));
+  const R = f.r * 1.5;
+  const spin = 1 + lost * 1.5;
   ctx.save();
   ctx.translate(f.x, f.y);
-  ctx.globalAlpha = 0.16 + 0.06 * Math.sin(t * 6);
-  ctx.fillStyle = "#4fb8ff";
-  ctx.beginPath();
-  ctx.arc(0, 0, R, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 0.85;
+  ctx.globalCompositeOperation = "lighter";
+  // แสงเรืองรอบตัว
+  const g = ctx.createRadialGradient(0, 0, f.r * 0.4, 0, 0, R * 1.35);
+  g.addColorStop(0, "rgba(79,184,255,0)");
+  g.addColorStop(0.6, "rgba(79,184,255," + ((0.22 + 0.06 * Math.sin(t * 6)) * fade).toFixed(3) + ")");
+  g.addColorStop(1, "rgba(79,184,255,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, R * 1.35, 0, Math.PI * 2); ctx.fill();
+  // เปลวฟ้าลอยขึ้นรอบตัว
+  for (let i = 0; i < 12; i++) {
+    const ph = (t * 0.9 * spin + i / 12) % 1;
+    const a = i * 2.399 + Math.sin(t + i) * 0.3;
+    const rr = f.r * (0.75 + 0.45 * Math.sin(i * 1.9));
+    const x = Math.cos(a) * rr;
+    const y = Math.sin(a) * rr * 0.5 + f.r * 0.5 - ph * f.r * 1.9;
+    const sz = (1 - ph) * f.r * 0.2 + 2;
+    const gold = lost > 0.5 && i % 3 === 0;
+    const fg = ctx.createRadialGradient(x, y, 0, x, y, sz * 2.2);
+    fg.addColorStop(0, gold ? "rgba(255,230,140," + (0.9 * (1 - ph) * fade).toFixed(3) + ")" : "rgba(190,240,255," + (0.9 * (1 - ph) * fade).toFixed(3) + ")");
+    fg.addColorStop(1, "rgba(79,184,255,0)");
+    ctx.fillStyle = fg;
+    ctx.beginPath(); ctx.ellipse(x, y, sz * 1.2, sz * 2.2, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  // วงหมุนสวนทางกัน 2 ชั้น (เส้นประ) + ขีดสั้นรอบวงนอก
   ctx.strokeStyle = "#8fe0ff";
+  ctx.globalAlpha = 0.85 * fade;
   ctx.lineWidth = 2.5;
   ctx.setLineDash([4, 7]);
-  ctx.lineDashOffset = t * 40;
-  ctx.beginPath();
-  ctx.arc(0, 0, R, 0, Math.PI * 2);
-  ctx.stroke();
+  ctx.lineDashOffset = t * 40 * spin;
+  ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = lost > 0.5 ? "#ffd65a" : "#c9f1ff";
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash([14, 10]);
+  ctx.lineDashOffset = -t * 55 * spin;
+  ctx.beginPath(); ctx.arc(0, 0, R * 0.82, 0, Math.PI * 2); ctx.stroke();
   ctx.setLineDash([]);
-  // ดวงตาเหนือหัว
-  const ey = -f.r - 20;
-  ctx.fillStyle = "rgba(10,30,60,0.8)";
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 6; i++) {
+    const a = t * 1.4 * spin + (i / 6) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 1.08, a, a + 0.16);
+    ctx.stroke();
+  }
+  // ดวงตาเหนือหัว: มองตามศัตรูที่ใกล้ที่สุด กะพริบเป็นระยะ
+  let foe = null, fd = 1e9;
+  for (const g2 of battle.fighters) {
+    if (g2 === f || g2.hp <= 0 || g2.team === f.team) continue;
+    const d = Math.hypot(g2.x - f.x, g2.y - f.y);
+    if (d < fd) { fd = d; foe = g2; }
+  }
+  let lx = 0, ly = 0;
+  if (foe) { const d = Math.hypot(foe.x - f.x, foe.y - f.y) || 1; lx = (foe.x - f.x) / d * 7; ly = (foe.y - f.y) / d * 3.5; }
+  const ey = -f.r - 26;
+  const blink = (t % 3.2) > 3.08 ? 0.15 : 1;
+  const ew = 24, eh = 12 * blink;
+  ctx.globalAlpha = fade;
+  ctx.shadowColor = "#6fd3ff"; ctx.shadowBlur = 14;
+  ctx.fillStyle = "rgba(8,24,52,0.9)";
   ctx.beginPath();
-  ctx.ellipse(0, ey, 20, 10, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#8fe0ff";
-  ctx.beginPath();
-  ctx.arc(0, ey, 5.5, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(-ew, ey);
+  ctx.quadraticCurveTo(0, ey - eh * 2, ew, ey);
+  ctx.quadraticCurveTo(0, ey + eh * 2, -ew, ey);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "#8fe0ff"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.shadowBlur = 0;
+  if (blink > 0.5) {
+    const ig = ctx.createRadialGradient(lx, ey + ly, 1, lx, ey + ly, 9);
+    ig.addColorStop(0, "#ffffff"); ig.addColorStop(0.45, "#8fe0ff"); ig.addColorStop(1, "#2f7bff");
+    ctx.fillStyle = ig;
+    ctx.beginPath(); ctx.arc(lx, ey + ly, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#04122a";
+    ctx.beginPath(); ctx.ellipse(lx, ey + ly, 2.4, 6, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // วงนับเวลาที่เหลือรอบดวงตา
+  const left = Math.max(0, Math.min(1, (c.sk.duration - c.t) / c.sk.duration));
+  ctx.strokeStyle = "rgba(143,224,255,0.9)"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(0, ey, ew + 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); ctx.stroke();
   ctx.restore();
 }
 
-// เส้นอนาคตที่ Isagi เห็น: เส้นประจากท่าของศัตรูไปจุดที่จะโดน
+// เส้นอนาคตที่ Isagi เห็น: เส้นไล่แสงจากท่าของศัตรูไปจุดที่จะโดน + จุดแสงวิ่งตามเส้น + กากบาทและวงเตือนที่จุดตกกระทบ
 function drawMetaThreats(f) {
   const th = f.cast && f.cast.threats;
   if (!th || !th.length) return;
+  const t = performance.now() / 1000;
   ctx.save();
-  ctx.strokeStyle = "rgba(143,224,255,0.75)";
-  ctx.lineWidth = 2;
-  ctx.setLineDash([8, 8]);
-  ctx.lineDashOffset = -performance.now() / 40;
+  ctx.lineCap = "round";
   for (const q of th) {
+    const dx = q.ex - q.x, dy = q.ey - q.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 2) continue;
+    const g = ctx.createLinearGradient(q.x, q.y, q.ex, q.ey);
+    g.addColorStop(0, "rgba(143,224,255,0.05)");
+    g.addColorStop(1, "rgba(190,240,255,0.95)");
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = "#6fd3ff"; ctx.shadowBlur = 10;
+    ctx.setLineDash([10, 7]);
+    ctx.lineDashOffset = -t * 30;
+    ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.ex, q.ey); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
+    // จุดแสงวิ่งไปตามเส้น (2 จุดเหลื่อมกัน)
+    for (let k = 0; k < 2; k++) {
+      const p = (t * 1.6 + k * 0.5) % 1;
+      ctx.fillStyle = "rgba(255,255,255," + (0.35 + 0.6 * p).toFixed(2) + ")";
+      ctx.beginPath(); ctx.arc(q.x + dx * p, q.y + dy * p, 3 + 2 * p, 0, Math.PI * 2); ctx.fill();
+    }
+    // หัวลูกศรปลายเส้น
+    const ang = Math.atan2(dy, dx);
+    ctx.fillStyle = "rgba(190,240,255,0.95)";
     ctx.beginPath();
-    ctx.moveTo(q.x, q.y);
-    ctx.lineTo(q.ex, q.ey);
+    ctx.moveTo(q.ex + Math.cos(ang) * 4, q.ey + Math.sin(ang) * 4);
+    ctx.lineTo(q.ex + Math.cos(ang + 2.5) * 13, q.ey + Math.sin(ang + 2.5) * 13);
+    ctx.lineTo(q.ex + Math.cos(ang - 2.5) * 13, q.ey + Math.sin(ang - 2.5) * 13);
+    ctx.closePath(); ctx.fill();
+    // วงเตือน + กากบาทที่จุดตกกระทบ
+    const pulse = (t * 1.8) % 1;
+    ctx.strokeStyle = "rgba(143,224,255," + (0.8 * (1 - pulse)).toFixed(2) + ")";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(q.ex, q.ey, 8 + pulse * 20, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(q.ex - 7, q.ey - 7); ctx.lineTo(q.ex + 7, q.ey + 7);
+    ctx.moveTo(q.ex + 7, q.ey - 7); ctx.lineTo(q.ex - 7, q.ey + 7);
     ctx.stroke();
   }
-  ctx.setLineDash([]);
-  ctx.fillStyle = "rgba(143,224,255,0.85)";
-  for (const q of th) {
-    ctx.beginPath();
-    ctx.arc(q.ex, q.ey, 5, 0, Math.PI * 2);
-    ctx.fill();
+  ctx.restore();
+}
+
+// รอยบอลที่ถูกเตะ: วงกลมซ้อนจางหายตามหลัง (Meta Kick เป็นสีทอง)
+function drawBallTrail() {
+  if (!ballTrail.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const bt of ballTrail) {
+    const k = Math.max(0, bt.life / bt.max);
+    ctx.fillStyle = (bt.meta ? "rgba(255,200,70," : "rgba(110,190,255,") + (0.38 * k).toFixed(3) + ")";
+    ctx.beginPath(); ctx.arc(bt.x, bt.y, bt.r * (0.45 + 0.7 * k), 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
+}
+
+// เอฟเฟกต์ลอยตัวของ Isagi: วงคลื่น, วงหด, เส้นรัศมี, เส้นความเร็ว
+function drawMetaFx() {
+  if (!metaFx.length) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const m of metaFx) {
+    const tt = m.t - (m.d || 0);
+    if (tt < 0) continue;
+    const dur = m.dur || m.life;
+    const k = Math.min(1, tt / dur);
+    const e = 1 - Math.pow(1 - k, 3);
+    if (m.k === "ring") {
+      ctx.strokeStyle = "rgba(" + m.col + "," + (0.9 * (1 - k)).toFixed(3) + ")";
+      ctx.lineWidth = m.lw * (1 - k * 0.6);
+      ctx.shadowColor = "rgb(" + m.col + ")"; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(m.x, m.y, Math.max(1, m.r * e), 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur = 0;
+    } else if (m.k === "in") {
+      ctx.strokeStyle = "rgba(" + m.col + "," + (0.2 + 0.7 * k).toFixed(3) + ")";
+      ctx.lineWidth = 2 + 3 * k;
+      ctx.beginPath(); ctx.arc(m.x, m.y, Math.max(1, m.r * (1 - e)), 0, Math.PI * 2); ctx.stroke();
+    } else if (m.k === "ray") {
+      const a0 = m.r0 + m.len * e * 0.4, a1 = m.r0 + m.len * e;
+      ctx.strokeStyle = "rgba(" + m.col + "," + (0.9 * (1 - k)).toFixed(3) + ")";
+      ctx.lineWidth = 3 * (1 - k) + 1;
+      ctx.beginPath();
+      ctx.moveTo(m.x + Math.cos(m.ang) * a0, m.y + Math.sin(m.ang) * a0);
+      ctx.lineTo(m.x + Math.cos(m.ang) * a1, m.y + Math.sin(m.ang) * a1);
+      ctx.stroke();
+    } else if (m.k === "streak") {
+      const dx = Math.cos(m.ang), dy = Math.sin(m.ang);
+      const head = m.len * e, tail = m.len * Math.max(0, e - 0.55);
+      ctx.strokeStyle = "rgba(" + m.col + "," + (0.85 * (1 - k)).toFixed(3) + ")";
+      ctx.lineWidth = 2.5 * (1 - k) + 0.8;
+      ctx.beginPath();
+      ctx.moveTo(m.x + dx * tail, m.y + dy * tail);
+      ctx.lineTo(m.x + dx * head, m.y + dy * head);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// ความมืดฟ้าที่ขอบจอตอน Meta Vision: รอบตัว Isagi ยังสว่าง เหมือน "โฟกัส" ที่ตัวเองและสิ่งที่กำลังจะมา
+function drawMetaVignette() {
+  if (metaDim <= 0.01) return;
+  let who = null;
+  for (const f of battle.fighters) if (f.hp > 0 && f.cast && f.cast.sk.type === "metavision") { who = f; break; }
+  if (!who) return;
+  const R = Math.max(W, H);
+  const g = ctx.createRadialGradient(who.x, who.y, 220, who.x, who.y, R);
+  g.addColorStop(0, "rgba(4,18,46,0)");
+  g.addColorStop(1, "rgba(4,18,46," + (0.42 * metaDim).toFixed(3) + ")");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
 }
 
 // ---------- กรอบคำพูด (กระสุนบั่นทอนสติ) ----------
@@ -3550,7 +3766,9 @@ function render() {
     }
     for (const gu of battle.guests || []) drawGuest(gu);
     for (const fl of battle.flowers) drawFlower(fl);
+    drawBallTrail();
     for (const b of battle.balls) drawBall(b);
+    drawMetaFx();
     for (const p of battle.projectiles) {
       gray(battle.isDazed(p.owner));
       if (p.shape === "note") { drawNote(p); gray(false); continue; }
@@ -3585,6 +3803,7 @@ function render() {
     ctx.globalAlpha = 1;
     if (battle.rewind) drawRewindOverlay(battle);
     if (battle.eraser && battle.eraser.cast) drawEraseLabel(battle);
+    drawMetaVignette();
     for (const f of battle.fighters) {
       if (!f.cast || f.hp <= 0) continue;
       const c = f.cast;
@@ -3686,7 +3905,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 69";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 70";
   }
 }
 
