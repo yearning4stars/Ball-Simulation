@@ -66,6 +66,8 @@
 //        ศัตรูปัดด้วยอาวุธ (ดาบ/เข็มทิศ) หรือคลื่นเสียง = บอลสะท้อนกลับไปหาผู้เตะ (เจ้าของบอลเปลี่ยน โดนผู้เตะได้เหมือนกัน)
 //        duration (เวลาพุ่งหาบอลสูงสุด), chaseSpeed, kickSpeed, ballRadius
 //        ใส่ใน metavision: kickCd, kickSpeedMult, kickDamageMult, kickKnockMult = เตะบอลระหว่าง Meta Vision ได้ แรงกว่าปกติ
+//        วอลเลย์: บอลที่พุ่งเข้าหาด้วยความเร็วถึง volleySpeed (ศัตรูเตะ/สะท้อนมา) จะถูกเตะสวนแรงกว่าเดิม (volleyAbsorb/SpeedMult/DamageMult/KnockMult)
+//        ใส่ใน metavision: adaptMax, adaptLook, adaptDodges, adaptCd, adaptPower, adaptKick = วิเคราะห์ท่าศัตรูที่หลบได้แล้วปรับตัว (ดู characters.js)
 //        projectile เพิ่ม: lead (เล็งนำหน้าศัตรูที่กำลังเคลื่อนที่), bounces (กระสุนสะท้อนกำแพงได้กี่ครั้ง), shape: "soccer" (ลูกฟุตบอล)
 //   "summon"      เรียกเพื่อน (Solar): ถึง fireDelay แล้วสุ่ม 1 คนจาก guests [{name (ตรงกับ name ใน CHARACTERS), say, damage, silence, slow, slowMult, knockback}]
 //        เพื่อนพุ่งมาหาศัตรูโจมตี 1 ครั้งแล้วหายไป  เรียกคนที่ศัตรูฝั่งตรงข้ามเป็นตัวนั้นอยู่ไม่ได้ (ไม่มีใครให้เรียก = ไม่ใช้สกิล)
@@ -366,6 +368,13 @@ const CHARACTERS = {
         kickSpeed: 640, // ความเร็วบอลหลังโดนเตะ
         knockback: 160,
         ballRadius: 15,
+        // Volley: ถ้าบอลมีแรงอยู่แล้ว (พุ่งเข้าหาเร็วเกิน volleySpeed px/วินาที) จะเตะสวนแบบวอลเลย์ -> ซ้อนแรงเดิมเข้าไปด้วย
+        volleySpeed: 260, // ความเร็วบอลขั้นต่ำที่นับเป็นวอลเลย์
+        volleyAbsorb: 0.6, // ซ้อนความเร็วเดิมของบอลเข้าไปกี่เท่า
+        volleySpeedMult: 1.3, // ตัวคูณความเร็วรวมของวอลเลย์
+        volleyDamageMult: 1.6, // ดาเมจแรงขึ้นกี่เท่า
+        volleyKnockMult: 1.4, // แรงผลักแรงขึ้นกี่เท่า
+        volleyMaxSpeed: 1900, // เพดานความเร็ว (กันบอลทะลุตัว)
       },
       {
         type: "metavision",
@@ -380,6 +389,13 @@ const CHARACTERS = {
         dodgeCd: 0.28, // พักสั้นๆ ระหว่างการหลบแต่ละครั้ง
         dodgePower: 620, // แรงสไลด์หลบ (px/วินาที ยิ่งมากยิ่งเลื่อนไกล)
         counterKick: true, // จบ Meta Vision แล้วเตะสวนทันที (รีเซ็ตคูลดาวน์ลูกเตะ)
+        // ปรับตัวตามที่วิเคราะห์ได้ (จำท่าศัตรูที่หลบได้ตลอดการต่อสู้ ท่าใหม่ +2 ท่าเดิม +1 ถึง adaptMax = เต็ม)
+        adaptMax: 10,
+        adaptLook: 0.5, // เต็มแล้วมองล่วงหน้าไกลขึ้นกี่เท่า (+50%)
+        adaptDodges: 4, // เต็มแล้วหลบได้เพิ่มต่อการใช้ 1 ครั้ง
+        adaptCd: 0.6, // เต็มแล้วพักระหว่างหลบสั้นลง 60%
+        adaptPower: 0.4, // เต็มแล้วสไลด์หลบไกลขึ้น 40%
+        adaptKick: 0.4, // เต็มแล้วเตะซ้ำระหว่าง Meta Vision ถี่ขึ้น 40%
         // ระหว่าง Meta Vision เตะบอลได้ต่อเนื่อง (ไม่ต้องรอคูลดาวน์ปกติ) และเตะแรงกว่าปกติ
         kickCd: 1.0, // เตะซ้ำได้ทุกกี่วินาทีระหว่าง Meta Vision
         kickSpeedMult: 1.5, // บอลเร็วขึ้นกี่เท่า
@@ -929,6 +945,6 @@ const CHARACTERS = {
 };
 
 // เลขเวอร์ชันของไฟล์นี้ (main.js ใช้ตรวจว่าโหลดไฟล์ครบและตรงกันหรือไม่)
-if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 40;
+if (typeof window !== "undefined") (window.BB_FILES = window.BB_FILES || {}).characters = 41;
 
 if (typeof module !== "undefined") module.exports = { CHARACTERS };

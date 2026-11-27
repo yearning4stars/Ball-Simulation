@@ -1421,6 +1421,11 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, "#6fd3ff", 14, 280);
       floaters.push({ x: e.x, y: e.y - 56, text: "หลบ!", life: 0.8, color: "#8fe0ff", size: 28 });
       sfx.dodge();
+    } else if (e.type === "metaAnalyze") {
+      // วิเคราะห์ท่าศัตรู: ท่าใหม่ขึ้นข้อความ + วงสแกนฟ้า-ขาว (ท่าที่เคยเห็นแล้วแค่วงเล็ก)
+      metaRing(e.x, e.y, e.isNew ? 140 : 90, e.isNew ? "255,255,255" : "143,224,255", 0.4, e.isNew ? 3 : 2, 0.05);
+      if (e.isNew) floaters.push({ x: e.x, y: e.y - 82, text: "วิเคราะห์: " + e.text + "  (" + e.level + "/" + e.max + ")", life: 1.3, color: "#c9f1ff", size: 22 });
+      else if (e.level >= e.max) floaters.push({ x: e.x, y: e.y - 82, text: "ปรับตัวเต็มที่!", life: 1.0, color: "#ffd65a", size: 24 });
     } else if (e.type === "kick") {
       // ทิศของลูกที่เพิ่งถูกเตะ ใช้พ่นประกายเป็นรูปกรวยไปทางเดียวกับบอล
       let kb = null, kd = 1e9;
@@ -1435,7 +1440,19 @@ function handleEvents(events) {
       }
       spawnParticles(e.x, e.y, e.meta ? "#ffd65a" : "#ffffff", e.meta ? 22 : 12, e.meta ? 380 : 260);
       shake = Math.max(shake, e.meta ? 9 : 5);
-      if (e.meta) floaters.push({ x: e.x, y: e.y - 40, text: "Meta Kick!", life: 1.0, color: "#ffd65a", size: 30 });
+      if (e.volley) {
+        // วอลเลย์: วงกระแทกซ้อน 3 ชั้นสีส้ม-ขาว + เส้นพุ่งตามทิศบอลยาวกว่าปกติ + จอสั่นแรง
+        metaRing(e.x, e.y, 170, "255,150,60", 0.5, 6, 0);
+        metaRing(e.x, e.y, 260, "255,255,255", 0.55, 3, 0.05);
+        metaRing(e.x, e.y, 110, "255,214,90", 0.35, 4, 0.1);
+        for (let i = 0; i < 14; i++) {
+          const a = ka + (Math.random() - 0.5) * 0.5;
+          metaFx.push({ k: "streak", x: e.x, y: e.y, ang: a, len: 140 + Math.random() * 200, col: "255,190,90", t: 0, life: 0.45, out: true });
+        }
+        spawnParticles(e.x, e.y, "#ff9d3c", 20, 460);
+        shake = Math.max(shake, 14);
+        floaters.push({ x: e.x, y: e.y - 44, text: "Volley!", life: 1.1, color: "#ff9d3c", size: 36 });
+      } else if (e.meta) floaters.push({ x: e.x, y: e.y - 40, text: "Meta Kick!", life: 1.0, color: "#ffd65a", size: 30 });
       sfx.kick();
     } else if (e.type === "reflect") {
       spawnParticles(e.x, e.y, "#ffffff", 16, 320);
@@ -2776,6 +2793,24 @@ function drawMetaAura(f) {
     ctx.fillStyle = "#04122a";
     ctx.beginPath(); ctx.ellipse(lx, ey + ly, 2.4, 6, 0, 0, Math.PI * 2); ctx.fill();
   }
+  // ระดับการวิเคราะห์/ปรับตัว: เม็ดเพชร 5 เม็ดเหนือดวงตา (เต็ม = ทอง)
+  const mem = f.metaMem;
+  if (mem && mem.level > 0) {
+    const mx = f.def.skills.find((k) => k.type === "metavision");
+    const adaptMax = (mx && mx.adaptMax) || 10;
+    const lv = (mem.level / adaptMax) * 10;
+    for (let i = 0; i < 5; i++) {
+      const fill = Math.max(0, Math.min(1, (lv - i * 2) / 2));
+      const px = (i - 2) * 11, py = ey - 26;
+      ctx.beginPath();
+      ctx.moveTo(px, py - 5); ctx.lineTo(px + 4, py); ctx.lineTo(px, py + 5); ctx.lineTo(px - 4, py);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(8,24,52,0.8)"; ctx.fill();
+      ctx.fillStyle = (mem.level >= adaptMax ? "rgba(255,214,90," : "rgba(143,224,255,") + (0.15 + 0.85 * fill).toFixed(2) + ")";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(143,224,255,0.8)"; ctx.lineWidth = 1; ctx.stroke();
+    }
+  }
   // วงนับเวลาที่เหลือรอบดวงตา
   const left = Math.max(0, Math.min(1, (c.sk.duration - c.t) / c.sk.duration));
   ctx.strokeStyle = "rgba(143,224,255,0.9)"; ctx.lineWidth = 3; ctx.lineCap = "round";
@@ -3810,7 +3845,7 @@ function render() {
       const left = Math.max(0, c.sk.duration - c.t).toFixed(1);
       if (c.sk.type === "timeaccel") drawTimeLabel("⏩ เร่งเวลา x" + (c.sk.rate || 2) + "  " + left + " วิ", "#ffcf5a");
       else if (c.sk.type === "timeslow") drawTimeLabel("⏳ ชะลอเวลา  " + left + " วิ", "#7ff5dc");
-      else if (c.sk.type === "metavision") drawTimeLabel("👁 Meta Vision  " + left + " วิ  (หลบได้อีก " + Math.max(0, (c.sk.maxDodges || 0) - (c.dodges || 0)) + ")", "#8fe0ff");
+      else if (c.sk.type === "metavision") drawTimeLabel("👁 Meta Vision  " + left + " วิ  (หลบได้อีก " + Math.max(0, (c.sk.maxDodges || 0) + Math.floor(Math.min(1, ((f.metaMem && f.metaMem.level) || 0) / (c.sk.adaptMax || 10)) * (c.sk.adaptDodges !== undefined ? c.sk.adaptDodges : 4)) - (c.dodges || 0)) + ")" + (f.metaMem && f.metaMem.level ? "  วิเคราะห์ " + f.metaMem.level + "/" + (c.sk.adaptMax || 10) : ""), "#8fe0ff");
     }
     if (screenFlash > 0) {
       ctx.fillStyle = "rgba(255,255,255," + Math.min(1, screenFlash).toFixed(3) + ")";
@@ -3893,7 +3928,7 @@ function fitCanvas() {
 }
 
 // ---------- ตรวจว่าไฟล์ JS โหลดครบและเป็นเวอร์ชันเดียวกัน ----------
-const EXPECTED_VERSION = 40;
+const EXPECTED_VERSION = 41;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
@@ -3905,7 +3940,7 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 70";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 71";
   }
 }
 
