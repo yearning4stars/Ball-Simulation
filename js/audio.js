@@ -23,6 +23,8 @@ class SoundFX {
     this.resume = {};    // key -> ตำแหน่งที่เล่นค้างไว้ (วินาที)
     this.sfxVol = 1;
     this.musicVol = 0.7;
+    this.trackVol = {};  // ชื่อเพลง -> ความดังรายเพลง (1 = ปกติ) ปรับได้ในหน้าตั้งค่าเสียง
+    try { this.trackVol = JSON.parse(localStorage.getItem("bb_trackvol") || "{}") || {}; } catch (e) { /* ข้าม */ }
     try {
       const v = JSON.parse(localStorage.getItem("bb_vol") || "{}");
       if (typeof v.sfx === "number") this.sfxVol = v.sfx;
@@ -303,7 +305,7 @@ class SoundFX {
         src.buffer = list[0];
         const g = this.ctx.createGain();
         const t = this.ctx.currentTime;
-        g.gain.setValueAtTime(1, t);
+        g.gain.setValueAtTime(this._musicGain(key.slice(6), list[0]), t);
         g.gain.linearRampToValueAtTime(0, t + 6);
         src.connect(g).connect(this.musicBus);
         src.start();
@@ -341,6 +343,41 @@ class SoundFX {
     return own && own.length ? own : this._synthMusic(name);
   }
 
+  // ไฟล์เพลงที่ผู้เล่นใส่มักดังไม่เท่ากัน: วัดความดังเฉลี่ย (RMS) แล้วลดให้ใกล้เคียงเพลงในตัว (ไม่เร่งให้ดังขึ้น)
+  _norm(buf) {
+    if (buf._norm === undefined) {
+      const d = buf.getChannelData(0);
+      const stride = Math.max(1, Math.floor(d.length / 200000));
+      let sum = 0, n = 0;
+      for (let i = 0; i < d.length; i += stride) { sum += d[i] * d[i]; n++; }
+      const rms = Math.sqrt(sum / Math.max(1, n));
+      buf._norm = rms > 0 ? Math.min(1, 0.11 / rms) : 1;
+    }
+    return buf._norm;
+  }
+
+  _musicGain(name, buf) {
+    const own = this.buffers["music:" + name];
+    const norm = own && own.indexOf(buf) >= 0 ? this._norm(buf) : 1; // เฉพาะไฟล์ของผู้เล่น
+    const tv = this.trackVol[name];
+    return norm * (typeof tv === "number" ? tv : 1);
+  }
+
+  getTrackVol(name) { const v = this.trackVol[name]; return typeof v === "number" ? v : 1; }
+
+  setTrackVol(name, v) {
+    this.trackVol[name] = Math.max(0, Math.min(1.5, v));
+    try { localStorage.setItem("bb_trackvol", JSON.stringify(this.trackVol)); } catch (e) { /* ข้าม */ }
+    const m = this.music;
+    if (m && m.key === name && this.ctx) { // กำลังเล่นเพลงนี้อยู่: ปรับตอนนี้เลย
+      const t = this.ctx.currentTime;
+      m.peak = this._musicGain(name, m.buf);
+      m.g.gain.cancelScheduledValues(t);
+      m.g.gain.setValueAtTime(m.g.gain.value, t);
+      m.g.gain.linearRampToValueAtTime(m.peak, t + 0.08);
+    }
+  }
+
   hasMusic(name) { const b = this._musicBufs(name); return !!(b && b.length); }
 
   musicPlay(name, fade = 1.2) {
@@ -356,11 +393,12 @@ class SoundFX {
     src.loop = true;
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(1, t + fade);
+    const peak = this._musicGain(name, buf);
+    g.gain.linearRampToValueAtTime(peak, t + fade);
     src.connect(g).connect(this.musicBus);
     const offset = (this.resume[name] || 0) % buf.duration;
     src.start(0, offset);
-    this.music = { key: name, src, g, buf, t0: t, offset };
+    this.music = { key: name, src, g, buf, t0: t, offset, peak };
   }
 
   musicStop(fade = 1) {

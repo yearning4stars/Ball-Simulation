@@ -247,6 +247,7 @@ function openSoundSettings() {
   const note = document.createElement("p");
   note.className = "snd-note";
   note.textContent = "เลือกไฟล์เสียง (mp3 / ogg / wav) จากเครื่องเพื่อใช้แทนเสียงเดิม ไฟล์จะถูกเก็บไว้ในเบราว์เซอร์นี้ " +
+    "เพลงแต่ละเพลงมีแถบเลื่อนปรับความดังรายเพลง (ไฟล์ที่ใส่เองจะถูกปรับให้ดังใกล้เคียงกันให้อัตโนมัติ) " +
     "ถ้าอยากให้ติดไปกับเกมบน GitHub ให้ใส่ไฟล์ในโฟลเดอร์ assets แล้วตั้งค่าใน js/sound-config.js";
   body.appendChild(note);
 
@@ -316,7 +317,14 @@ function openSoundSettings() {
       if (fromCfg) sfx.setCustom(key, fromCfg, "config");
       refresh();
     });
-    row.append(nm, st, pick, play, clr);
+    if (key.startsWith("music:")) { // เพลง: ปรับความดังรายเพลงได้
+      const vs = document.createElement("input");
+      vs.type = "range"; vs.min = "0"; vs.max = "150"; vs.className = "snd-tv";
+      vs.title = "ความดังของเพลงนี้";
+      vs.value = String(Math.round(sfx.getTrackVol(key.slice(6)) * 100));
+      vs.addEventListener("input", () => sfx.setTrackVol(key.slice(6), vs.value / 100));
+      row.append(nm, st, vs, pick, play, clr);
+    } else row.append(nm, st, pick, play, clr);
     parent.appendChild(row);
     refresh();
   };

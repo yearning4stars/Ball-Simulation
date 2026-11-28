@@ -336,7 +336,9 @@ class Battle {
         f.dashTimer = 0;
       } else {
         if (!f.cast && !this._chaseFlowers(f, enemy, fdt)) this._approach(f, enemy, fdt); // ว่างๆ: วิ่งไปเก็บดอกไม้ของตัวเอง ไม่งั้นเข้าหาศัตรูให้อยู่ในระยะสกิล
-        if (!(f.def.blind && !f.hear && !f.cast)) this._updateSkill(f, enemy, cdt); // ตาบอดและยังไม่ได้ยินอะไร: ยังไม่ร่ายสกิล
+        // ไม่มีศัตรูจริง (เช่นช่วงพักระหว่างคลื่น) _target จะถอยไปเลือกเพื่อน/ตัวเอง: ห้ามเริ่มสกิลใส่เพื่อนเด็ดขาด
+        const hasFoe = enemy.team !== f.team && enemy !== f;
+        if (!(f.def.blind && !f.hear && !f.cast) && (f.cast || hasFoe)) this._updateSkill(f, enemy, cdt); // ตาบอดและยังไม่ได้ยินอะไร: ยังไม่ร่ายสกิล
       }
       this._move(f, fdt);
     }
@@ -783,7 +785,7 @@ class Battle {
         const d = Math.hypot(dx, dy) || 1;
         gu.facing = dx >= 0 ? 1 : -1;
         const step = 1100 * dt;
-        if (t.hp <= 0 || t === this.eraser || gu.t > 1.5) { gu.phase = "out"; gu.t = 0; continue; } // เป้าหมายตาย/อยู่นอกความจริง: เพื่อนกลับไป
+        if (t.hp <= 0 || t === this.eraser || t.team === gu.owner.team || gu.t > 1.5) { gu.phase = "out"; gu.t = 0; continue; } // เป้าหมายตาย/อยู่นอกความจริง: เพื่อนกลับไป
         if (d <= t.r + 26) {
           gu.phase = "out";
           gu.t = 0;
@@ -824,6 +826,7 @@ class Battle {
 
   // ดาเมจของท่า Triple Threat / ประกาศดวล: ดาเมจกายภาพ + ดาเมจจริง truePct ของเลือดสูงสุดศัตรู
   _florHit(f, target, dmg, truePct) {
+    if (target === f || target.team === f.team) return; // ไม่มีศัตรูเหลือ (_target ถอยไปเลือกเพื่อน/ตัวเอง): ห้ามแทงพวกเดียวกัน
     let amt = this._out(f, dmg * this._dmgMult(f, target));
     if (truePct) amt += Math.max(1, Math.round(target.maxHp * truePct));
     const d = Math.hypot(target.x - f.x, target.y - f.y) || 1;
@@ -1628,7 +1631,7 @@ class Battle {
 
     // ปัดกระสุนของศัตรูทิ้ง (ทำได้ตลอด ไม่เกี่ยวกับคูลดาวน์การฟัน)
     for (const p of this.projectiles) {
-      if (p.owner === f || p.dead || p.indestructible || p.hoop) continue; // ลูกบาสที่ลอยเหนือหัวไปแป้นปัดไม่ถึง
+      if (p.owner === f || p.owner.team === f.team || p.dead || p.indestructible || p.hoop) continue; // ไม่ปัดกระสุนเพื่อนร่วมทีม / ลูกบาสที่ลอยเหนือหัวไปแป้นปัดไม่ถึง
       const qx = p.x - f.x;
       const qy = p.y - f.y;
       const tt = Math.max(s0, Math.min(s1, qx * ca + qy * sa));
