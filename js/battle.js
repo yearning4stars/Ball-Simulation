@@ -46,6 +46,7 @@ class Battle {
     this.phantom = null; // ตำแหน่งที่ FuNx เคยยืนก่อนตัดเวลา: สิ่งเดียวที่ตัวเหม่อลอย "จำได้" และใช้เล็ง
 
     this.fighters = this._spawn(defs, teams);
+    this.wave = null; // โหมดเอาชีวิตรอดเป็นคลื่น (เปิดด้วย startSurvival)
 
     // บอลบนสนาม: สร้างเมื่อมีตัวละครที่มีสกิล ballkick (Isagi)
     this.balls = [];
@@ -369,7 +370,102 @@ class Battle {
     }
     // ชะลอเวลาอาจจบกลางก้าวนี้ ให้ตัววาดเห็นสถานะตรงกับความจริง
     if (this.slower && !(this.slower.cast && this.slower.cast.sk.type === "timeslow")) this.slower = null;
+    if (this.wave) this._tickSurvival(dt);
     this._checkWinner();
+  }
+
+  // ---------- โหมดเอาชีวิตรอดเป็นคลื่น ----------
+  // cfg: {spawn(n, rng) -> [def...], total (0 = ไม่จำกัด), maxAlive, breakT, firstT, healFrac, category}
+  // ผู้เล่นทุกคนอยู่ทีม 0 ศัตรูอยู่ทีม 1 ชนะ = ผ่านครบ total คลื่น แพ้ = ผู้เล่นตายหมด
+  startSurvival(cfg) {
+    this.wave = {
+      cfg,
+      n: 0,
+      queue: [],
+      state: "break", // "break" พักก่อนคลื่นถัดไป | "fight" กำลังสู้
+      t: cfg.firstT !== undefined ? cfg.firstT : 2.5,
+      spawnT: 0,
+      kills: 0,
+      total: cfg.total || 0,
+      boss: false,
+    };
+    // รวมผู้เล่นเป็นกลุ่มกลางสนาม
+    const heroes = this.fighters.filter((f) => f.team === 0);
+    const R = heroes.length > 1 ? Math.min(this.w, this.h) * 0.09 : 0;
+    heroes.forEach((f, i) => {
+      const a = -Math.PI / 2 + (i / heroes.length) * Math.PI * 2;
+      f.x = this.w / 2 + Math.cos(a) * R;
+      f.y = this.h / 2 + Math.sin(a) * R;
+    });
+  }
+
+  _enemiesAlive() {
+    return this.fighters.filter((f) => f.team === 1 && f.hp > 0).length;
+  }
+
+  _spawnEnemy(def) {
+    // เกิดที่ขอบสนามด้านใดด้านหนึ่ง หันเข้าหาศูนย์กลาง
+    const m = def.radius + 8;
+    const side = Math.floor(this.rng() * 4);
+    const u = this.rng();
+    let x, y;
+    if (side === 0) { x = m; y = m + u * (this.h - 2 * m); }
+    else if (side === 1) { x = this.w - m; y = m + u * (this.h - 2 * m); }
+    else if (side === 2) { x = m + u * (this.w - 2 * m); y = m; }
+    else { x = m + u * (this.w - 2 * m); y = this.h - m; }
+    const f = this._makeFighter(def, x, y, Math.atan2(this.h / 2 - y, this.w / 2 - x));
+    f.team = 1;
+    f.idx = -1;
+    f.skin = def.skin;
+    f.isEnemy = true;
+    this.fighters.push(f);
+    this.events.push({ type: "enemySpawn", x, y, boss: !!def.boss });
+  }
+
+  _tickSurvival(dt) {
+    const W = this.wave;
+    if (!W || this.winner !== null) return;
+    const cfg = W.cfg;
+    const heroesAlive = this.fighters.some((f) => f.team === 0 && f.hp > 0);
+    if (!heroesAlive) return; // _checkWinner จะตัดสินว่าแพ้
+    if (W.state === "break") {
+      W.t -= dt;
+      if (W.t <= 0) {
+        W.n++;
+        W.queue = cfg.spawn(W.n, this.rng);
+        W.boss = W.queue.some((d) => d.boss);
+        W.state = "fight";
+        W.spawnT = 0.3;
+        this.events.push({ type: "waveStart", n: W.n, count: W.queue.length, boss: W.boss, total: W.total });
+      }
+      return;
+    }
+    // กำลังสู้: ทยอยปล่อยศัตรูตามที่ที่ว่าง
+    W.spawnT -= dt;
+    if (W.queue.length && W.spawnT <= 0 && this._enemiesAlive() < cfg.maxAlive) {
+      this._spawnEnemy(W.queue.shift());
+      W.spawnT = 0.45;
+    }
+    if (!W.queue.length && this._enemiesAlive() === 0) {
+      // เคลียร์คลื่น: นับศัตรูที่ตาย เก็บศพ ฟื้นเลือดผู้เล่นที่ยังรอด
+      W.kills += this.fighters.filter((f) => f.team === 1).length;
+      this.fighters = this.fighters.filter((f) => f.team !== 1);
+      this.history = [];
+      this.projectiles = this.projectiles.filter((p) => p.owner && p.owner.team === 0);
+      for (const f of this.fighters) {
+        if (f.team !== 0 || f.hp <= 0) continue;
+        f.hp = Math.min(f.maxHp, f.hp + f.maxHp * (cfg.healFrac !== undefined ? cfg.healFrac : 0.3));
+        if (f.def.staminaMax) { f.stamina = f.def.staminaMax; f.exhausted = false; }
+        if (f.def.energyMax) f.energy = f.def.energyMax;
+      }
+      this.events.push({ type: "waveClear", n: W.n, total: W.total });
+      if (W.total && W.n >= W.total) {
+        this.winner = 0; // ผ่านครบทุกคลื่น
+      } else {
+        W.state = "break";
+        W.t = cfg.breakT !== undefined ? cfg.breakT : 3.2;
+      }
+    }
   }
 
   // ตัวคูณเวลาที่จุด (x,y) สำหรับของที่เป็นของ owner: 1 = ปกติ, น้อยกว่า 1 = อยู่ในวงชะลอเวลาของ Johan
@@ -1479,6 +1575,7 @@ class Battle {
     }
     this.fighters.forEach((f, i) => {
       const s = snap.fighters[i];
+      if (!s) return; // ศัตรูที่เกิดหลังภาพถ่ายนี้ (โหมดคลื่น)
       f.x = s.x; f.y = s.y; f.vx = s.vx; f.vy = s.vy; f.knockX = s.knockX; f.knockY = s.knockY;
       f.hitFlash = Math.max(0, f.hitFlash - dt);
       // เลือดของคนใช้สกิลย้อนกลับไปด้วย (เลือดศัตรูไม่ถูกย้อน ดาเมจที่ทำไปแล้วยังอยู่)
@@ -2276,7 +2373,12 @@ class Battle {
     // ผู้ชนะ = เลขทีมที่เหลือรอดทีมเดียว (1v1 / ffa เลขทีม = ลำดับผู้เล่น) ตายหมดพร้อมกัน = เสมอ
     const alive = this.fighters.filter((f) => f.hp > 0);
     const teamsAlive = [...new Set(alive.map((f) => f.team))];
-    if (!alive.length) this.winner = "draw";
+    if (this.wave) {
+      if (this.winner === null && !alive.some((f) => f.team === 0)) {
+        this.winner = 1; // ผู้เล่นตายหมด = ศัตรูชนะ (นับคลื่นที่ไปถึงจาก wave.n)
+        this.wave.kills += this.fighters.filter((f) => f.team === 1 && f.hp <= 0).length;
+      }
+    } else if (!alive.length) this.winner = "draw";
     else if (teamsAlive.length === 1) this.winner = teamsAlive[0];
     if (this.winner !== null) {
       this.events.push({ type: "ko" });

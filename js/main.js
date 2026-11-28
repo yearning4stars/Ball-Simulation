@@ -41,7 +41,7 @@ let metaFx = []; // เอฟเฟกต์ของ Isagi: วงคลื่�
 let ballTrail = []; // ภาพติดตาของลูกบอลที่ถูกเตะ {x,y,r,life,meta}
 let ballTrailAcc = 0;
 let metaDim = 0; // 0..1 ความมืดฟ้ารอบสนามตอน Meta Vision (ค่อยๆ เข้า/ออก)
-const charKey = (def) => (def && def.__dummy ? "__dummy" : Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def));
+const charKey = (def) => (def && def.__dummy ? "__dummy" : def && def.__key ? def.__key : Object.keys(CHARACTERS).find((k) => CHARACTERS[k] === def));
 
 // ---------- โหลดภาพ ----------
 const fxImages = {}; // fxImages[charKey][fxName] = สไปรต์เอฟเฟกต์ฟัน | null (ไม่มีไฟล์ = วาดรอยฟันด้วยโค้ด)
@@ -74,6 +74,22 @@ function loadAllImages() {
       );
     }
   }
+  // ศัตรูโหมดคลื่น: หมวดที่ใช้ PNG (เช่น สกิบิดี้) โหลดรูปของคุณ ไม่มีไฟล์ = ได้บอลสีเปล่า / หมวดวาดด้วยโค้ดไม่ต้องโหลดอะไร
+  if (typeof enemyImageList === "function") {
+    for (const { key, src } of enemyImageList()) {
+      images[key] = {};
+      fxImages[key] = {};
+      if (!src) continue;
+      jobs.push(
+        new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => { images[key].idle = img; resolve(); };
+          img.onerror = () => { images[key].idle = null; resolve(); };
+          img.src = src;
+        })
+      );
+    }
+  }
   return Promise.all(jobs);
 }
 
@@ -84,6 +100,9 @@ const TEAM_INFO = [
   { name: "ทีมฟ้า", color: "#4db8ff" },
 ];
 const FFA_COLORS = ["#ff6b6b", "#4db8ff", "#6bff9e", "#ffd35a", "#d28bff", "#ff9f5a"];
+// โหมดเอาชีวิตรอดเป็นคลื่น: หมวดศัตรู / จำนวนคลื่น (0 = ไม่จำกัด) / จำนวนผู้เล่น
+const waveCfg = { cat: DEFAULT_ENEMY_CATEGORY, total: 5, heroes: 2 };
+function saveWavePrefs() { try { localStorage.setItem("bb_wave", JSON.stringify(waveCfg)); } catch (e) { /* ข้าม */ } }
 
 // อ่านโหมดที่เลือกอยู่ แล้วบอกว่ามีกี่คน ใครอยู่ทีมไหน ป้ายชื่อ และสีประจำตัว (colors = null: ไม่วาดวงสีใต้ตัวละคร)
 function currentLayout() {
@@ -95,6 +114,11 @@ function currentLayout() {
       labels: ["ทีมแดง 1", "ทีมแดง 2", "ทีมฟ้า 1", "ทีมฟ้า 2"],
       colors: teams.map((t) => TEAM_INFO[t].color),
     };
+  }
+  if (mode === "waves") {
+    const n = Math.max(1, Math.min(4, waveCfg.heroes));
+    const idx = Array.from({ length: n }, (_, i) => i);
+    return { mode, n, teams: idx.map(() => 0), labels: idx.map((i) => "ผู้เล่น " + (i + 1)), colors: idx.map((i) => FFA_COLORS[i]) };
   }
   if (mode === "ffa") {
     const n = Math.max(3, Math.min(6, parseInt(selCount.value, 10) || 4));
@@ -545,12 +569,17 @@ const MODE_DEFS = [
   { id: "1v1", name: "1 ต่อ 1", desc: "ดวลตัวต่อตัว" },
   { id: "2v2", name: "2 ต่อ 2", desc: "ทีมแดง vs ทีมฟ้า" },
   { id: "ffa", name: "ทุกคนสู้กันเอง", desc: "FFA คนสุดท้ายชนะ" },
+  { id: "waves", name: "เอาชีวิตรอดเป็นคลื่น", desc: "รับมือศัตรูทีละคลื่น เลือกหมวดศัตรูได้" },
 ];
 const modeDots = (cols) => cols.map((c) => '<i style="background:' + c + '"></i>').join("");
 function modePips(id) {
   const r = TEAM_INFO[0].color, b = TEAM_INFO[1].color;
   if (id === "1v1") return modeDots([r]) + "<b>vs</b>" + modeDots([b]);
   if (id === "2v2") return modeDots([r, r]) + "<b>vs</b>" + modeDots([b, b]);
+  if (id === "waves") {
+    const cat = ENEMY_CATEGORIES[waveCfg.cat] || ENEMY_CATEGORIES[DEFAULT_ENEMY_CATEGORY];
+    return modeDots(FFA_COLORS.slice(0, Math.min(3, waveCfg.heroes))) + "<b>vs</b>" + modeDots([cat.roles.walker.color, cat.roles.runner.color, cat.roles.brute.color]);
+  }
   return modeDots(FFA_COLORS.slice(0, 5));
 }
 function saveModePrefs() {
@@ -573,9 +602,11 @@ function buildModeCards() {
 function refreshModeCards() {
   if (!modeBtn) return;
   const m = MODE_DEFS.find((x) => x.id === selMode.value) || MODE_DEFS[0];
+  const wc = ENEMY_CATEGORIES[waveCfg.cat] || ENEMY_CATEGORIES[DEFAULT_ENEMY_CATEGORY];
   const extra = m.id === "ffa" ? " · " + selCount.value + " คน" : "";
+  const desc = m.id === "waves" ? wc.icon + wc.name + " · " + (waveCfg.total ? waveCfg.total + " คลื่น" : "ไม่จำกัด") + " · " + waveCfg.heroes + " คน" : m.desc;
   modeBtn.innerHTML =
-    '<span class="mc-txt"><b>' + m.name + extra + "</b><small>" + m.desc + "</small></span>" +
+    '<span class="mc-txt"><b>' + m.name + extra + "</b><small>" + desc + "</small></span>" +
     '<span class="mc-pips">' + modePips(m.id) + '</span><span class="mb-chg">เปลี่ยน ▾</span>';
 }
 function openModePicker() {
@@ -617,6 +648,33 @@ function openModePicker() {
       }
       card.appendChild(cnt);
     }
+    if (m.id === "waves") {
+      const applyWave = () => {
+        saveWavePrefs();
+        const same = selMode.value === "waves";
+        selMode.value = "waves";
+        saveModePrefs();
+        if (same) { battle = null; rebuildPlayers(); refreshModeCards(); } else selMode.dispatchEvent(new Event("change"));
+      };
+      const mkRow = (label, items, cur, pick) => {
+        const row = document.createElement("div");
+        row.className = "mc-count";
+        row.innerHTML = "<span>" + label + "</span>";
+        for (const it of items) {
+          const nb = document.createElement("button");
+          nb.type = "button";
+          nb.className = "mc-n wide" + (on && cur === it.v ? " on" : "");
+          nb.textContent = it.t;
+          if (it.d) nb.title = it.d;
+          nb.addEventListener("click", (e) => { e.stopPropagation(); sfx.unlock(); pick(it.v); applyWave(); closePicker(); });
+          row.appendChild(nb);
+        }
+        card.appendChild(row);
+      };
+      mkRow("หมวดศัตรู", Object.entries(ENEMY_CATEGORIES).map(([id, c]) => ({ v: id, t: c.icon + " " + c.name, d: c.desc })), waveCfg.cat, (v) => { waveCfg.cat = v; });
+      mkRow("จำนวนคลื่น", WAVE_TOTAL_CHOICES.map((v) => ({ v, t: v ? String(v) : "ไม่จำกัด" })), waveCfg.total, (v) => { waveCfg.total = v; });
+      mkRow("ผู้เล่น", [1, 2, 3, 4].map((v) => ({ v, t: String(v) })), waveCfg.heroes, (v) => { waveCfg.heroes = v; });
+    }
     card.addEventListener("click", () => { sfx.unlock(); setMode(m.id); closePicker(); });
     body.appendChild(card);
   }
@@ -644,6 +702,11 @@ function assembleTeams(slotEls) {
     t.appendChild(row);
     return t;
   };
+  if (layout.mode === "waves") {
+    const wc = ENEMY_CATEGORIES[waveCfg.cat] || ENEMY_CATEGORIES[DEFAULT_ENEMY_CATEGORY];
+    playersBox.appendChild(mkTeam("ผู้เล่น " + layout.n + " คน · รับมือคลื่น " + wc.icon + wc.name + " (" + (waveCfg.total ? waveCfg.total + " คลื่น" : "ไม่จำกัด") + ")", "#7fae5a", slotEls, "ffa"));
+    return;
+  }
   if (layout.mode === "ffa") {
     playersBox.appendChild(mkTeam("ทุกคนสู้กันเอง · " + layout.n + " คน", "#ff7a59", slotEls, "ffa"));
     return;
@@ -780,6 +843,8 @@ function startBattle() {
   const defs = playerSels.map((sel) => CHARACTERS[sel.value]);
   battle = new Battle(W, H, defs, Math.random, layout.teams);
   battle.layout = layout;
+  waveBanner = null;
+  if (layout.mode === "waves") battle.startSurvival(surviveConfig(waveCfg.cat, waveCfg.total, layout.n));
   battle.fighters.forEach((f, i) => { f.trailHp = f.hp; f.skin = (playerSels[i] && playerSels[i].skin) || DEFAULT_SKIN; }); // แถบเลือดที่ค่อยๆ ลดตามหลัง
   particles = [];
   shards = [];
@@ -1428,6 +1493,13 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, "#6fd3ff", 14, 280);
       floaters.push({ x: e.x, y: e.y - 56, text: "หลบ!", life: 0.8, color: "#8fe0ff", size: 28 });
       sfx.dodge();
+    } else if (e.type === "enemySpawn") {
+      spawnParticles(e.x, e.y, e.boss ? "#ff6a5a" : "#9fbf7a", e.boss ? 18 : 5, e.boss ? 260 : 110);
+      if (e.boss) shake = Math.max(shake, 8);
+    } else if (e.type === "waveStart") {
+      waveBanner = { text: "คลื่นที่ " + e.n + (e.total ? " / " + e.total : ""), sub: e.boss ? "👑 บอสมาแล้ว!" : "ศัตรู " + e.count + " ตัว", t: 2.2, boss: e.boss };
+    } else if (e.type === "waveClear") {
+      waveBanner = { text: "เคลียร์คลื่น " + e.n + "!", sub: e.total && e.n >= e.total ? "" : "ฟื้นเลือดเล็กน้อย", t: 2.2, boss: false };
     } else if (e.type === "tired") {
       floaters.push({ x: e.x, y: e.y - 70, text: "เหนื่อยแล้ว…", life: 1.1, color: "#ffd65a", size: 22 });
     } else if (e.type === "exhausted") {
@@ -1636,6 +1708,7 @@ function updateEffects(dt) {
   for (const g of ghosts) g.life -= dt;
   ghosts = ghosts.filter((g) => g.life > 0);
   // เอฟเฟกต์ Isagi: วงคลื่น/เส้นความเร็ว, รอยบอลที่ถูกเตะ, ความมืดฟ้ารอบสนามตอน Meta Vision
+  if (waveBanner) { waveBanner.t -= dt; if (waveBanner.t <= 0) waveBanner = null; }
   for (const m of metaFx) m.t += dt;
   metaFx = metaFx.filter((m) => m.t < m.life);
   for (const bt of ballTrail) bt.life -= dt;
@@ -1759,7 +1832,82 @@ function shade(hex, amt) { // amt -1..1: มืดลง..สว่างขึ�
 
 // สัญลักษณ์เด่นของแต่ละตัว (พิกัดสมมติหันขวา ขนาดอิงรัศมี r): body = สีตัว, back = วาดหลังตัว, front = วาดทับตัว,
 // eyes = "none" ไม่ใส่ตา หรือสีตา; ตัวที่ไม่ได้ลงทะเบียนจะเป็นบอลเปล่าๆ ใส่ตาอย่างเดียว
+// ---------- สไตล์บอลของศัตรูโหมดคลื่น (หมวดซอมบี้ วาดด้วยโค้ดทั้งหมด) คีย์ = "<หมวด>_<role>" ----------
+const ZOMBIE_STYLES = {
+  zombie_walker: {
+    eyes: "none",
+    back(c, r, t) { // แขนยื่นไปข้างหน้า ส่ายเล็กน้อย
+      c.fillStyle = "#6b9a4a"; c.strokeStyle = "#3f5f2b"; c.lineWidth = r * 0.06;
+      for (const dy of [-0.18, 0.3]) {
+        const sw = Math.sin(t * 3 + dy * 9) * r * 0.06;
+        c.beginPath(); c.roundRect(r * 0.55, r * dy - r * 0.09 + sw, r * 0.85, r * 0.19, r * 0.09); c.fill(); c.stroke();
+      }
+    },
+    front(c, r, t) {
+      c.fillStyle = "#e9efd0"; c.beginPath(); c.ellipse(r * 0.2, -r * 0.14, r * 0.2, r * 0.25, 0, 0, Math.PI * 2); c.fill(); // ตาใหญ่ขุ่น
+      c.fillStyle = "#b8332b"; c.beginPath(); c.arc(r * 0.26, -r * 0.1, r * 0.07, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#20301a"; c.beginPath(); c.ellipse(r * 0.62, -r * 0.1, r * 0.12, r * 0.14, 0, 0, Math.PI * 2); c.fill(); // ตาเล็กเว้าลึก
+      c.strokeStyle = "#20301a"; c.lineWidth = r * 0.05; c.lineJoin = "round"; // ปากฉีกมีฟัน
+      c.beginPath(); c.moveTo(r * 0.1, r * 0.3); for (let i = 0; i < 6; i++) c.lineTo(r * (0.1 + i * 0.12), r * (i % 2 ? 0.3 : 0.42)); c.stroke();
+      c.strokeStyle = "rgba(40,60,30,0.8)"; c.lineWidth = r * 0.04; // รอยเย็บบนหน้าผาก
+      c.beginPath(); c.moveTo(-r * 0.5, -r * 0.62); c.lineTo(-r * 0.1, -r * 0.7); c.stroke();
+      for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(-r * (0.45 - i * 0.14), -r * (0.7 - i * 0.03)); c.lineTo(-r * (0.45 - i * 0.14) + r * 0.03, -r * (0.55 - i * 0.03)); c.stroke(); }
+      c.fillStyle = "rgba(60,30,25,0.55)"; c.fillRect(-r * 0.7, r * 0.1, r * 0.4, r * 0.25); // เสื้อขาด
+    },
+  },
+  zombie_runner: {
+    eyes: "none",
+    back(c, r, t) { // เส้นลมตอนวิ่ง
+      c.strokeStyle = "rgba(220,240,160,0.5)"; c.lineWidth = r * 0.07; c.lineCap = "round";
+      for (let i = -1; i <= 1; i++) { const o = ((t * 4 + i) % 1) * r * 0.3; c.beginPath(); c.moveTo(-r * 1.05 - o, i * r * 0.4); c.lineTo(-r * 1.6 - o, i * r * 0.4); c.stroke(); }
+    },
+    front(c, r, t) {
+      c.fillStyle = "#ff4a3a"; // ตาแดงหยีโกรธ
+      for (const ex of [0.2, 0.62]) { c.beginPath(); c.moveTo(r * (ex - 0.14), -r * 0.2); c.lineTo(r * (ex + 0.14), -r * 0.08); c.lineTo(r * (ex - 0.08), -r * 0.02); c.closePath(); c.fill(); }
+      c.fillStyle = "#1c2a14"; c.beginPath(); c.ellipse(r * 0.45, r * 0.3, r * 0.3, r * 0.17 + Math.sin(t * 20) * r * 0.03, 0, 0, Math.PI * 2); c.fill(); // ปากอ้ากว้าง
+      c.fillStyle = "#f2f0d8"; for (let i = 0; i < 4; i++) c.fillRect(r * (0.22 + i * 0.1), r * 0.16, r * 0.06, r * 0.08);
+    },
+  },
+  zombie_spitter: {
+    eyes: "none",
+    front(c, r, t) {
+      c.fillStyle = "#e9f2c8"; c.beginPath(); c.arc(r * 0.25, -r * 0.14, r * 0.17, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#2a5b3a"; c.beginPath(); c.arc(r * 0.3, -r * 0.12, r * 0.07, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#e9f2c8"; c.beginPath(); c.arc(r * 0.66, -r * 0.1, r * 0.13, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#2a5b3a"; c.beginPath(); c.arc(r * 0.7, -r * 0.08, r * 0.06, 0, Math.PI * 2); c.fill();
+      const pulse = 0.5 + 0.5 * Math.sin(t * 6); // ถุงกรดที่แก้มพองหายใจ + หยดกรดไหลจากปาก
+      c.fillStyle = "rgba(150,255,80," + (0.55 + pulse * 0.3).toFixed(2) + ")";
+      c.beginPath(); c.arc(-r * 0.3, r * 0.3, r * (0.2 + pulse * 0.05), 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(r * 0.15, r * 0.52, r * 0.1, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#1c3a22"; c.beginPath(); c.ellipse(r * 0.45, r * 0.32, r * 0.2, r * 0.12, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "rgba(150,255,80,0.9)"; c.fillRect(r * 0.42, r * 0.38, r * 0.06, r * (0.2 + pulse * 0.15));
+    },
+  },
+  zombie_brute: {
+    eyes: "none",
+    rim: "#24361a",
+    back(c, r, t) { // แขนใหญ่ทั้งสองข้าง
+      c.fillStyle = "#4e6e35"; c.strokeStyle = "#24361a"; c.lineWidth = r * 0.05;
+      for (const dy of [-0.3, 0.45]) { c.beginPath(); c.roundRect(r * 0.5, r * dy - r * 0.16, r * 0.95, r * 0.32, r * 0.14); c.fill(); c.stroke(); }
+    },
+    front(c, r, t) {
+      c.fillStyle = "#d9d3b0"; // หนามกระดูกที่หัว
+      for (let i = -2; i <= 2; i++) { c.beginPath(); c.moveTo(r * i * 0.26 - r * 0.09, -r * 0.88); c.lineTo(r * i * 0.26, -r * 1.2 - Math.abs(i) * -r * 0.04); c.lineTo(r * i * 0.26 + r * 0.09, -r * 0.88); c.closePath(); c.fill(); }
+      c.fillStyle = "#f4efd2"; c.beginPath(); c.ellipse(r * 0.38, -r * 0.14, r * 0.3, r * 0.3, 0, 0, Math.PI * 2); c.fill(); // ตาเดียวใหญ่
+      c.fillStyle = "#c0261c"; c.beginPath(); c.arc(r * 0.45, -r * 0.1, r * 0.13, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#1c1208"; c.beginPath(); c.arc(r * 0.47, -r * 0.1, r * 0.06, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = "#1c2a12"; c.lineWidth = r * 0.07; c.lineCap = "round"; // คิ้วขมวด + ปากเหยียด
+      c.beginPath(); c.moveTo(r * 0.05, -r * 0.5); c.lineTo(r * 0.7, -r * 0.34); c.stroke();
+      c.beginPath(); c.moveTo(-r * 0.1, r * 0.42); c.lineTo(r * 0.7, r * 0.38); c.stroke();
+      c.fillStyle = "#f2f0d8"; for (let i = 0; i < 5; i++) c.fillRect(r * (0.02 + i * 0.14), r * 0.42, r * 0.07, r * 0.13);
+      c.strokeStyle = "rgba(30,20,10,0.7)"; c.lineWidth = r * 0.04; // แผลเป็นข้ามตัว
+      c.beginPath(); c.moveTo(-r * 0.6, -r * 0.1); c.lineTo(-r * 0.2, r * 0.3); c.stroke();
+    },
+  },
+};
+
 const BALL_STYLES = {
+  ...ZOMBIE_STYLES,
   gunner: {
     front(c, r) {
       c.fillStyle = "#2b3350"; // หมวกแก๊ป
@@ -2421,6 +2569,56 @@ function drawTimeLabel(txt, color) {
 }
 
 // วงสีทีม/ผู้เล่นใต้ตัวละคร + เลขผู้เล่น (โหมด 2v2 และ ffa)
+// ---------- โหมดคลื่น: แถบสถานะบนสนาม / แถบเลือดศัตรู / ป้ายใหญ่ตอนเริ่มคลื่น ----------
+let waveBanner = null; // {text, sub, t, boss}
+
+function drawEnemyBar(f) {
+  const w = Math.max(36, f.r * 1.5), x = f.x - w / 2, y = f.y - f.r - 15;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(x - 1, y - 1, w + 2, f.def.boss ? 8 : 6);
+  const ratio = Math.max(0, f.hp / f.maxHp);
+  ctx.fillStyle = f.def.boss ? "#ff6a5a" : hpColor(ratio);
+  ctx.fillRect(x, y, w * ratio, f.def.boss ? 6 : 4);
+  if (f.def.boss) {
+    ctx.font = "700 13px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,0.7)"; ctx.strokeText("👑 " + f.def.name, f.x, y - 4);
+    ctx.fillStyle = "#ffe8b0"; ctx.fillText("👑 " + f.def.name, f.x, y - 4);
+  }
+  ctx.restore();
+}
+
+function drawWaveHud(b) {
+  const w = b.wave;
+  if (!w) return;
+  const total = w.total ? " / " + w.total : "";
+  let line;
+  if (w.state === "break") line = (w.n ? "พักก่อนคลื่น " + (w.n + 1) + total : "เตรียมตัว… คลื่น 1" + total) + "  ·  อีก " + Math.max(1, Math.ceil(w.t)) + " วิ";
+  else line = "คลื่น " + w.n + total + "  ·  ศัตรูเหลือ " + (b._enemiesAlive() + w.queue.length) + (w.boss ? "  ·  👑 บอส" : "") + "  ·  กำจัดแล้ว " + (w.kills + b.fighters.filter((f) => f.team === 1 && f.hp <= 0).length);
+  ctx.save();
+  ctx.font = "700 15px " + FONT;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const tw = ctx.measureText(line).width + 28;
+  ctx.fillStyle = "rgba(10,12,24,0.72)";
+  ctx.beginPath(); ctx.roundRect(W / 2 - tw / 2, 10, tw, 28, 14); ctx.fill();
+  ctx.fillStyle = w.boss && w.state === "fight" ? "#ff9a8a" : "#e8ebf5";
+  ctx.fillText(line, W / 2, 25);
+  if (waveBanner) {
+    const k = Math.min(1, waveBanner.t / 0.5, (2.2 - waveBanner.t) / 0.25 + 0.05);
+    ctx.globalAlpha = Math.max(0, Math.min(1, k));
+    ctx.font = "700 52px " + FONT;
+    ctx.lineWidth = 7; ctx.strokeStyle = "rgba(0,0,0,0.65)";
+    ctx.strokeText(waveBanner.text, W / 2, H * 0.34);
+    ctx.fillStyle = waveBanner.boss ? "#ff7a6a" : "#ffffff";
+    ctx.fillText(waveBanner.text, W / 2, H * 0.34);
+    if (waveBanner.sub) {
+      ctx.font = "600 24px " + FONT;
+      ctx.lineWidth = 5; ctx.strokeText(waveBanner.sub, W / 2, H * 0.34 + 46);
+      ctx.fillStyle = "#ffe08a"; ctx.fillText(waveBanner.sub, W / 2, H * 0.34 + 46);
+    }
+  }
+  ctx.restore();
+}
+
 function drawTeamMark(f, color, num) {
   ctx.save();
   ctx.strokeStyle = color;
@@ -3625,7 +3823,10 @@ function drawWinnerBanner(b) {
   let text = "เสมอ!";
   if (b.winner !== "draw") {
     const L = b.layout;
-    if (L && L.mode === "2v2") text = TEAM_INFO[b.winner].name + " ชนะ!";
+    if (L && L.mode === "waves") {
+      const kills = b.wave ? b.wave.kills : 0;
+      text = b.winner === 0 ? "รอดครบ " + b.wave.total + " คลื่น! (กำจัด " + kills + " ตัว)" : "ตกรอบที่คลื่น " + b.wave.n + " (กำจัด " + kills + " ตัว)";
+    } else if (L && L.mode === "2v2") text = TEAM_INFO[b.winner].name + " ชนะ!";
     else if (L && L.mode === "ffa") text = "ผู้เล่น " + (b.winner + 1) + " (" + b.fighters[b.winner].def.name + ") ชนะ!";
     else text = b.fighters[b.winner].def.name + " ชนะ!";
   }
@@ -3786,8 +3987,9 @@ function render() {
         ctx.filter = "drop-shadow(0 0 10px #ff2a55)";
         ctx.globalAlpha = 0.72;
       }
-      if (battle.layout && battle.layout.colors) drawTeamMark(f, battle.layout.colors[f.idx], f.idx + 1);
+      if (battle.layout && battle.layout.colors && f.idx >= 0 && battle.layout.colors[f.idx]) drawTeamMark(f, battle.layout.colors[f.idx], f.idx + 1);
       drawFighter(f, keyOf(f.def));
+      if (f.isEnemy) drawEnemyBar(f);
       ctx.globalAlpha = 1;
       if (f === battle.eraser) ctx.filter = "none";
       if (f.weapon && !f.disarmed) (f.weapon.type === "compass" ? drawCompass(f) : drawKatana(f));
@@ -3882,6 +4084,7 @@ function render() {
     if (battle.rewind) drawRewindOverlay(battle);
     if (battle.eraser && battle.eraser.cast) drawEraseLabel(battle);
     drawMetaVignette();
+    drawWaveHud(battle);
     for (const f of battle.fighters) {
       if (!f.cast || f.hp <= 0) continue;
       const c = f.cast;
@@ -3975,7 +4178,7 @@ const EXPECTED_VERSION = 41;
 function checkVersions() {
   const el = document.getElementById("ver");
   if (!el || typeof window === "undefined" || !window.BB_FILES) return;
-  const stale = ["characters", "battle", "audio"].filter((k) => window.BB_FILES[k] !== EXPECTED_VERSION);
+  const stale = ["characters", "battle", "audio", "waves"].filter((k) => window.BB_FILES[k] !== EXPECTED_VERSION);
   if (stale.length) {
     el.className = "ver warn";
     el.textContent =
@@ -3983,14 +4186,20 @@ function checkVersions() {
       stale.map((k) => "js/" + k + ".js").join(", ") +
       " — อัปโหลดไฟล์ใหม่ทับ แล้วรีเฟรชแรงๆ (Ctrl+Shift+R)";
   } else {
-    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 71";
+    el.textContent = "เวอร์ชัน " + EXPECTED_VERSION + " · UI 72";
   }
 }
 
 // จำโหมดที่เล่นล่าสุด
 try {
   const sm = localStorage.getItem("bb_mode");
-  if (sm && ["1v1", "2v2", "ffa"].includes(sm)) selMode.value = sm;
+  if (sm && ["1v1", "2v2", "ffa", "waves"].includes(sm)) selMode.value = sm;
+  const sw = JSON.parse(localStorage.getItem("bb_wave") || "null");
+  if (sw) {
+    if (ENEMY_CATEGORIES[sw.cat]) waveCfg.cat = sw.cat;
+    if (WAVE_TOTAL_CHOICES.includes(sw.total)) waveCfg.total = sw.total;
+    if ([1, 2, 3, 4].includes(sw.heroes)) waveCfg.heroes = sw.heroes;
+  }
   const sc = localStorage.getItem("bb_ffa");
   if (sc && ["3", "4", "5", "6"].includes(sc)) selCount.value = sc;
 } catch (e) { /* ข้าม */ }
