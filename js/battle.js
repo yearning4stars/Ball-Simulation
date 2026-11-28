@@ -496,7 +496,9 @@ class Battle {
     if (f.cast) {
       const c = f.cast;
       const sk = c.sk;
-      c.t += dt;
+      // singRush: ยิ่งเลือดน้อย ท่านี้ยิ่งร้องเร็วขึ้น (ทั้งช่วงเตรียม ระยะห่างระหว่างโน้ต และเวลาทั้งท่า) เลือดเต็ม 1 เท่า -> เลือดหมด singRush เท่า
+      const sr = sk.singRush ? 1 + (sk.singRush - 1) * (1 - Math.max(0, f.hp) / f.maxHp) : 1;
+      c.t += dt * sr;
 
       if (sk.type === "projectile") {
         // ยิงเป็นชุด: count ลูก ห่างกัน interval วินาที เริ่มที่ fireDelay
@@ -1766,6 +1768,8 @@ class Battle {
       mindDamage: sk.threeRange ? (hoopShot || !three ? sk.mindNear || 0 : sk.mindDamage) : sk.mindDamage || 0, // บั่นทอน (ลูกที่ไปโดนหน้าศัตรูระหว่างทาง = เบา)สติ/ความมั่นใจเท่าไรเมื่อโดน
       unblockable: !!sk.unblockable, // ปัดไม่ได้เลย: ดาบ/คลื่น/กระสุนอื่นไม่มีผล (Blossom)
       indestructible: !!sk.indestructible || !!sk.unblockable, // ปัดทิ้ง/ชนแล้วไม่แตก
+      pierce: !!sk.pierce, // ทะลุเป้า: โดนแล้วบินต่อ โดนศัตรูแต่ละตัวได้ครั้งเดียวต่อลูก (โน้ต/คำพูดของ Luka)
+      hits: [],
       hoop: hoopShot ? this.hoop : null,
       scoreMind: sk.mindDamage || 0, // ลงแป้น: ข่มขวัญศัตรูทุกคนเท่านี้ (3 แต้ม) / ครึ่งเดียวถ้า 2 แต้ม
       scoreDamage: three ? sk.damage || 0 : sk.damageNear || 0,
@@ -2078,6 +2082,7 @@ class Battle {
       for (const target of p.hoop ? [] : this._foes(p.owner)) { // ลูกชู้ตเข้าแป้นลอยเหนือหัวศัตรู ไม่โดนใครระหว่างทาง
         // หลบไปแล้ว (Meta Vision) / อยู่นอกความจริง (ตัดเวลา): กระสุนบินทะลุผ่านไป
         if (this._evaded(p, target) || target === this.eraser) continue;
+        if (p.pierce && p.hits.includes(target)) continue; // ทะลุผ่านตัวที่โดนไปแล้ว
         if (Math.hypot(target.x - p.x, target.y - p.y) < target.r + p.r) {
           // เกราะ (Wither ตอนเลือดต่ำ): กระสุนโดนน้อยลง
           // เกราะ Wither กันได้เฉพาะ "กระสุน" (ดาบ พุ่งชน คลื่น ฯลฯ ไม่ลดดาเมจ)
@@ -2099,6 +2104,7 @@ class Battle {
           if (p.flowers) this._spawnFlowers(p.owner, target, p.flowers, p.flowerDist);
           if (p.energyRefill) p.owner.energy = p.owner.def.energyMax || p.owner.energy; // ปาโดนแล้วพร้อมแทงต่อทันที
           p.owner.combatT = 0;
+          if (p.pierce) { p.hits.push(target); continue; } // ทะลุไปโดนตัวถัดไปได้
           p.dead = true;
           hit = true;
           break;
