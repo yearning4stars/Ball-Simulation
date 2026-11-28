@@ -302,6 +302,7 @@ button.pick:hover { background: #303030; }
 .snd-name { width: 9.5em; flex: none; font-weight: 600; }
 .snd-st { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6b7390; }
 .snd-st.on { color: #7be08f; }
+.snd-tv { width: 70px; flex: none; }
 .snd-row button { padding: 2px 8px; }
 .snd-row button:disabled { opacity: 0.35; cursor: default; }
 @media (max-width: 520px) { .snd-name { width: 6.5em; } }
