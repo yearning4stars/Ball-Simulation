@@ -29,6 +29,7 @@ const SOUND_CONFIG = {
     characters: {
       redmist: "assets/music/redmist.mp3",
       isagi: "assets/music/isagi.mp3",
+      luka: "assets/music/luka.mp3",
       // funx: "assets/music/funx.mp3",
       // florentino: "assets/music/florentino.mp3",
     },
