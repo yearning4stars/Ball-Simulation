@@ -695,6 +695,14 @@ const CHARACTERS = {
         rechain: true,
         rechainCd: 0.8,
         restAfter: 0.15,
+        // เป้าเลือดต่ำกว่า lowHpBelow (สัดส่วน) โดนแรงกว่า lowHpMult เท่า
+        // killChain: ฆ่าได้ -> พุ่งใส่ตัวต่อไปทันที (ไม่รอคูลดาวน์ ทำซ้ำได้ไม่จำกัด) ดาเมจครั้งถัดไป x killMult
+        // maxMult: เพดานตัวคูณรวมทั้งหมด "รวม E.G.O." (ตัวคูณทุกอย่างคูณกันแล้วไม่เกินเท่านี้)
+        lowHpMult: 2,
+        lowHpBelow: 0.5,
+        killChain: true,
+        killMult: 3,
+        maxMult: 6,
       },
       {
         // Greater Split: Horizontal: ฟันกวาด 180 องศาตรงหน้า ระยะไกลมาก ทำลายกระสุนและบั่นทอนสกิลของศัตรู (คูลดาวน์เพิ่ม)

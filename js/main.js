@@ -1493,6 +1493,13 @@ function handleEvents(events) {
       spawnParticles(e.x, e.y, "#6fd3ff", 14, 280);
       floaters.push({ x: e.x, y: e.y - 56, text: "หลบ!", life: 0.8, color: "#8fe0ff", size: 28 });
       sfx.dodge();
+    } else if (e.type === "onrushChain") {
+      // Onrush ฆ่าได้: พุ่งต่อทันที ดาเมจครั้งถัดไป x3 (เพดานรวม x6) ยิ่งต่อเนื่องยิ่งเอฟเฟกต์แรง
+      metaRing(e.x, e.y, 110 + Math.min(80, e.count * 12), "255,70,100", 0.4, 5, 0);
+      metaRing(e.x, e.y, 170, "255,255,255", 0.3, 2, 0.05);
+      spawnParticles(e.x, e.y, "#ff3b5c", 14, 340);
+      shake = Math.max(shake, 7);
+      floaters.push({ x: e.x, y: e.y - 52, text: "ต่อเนื่อง x" + e.count + "! (ดาเมจ x" + e.mult + ")", life: 1.1, color: "#ff5a78", size: 26 });
     } else if (e.type === "enemySpawn") {
       spawnParticles(e.x, e.y, e.boss ? "#ff6a5a" : "#9fbf7a", e.boss ? 18 : 5, e.boss ? 260 : 110);
       if (e.boss) shake = Math.max(shake, 8);

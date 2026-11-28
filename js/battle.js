@@ -586,8 +586,13 @@ class Battle {
 
     // เลือกสกิลที่พร้อมใช้ โดยให้สกิลที่รอมานานที่สุดไปก่อน (กันสกิลแรกแย่งใช้ตลอด)
     let pick = -1;
+    if (f.forceSkill !== undefined && f.forceSkill !== null) { // Onrush ต่อเนื่อง: ใช้ซ้ำทันทีถ้ายังมีศัตรูให้พุ่งใส่
+      pick = f.forceSkill;
+      f.forceSkill = null;
+      if (f.hp <= 0 || !this._foes(f).length) pick = -1;
+    }
     const timeBusy = this.rewind || this.fighters.some((g) => g.cast && TIME_SKILLS.includes(g.cast.sk.type));
-    for (let i = 0; i < f.skills.length; i++) {
+    for (let i = 0; pick === -1 && i < f.skills.length; i++) {
       const s2 = f.skills[i];
       if (f.cds[i] > 0) continue;
       if (timeBusy && TIME_SKILLS.includes(s2.type)) continue; // เวลาถูกแตะอยู่แล้ว
@@ -1901,7 +1906,28 @@ class Battle {
     const c = attacker.cast;
     if (!c || c.sk.type !== "dash" || c.hit) return;
     c.hit = true;
-    this._damage(target, this._out(attacker, c.sk.damage * this._dmgMult(attacker, target)), attacker.x + nx * attacker.r, attacker.y + ny * attacker.r, true);
+    const dsk = c.sk;
+    // ตัวคูณดาเมจพิเศษ (Onrush): เป้าเลือดต่ำกว่า lowHpBelow = x lowHpMult, ฆ่าได้ครั้งก่อน = x killMult (chainMult)
+    // ทุกตัวคูณรวมกับ E.G.O. แล้วถูกจำกัดที่ maxMult
+    let mult = this._dmgMult(attacker, target);
+    if (dsk.lowHpMult && target.hp < target.maxHp * (dsk.lowHpBelow || 0.5)) mult *= dsk.lowHpMult;
+    if (dsk.killChain && attacker.chainMult > 1) mult *= attacker.chainMult;
+    if (dsk.maxMult) mult = Math.min(dsk.maxMult, mult);
+    if (dsk.killChain) attacker.chainMult = 1;
+    this._damage(target, this._out(attacker, dsk.damage * mult), attacker.x + nx * attacker.r, attacker.y + ny * attacker.r, true);
+    if (dsk.killChain && target.hp <= 0) {
+      // ฆ่าได้: ครั้งต่อไปดาเมจ x killMult แล้วพุ่งใส่ตัวต่อไปทันที (ไม่รอคูลดาวน์) ทำซ้ำได้ไม่จำกัด
+      attacker.chainMult = dsk.killMult || 3;
+      attacker.chainCount = (attacker.chainCount || 0) + 1;
+      attacker.forceSkill = c.i;
+      attacker.cast = null;
+      attacker.frame = "idle";
+      attacker.dashTimer = 0;
+      attacker.gcd = 0;
+      attacker.cds[c.i] = 0;
+      this.events.push({ type: "onrushChain", x: attacker.x, y: attacker.y, count: attacker.chainCount, mult: attacker.chainMult });
+      return;
+    }
     const kb = c.sk.knockback || 0;
     this._knock(target, nx, ny, kb);
     attacker.combatT = 0;
