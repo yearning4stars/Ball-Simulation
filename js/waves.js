@@ -60,14 +60,14 @@ const ENEMY_CATEGORIES = {
   skibidi: {
     name: "สกิบิดี้",
     icon: "🚽",
-    desc: "ใส่รูปของคุณเองที่ assets/enemies/skibidi/ (walker, runner, spitter, brute .png)",
+    desc: "Normal / Mini / Police / Large Toilet · ใส่รูปของคุณเองที่ assets/enemies/skibidi/ (walker, runner, spitter, brute .png)",
     skin: "sprite", // ตัวละครนี้มีลิขสิทธิ์ ผมไม่ได้วาดให้ ใส่ PNG ของคุณเอง
     imageDir: "assets/enemies/skibidi/",
     roles: {
-      walker: { name: "สกิบิดี้", color: "#c9d3e6" },
-      runner: { name: "สกิบิดี้วิ่ง", color: "#e6c9d3" },
-      spitter: { name: "สกิบิดี้ยิง", color: "#c9e6d3" },
-      brute: { name: "สกิบิดี้บอส", color: "#e6dcc9" },
+      walker: { name: "Normal Toilet", color: "#c9d3e6" },
+      runner: { name: "Mini Toilet", color: "#e6c9d3" },
+      spitter: { name: "Police Toilet", color: "#9fb8e6" },
+      brute: { name: "Large Toilet", color: "#e6dcc9" },
     },
   },
 };
