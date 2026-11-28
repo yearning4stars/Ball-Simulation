@@ -2,11 +2,11 @@
 //  เพลงธีมของโหมดเอาชีวิตรอดเป็นคลื่น
 //
 //  - มีเพลงสังเคราะห์ในตัวหลายธีม (สร้างจากโค้ด ไม่ต้องมีไฟล์เสียง) เล่นวนซ้ำ
-//  - เลือกเพลงตามสถานการณ์: พักระหว่างคลื่น / คลื่นต้น-กลาง-ท้าย / บอส / คลื่นสุดท้าย / คลื่นที่กำหนดเฉพาะ / หมวดศัตรู
+//  - เลือกเพลงตามสถานการณ์: คลื่นต้น-กลาง-ท้าย / บอส / คลื่นสุดท้าย / คลื่นที่กำหนดเฉพาะ / หมวดศัตรู
 //  - อยากใช้เพลงของตัวเอง: ตั้งใน js/sound-config.js (หัวข้อ waves) หรือกด "🎵 ตั้งค่าเสียง" ในเกม
 //    ไฟล์ที่ตั้งไว้จะ "ทับ" เพลงสังเคราะห์ของธีมชื่อเดียวกัน
 //
-//  ชื่อธีมในตัว: calm early mid late boss boss2 finale zombie skibidi
+//  ชื่อธีมในตัว: early mid late boss boss2 finale zombie skibidi
 // ============================================================
 (function () {
   // ---------- ธีมสังเคราะห์ ----------
@@ -22,13 +22,6 @@
   };
 
   const THEMES = {
-    // พักระหว่างคลื่น: เบาๆ ผ่อนคลาย
-    calm: {
-      label: "พักระหว่างคลื่น (สงบ)", bpm: 72, bars: 8, root: 57, scale: "minor",
-      prog: [0, 5, 2, 6, 0, 5, 6, 4], seed: 11,
-      pad: { wave: "tri", vol: 0.55 }, arp: { pat: "x.x.x.x.x.x.x.x.", wave: "sine", vol: 0.35, oct: 1 },
-      lead: { density: 0.22, wave: "sine", vol: 0.4, oct: 1 },
-    },
     // คลื่นต้นๆ
     early: {
       label: "คลื่นต้น (เริ่มอุ่นเครื่อง)", bpm: 112, bars: 8, root: 57, scale: "minor",
@@ -248,9 +241,8 @@
   }
 
   // ---------- เลือกเพลงตามสถานการณ์ ----------
-  // wc = SOUND_CONFIG.waves; info = { state: "break"|"fight", n, total, boss, category }
+  // wc = SOUND_CONFIG.waves; info = { n, total, boss, category }
   const DEFAULTS = {
-    break: "calm",
     fight: [{ upTo: 3, music: "early" }, { upTo: 7, music: "mid" }, { music: "late" }],
     boss: "boss",
     finale: "finale",
@@ -261,7 +253,6 @@
   function pick(wc, info) {
     wc = wc || {};
     const v = (k) => (wc[k] !== undefined ? wc[k] : DEFAULTS[k]);
-    if (info.state === "break") return v("break") || null;
     const byWave = v("byWave") || {};
     if (byWave[info.n]) return byWave[info.n]; // เพลงเฉพาะด่านชนะทุกอย่าง
     if (info.total && info.n >= info.total) return v("finale") || null; // คลื่นสุดท้าย

@@ -35,15 +35,17 @@ const SOUND_CONFIG = {
   },
 
   // เพลงโหมดคลื่น (Survival Waves) — ไม่ตั้งอะไรเลยก็มีเพลงสังเคราะห์ในตัวให้ครบ
-  // ชื่อธีมในตัว: calm early mid late boss boss2 finale zombie skibidi
+  // ชื่อธีมในตัว: early mid late boss boss2 finale zombie skibidi
   // ค่าที่ใส่ในช่องด้านล่างคือ "ชื่อธีม" (ของในตัวหรือที่คุณตั้งเองใน files)
   waves: {
     // ผูกไฟล์เพลงของคุณกับชื่อธีม: ชื่อเดียวกับธีมในตัว = ใช้ไฟล์แทนเพลงในตัว / ชื่อใหม่ = ธีมใหม่ของคุณ
+    // เพลงประจำตัวละคร (music.characters ด้านบน) จะ "ทับ" เพลงโหมดคลื่นทั้งหมด ถ้าไม่อยากให้ทับ ตั้ง characterOverride: false
+    characterOverride: true,
+    // ช่วงพักระหว่างคลื่นเพลงจะเล่นต่อเนื่อง ไม่เปลี่ยนเพลง
     files: {
       // boss: "assets/music/my-boss.mp3",
       // wave15: "assets/music/wave15.mp3",
     },
-    break: "calm",                       // ช่วงพักระหว่างคลื่น
     fight: [                             // เพลงตอนสู้ตามเลขคลื่น (upTo = ถึงคลื่นที่เท่าไร)
       { upTo: 3, music: "early" },
       { upTo: 7, music: "mid" },

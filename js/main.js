@@ -143,8 +143,18 @@ function teamRatios(b) {
 }
 // ---------- เพลงโหมดคลื่น: พัก / คลื่นต้น-กลาง-ท้าย / บอส / คลื่นสุดท้าย / เพลงเฉพาะด่าน / หมวดศัตรู ----------
 // เลือกเพลงด้วย WaveMusic.pick (js/wave-music.js) ตั้งค่าได้ที่ SOUND_CONFIG.waves ใน js/sound-config.js
+function waveCharKey() {
+  // ธีมประจำตัวละครของผู้เล่นที่ยังรอด (เลือกตัวที่เลือดเหลือมากที่สุดที่มีธีม)
+  if (!battle) return null;
+  const heroes = battle.fighters.filter((f) => f.team === 0 && f.hp > 0).sort((x, y) => y.hp / y.maxHp - x.hp / x.maxHp);
+  for (const f of heroes) { const k = "char:" + charKey(f.def); if (sfx.hasMusic(k)) return k; }
+  return null;
+}
 function waveMusicSet(info) {
   const wc = window.SOUND_CONFIG && SOUND_CONFIG.waves;
+  const ck = !wc || wc.characterOverride !== false ? waveCharKey() : null;
+  if (ck) { sfx.musicPlay(ck, 1.2); return; } // เพลงตัวละครทับเพลงคลื่น
+  if (info.state === "break") { if (sfx.music) return; info = Object.assign({}, info, { state: "fight", n: info.n + 1 }); } // พัก = เล่นต่อ
   const id = typeof WaveMusic !== "undefined" ? WaveMusic.pick(wc, info) : null;
   const key = id ? "wave:" + id : null;
   if (!key || !sfx.hasMusic(key)) { sfx.musicStop(1.0); return; }
@@ -329,9 +339,9 @@ function openSoundSettings() {
   body.appendChild(hw);
   const wnote = document.createElement("p");
   wnote.className = "snd-note";
-  wnote.textContent = "มีเพลงในตัวให้ทุกธีม (กด ▶ ลองฟัง) เลือกไฟล์เพื่อใช้แทนธีมนั้นได้ " +
+  wnote.textContent = "มีเพลงในตัวให้ทุกธีม (กด ▶ ลองฟัง) เลือกไฟล์เพื่อใช้แทนธีมนั้นได้ ถ้าตัวละครของผู้เล่นมีธีมของตัวเอง (ด้านบน) จะเล่นธีมตัวละครแทนเพลงคลื่นทั้งหมด " +
     "ลำดับการเลือกเพลงตอนสู้: เพลงเฉพาะด่าน (ค่าเริ่มต้น คลื่นที่ 10 = บอสคลั่ง) › คลื่นสุดท้าย › บอส › เพลงประจำหมวดศัตรู › คลื่นต้น/กลาง/ท้าย " +
-    "ส่วนช่วงพักระหว่างคลื่นใช้เพลงสงบ (ตั้งว่าคลื่นไหนใช้เพลงอะไรได้ใน js/sound-config.js หัวข้อ waves)";
+    "ช่วงพักระหว่างคลื่นเพลงเล่นต่อเนื่อง (ตั้งว่าคลื่นไหนใช้เพลงอะไรได้ใน js/sound-config.js หัวข้อ waves)";
   body.appendChild(wnote);
   if (typeof WaveMusic !== "undefined") {
     const wids = WaveMusic.ids();
