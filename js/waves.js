@@ -1,7 +1,7 @@
 // ============================================================
 //  โหมดเอาชีวิตรอดเป็นคลื่น (Survival Waves)
 //
-//  ผู้เล่น 1-4 คน (ทีม 0) รับมือศัตรูที่ทยอยเข้ามาเป็นคลื่นๆ ผ่านครบ = ชนะ (หรือเล่นไม่จำกัดจนตาย)
+//  ผู้เล่น 1-4 คน (ทีม 0) รับมือศัตรู (ความยากไม่เปลี่ยนตามจำนวนผู้เล่น)ที่ทยอยเข้ามาเป็นคลื่นๆ ผ่านครบ = ชนะ (หรือเล่นไม่จำกัดจนตาย)
 //  ทุกๆ 5 คลื่นมีบอส (role "brute") คลื่นยิ่งสูงยิ่งเยอะและอึดขึ้น
 //
 //  หมวดศัตรู = ENEMY_CATEGORIES (เพิ่มหมวดใหม่ได้โดยเพิ่มรายการ ไม่ต้องแก้ที่อื่น)
@@ -64,10 +64,10 @@ const ENEMY_CATEGORIES = {
     skin: "sprite", // ตัวละครนี้มีลิขสิทธิ์ ผมไม่ได้วาดให้ ใส่ PNG ของคุณเอง
     imageDir: "assets/enemies/skibidi/",
     roles: {
-      walker: { name: "Normal Toilet", color: "#c9d3e6" },
-      runner: { name: "Mini Toilet", color: "#e6c9d3" },
-      spitter: { name: "Police Toilet", color: "#9fb8e6" },
-      brute: { name: "Large Toilet", color: "#e6dcc9" },
+      walker: { name: "Normal Toilet", color: "#c9d3e6", hp: 4 }, // hp ตายตัว (ไม่เพิ่มตามคลื่น)
+      runner: { name: "Mini Toilet", color: "#e6c9d3", hp: 2 },
+      spitter: { name: "Police Toilet", color: "#9fb8e6", hp: 3 },
+      brute: { name: "Large Toilet", color: "#e6dcc9", hp: 10 },
     },
   },
 };
@@ -92,7 +92,7 @@ function makeEnemyDef(catId, role, n) {
     __key: enemyKey(catId, role),
     name: ov.name,
     color: ov.color,
-    hp: Math.round(tpl.hp * hpM),
+    hp: ov.hp !== undefined ? ov.hp : Math.round(tpl.hp * hpM), // หมวดที่กำหนด hp เอง = ใช้ค่านั้นตลอดทุกคลื่น
     speed: Math.round(tpl.speed * spM),
     radius: tpl.radius,
     skin: cat.skin,
@@ -105,7 +105,7 @@ function makeEnemyDef(catId, role, n) {
 // รายชื่อศัตรูของคลื่นที่ n (แค่ role) heroes = จำนวนผู้เล่น (คนเยอะ = ศัตรูเยอะขึ้น)
 function waveRoster(n, heroes, rng) {
   rng = rng || Math.random;
-  const scale = 1 + 0.45 * (Math.max(1, heroes) - 1);
+  const scale = 1; // จำนวนศัตรูไม่เพิ่มตามจำนวนผู้เล่น (heroes ไม่ใช้แล้ว)
   const cnt = (v) => Math.round(v * scale);
   const list = [];
   const add = (role, k) => { for (let i = 0; i < k; i++) list.push(role); };
@@ -125,7 +125,7 @@ function surviveConfig(catId, total, heroes) {
   return {
     category: catId,
     total, // 0 = ไม่จำกัด
-    maxAlive: 7 + Math.min(5, heroes * 2), // อยู่บนสนามพร้อมกันไม่เกินนี้ ที่เหลือรอทยอยเข้า
+    maxAlive: 9, // อยู่บนสนามพร้อมกันไม่เกินนี้ ที่เหลือรอทยอยเข้า (ไม่เปลี่ยนตามจำนวนผู้เล่น)
     breakT: 3.2, // พักระหว่างคลื่น (วินาที)
     firstT: 2.5, // รอก่อนคลื่นแรก
     healFrac: 0.3, // จบคลื่นฟื้นเลือดผู้เล่นที่ยังรอด 30%
