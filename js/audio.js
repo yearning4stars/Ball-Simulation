@@ -236,7 +236,7 @@ class SoundFX {
     this._tone(247, 196, 0.5, "triangle", 0.14, 0.95);
   }
   // ---------- เสียง/เพลงที่ผู้เล่นใส่เอง ----------
-  // key: "sfx:<ชื่อเสียง>" | "music:advantage" | "music:char:<ชื่อตัวละคร>"
+  // key: "sfx:<ชื่อเสียง>" | "music:advantage" | "music:char:<ชื่อตัวละคร>" | "music:wave:<ชื่อธีมโหมดคลื่น>"
   // src: URL (string) หรือ Blob  แปลงเป็นเสียงตอนปลดล็อกเสียงแล้ว (ถ้ายังไม่ปลดล็อกจะรอไว้)
   setCustom(key, src, kind, name) {
     this.pending[key] = { src };
@@ -262,6 +262,7 @@ class SoundFX {
     if (!this.ctx) return;
     const keys = Object.keys(this.pending);
     for (const key of keys) {
+      if (!this.pending[key]) continue; // อีกรอบถอดรหัสไปแล้ว
       const items = [].concat(this.pending[key].src);
       delete this.pending[key];
       const out = [];
@@ -294,7 +295,7 @@ class SoundFX {
     this.unlock();
     if (!this.ctx) return;
     const go = () => {
-      const list = this.buffers[key];
+      const list = key.startsWith("music:") ? this._musicBufs(key.slice(6)) : this.buffers[key];
       if (!list || !list.length) return;
       if (key.startsWith("sfx:")) this._playCustom(key.slice(4));
       else {
@@ -320,12 +321,32 @@ class SoundFX {
   }
 
   // ---------- เพลงธีม (เล่นวนซ้ำ ค่อยๆ เฟดเข้า/ออก) ----------
-  hasMusic(name) { return !!(this.buffers["music:" + name] && this.buffers["music:" + name].length); }
+  // เพลงสังเคราะห์ของโหมดคลื่น ("wave:<ธีม>") สร้างตอนต้องใช้ครั้งแรกแล้วเก็บไว้ ไฟล์ที่ผู้เล่นใส่จะมาก่อนเสมอ
+  _synthMusic(name) {
+    if (!this.ctx || !name.startsWith("wave:") || typeof WaveMusic === "undefined") return null;
+    this.synthBufs = this.synthBufs || {};
+    if (!(name in this.synthBufs)) {
+      let b = null;
+      try {
+        const r = WaveMusic.render(name.slice(5));
+        if (r) { b = this.ctx.createBuffer(1, r.data.length, r.sampleRate); b.copyToChannel(r.data, 0); }
+      } catch (e) { /* สร้างไม่ได้ก็ข้าม */ }
+      this.synthBufs[name] = b;
+    }
+    return this.synthBufs[name] ? [this.synthBufs[name]] : null;
+  }
+
+  _musicBufs(name) {
+    const own = this.buffers["music:" + name];
+    return own && own.length ? own : this._synthMusic(name);
+  }
+
+  hasMusic(name) { const b = this._musicBufs(name); return !!(b && b.length); }
 
   musicPlay(name, fade = 1.2) {
     if (!this.ctx) return;
     if (this.music && this.music.key === name) return;
-    const bufs = this.buffers["music:" + name];
+    const bufs = this._musicBufs(name);
     if (!bufs || !bufs.length) return;
     this.musicStop(fade);
     const t = this.ctx.currentTime;

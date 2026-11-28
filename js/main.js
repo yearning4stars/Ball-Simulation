@@ -141,7 +141,19 @@ function teamRatios(b) {
     .map(([team, v]) => ({ team: isNaN(+team) ? team : +team, r: v.max ? (v.hp / v.max) * 100 : 0 }))
     .sort((a, c) => c.r - a.r);
 }
+// ---------- เพลงโหมดคลื่น: พัก / คลื่นต้น-กลาง-ท้าย / บอส / คลื่นสุดท้าย / เพลงเฉพาะด่าน / หมวดศัตรู ----------
+// เลือกเพลงด้วย WaveMusic.pick (js/wave-music.js) ตั้งค่าได้ที่ SOUND_CONFIG.waves ใน js/sound-config.js
+function waveMusicSet(info) {
+  const wc = window.SOUND_CONFIG && SOUND_CONFIG.waves;
+  const id = typeof WaveMusic !== "undefined" ? WaveMusic.pick(wc, info) : null;
+  const key = id ? "wave:" + id : null;
+  if (!key || !sfx.hasMusic(key)) { sfx.musicStop(1.0); return; }
+  const special = info.state === "fight" && (info.boss || (info.total && info.n >= info.total));
+  sfx.musicPlay(key, special ? 0.5 : 1.4);
+}
+
 function updateMusic(b) {
+  if (b.wave) return; // โหมดคลื่นใช้เพลงตามคลื่น (waveMusicSet) ไม่ใช้เพลงตอนได้เปรียบ
   if (b.winner !== null) { musicState.team = null; return; }
   const cfg = (window.SOUND_CONFIG && SOUND_CONFIG.advantage) || {};
   const lead = cfg.lead !== undefined ? cfg.lead : 25;
@@ -188,6 +200,7 @@ function loadSoundConfig() {
     const m = cfg.music || {};
     if (m.advantage) sfx.setCustom("music:advantage", m.advantage, "config");
     for (const [k, v] of Object.entries(m.characters || {})) if (v) sfx.setCustom("music:char:" + k, v, "config");
+    for (const [k, v] of Object.entries((cfg.waves && cfg.waves.files) || {})) if (v) sfx.setCustom("music:wave:" + k, v, "config");
   }
   CustomStore.all().then((rows) => {
     for (const r of rows) sfx.setCustom(r.key, r.blob, "upload", r.name);
@@ -245,7 +258,7 @@ function openSoundSettings() {
   document.body.appendChild(file);
   const refreshers = [];
 
-  const addRow = (parent, key, label) => {
+  const addRow = (parent, key, label, builtin) => {
     const row = document.createElement("div");
     row.className = "snd-row";
     const nm = document.createElement("span");
@@ -261,9 +274,9 @@ function openSoundSettings() {
     clr.type = "button"; clr.className = "secondary"; clr.textContent = "ล้าง"; clr.title = "กลับไปใช้ค่าเริ่มต้น";
     const refresh = () => {
       const src = sfx.sources[key];
-      st.textContent = src ? (src === "upload" ? "[ไฟล์] " : "[ลิงก์] ") + (sfx.names[key] || "") : "ค่าเริ่มต้น";
+      st.textContent = src ? (src === "upload" ? "[ไฟล์] " : "[ลิงก์] ") + (sfx.names[key] || "") : builtin ? "เพลงในตัว" : "ค่าเริ่มต้น";
       st.classList.toggle("on", !!src);
-      play.disabled = !src;
+      play.disabled = !src && !builtin;
       clr.disabled = !src;
     };
     refreshers.push(refresh);
@@ -288,6 +301,7 @@ function openSoundSettings() {
       const cfg = window.SOUND_CONFIG || {};
       const n = key.split(":").slice(1).join(":");
       const fromCfg = key.startsWith("sfx:") ? (cfg.sfx || {})[n]
+        : n.startsWith("wave:") ? ((cfg.waves || {}).files || {})[n.slice(5)]
         : n === "advantage" ? (cfg.music || {}).advantage : ((cfg.music || {}).characters || {})[n.replace("char:", "")];
       if (fromCfg) sfx.setCustom(key, fromCfg, "config");
       refresh();
@@ -309,6 +323,22 @@ function openSoundSettings() {
   body.appendChild(hint);
   addRow(body, "music:advantage", "เพลงทั่วไป (ทุกตัวละคร)");
   for (const k of Object.keys(CHARACTERS)) addRow(body, "music:char:" + k, "ธีม " + CHARACTERS[k].name);
+
+  const hw = document.createElement("h3");
+  hw.textContent = "เพลงโหมดคลื่น";
+  body.appendChild(hw);
+  const wnote = document.createElement("p");
+  wnote.className = "snd-note";
+  wnote.textContent = "มีเพลงในตัวให้ทุกธีม (กด ▶ ลองฟัง) เลือกไฟล์เพื่อใช้แทนธีมนั้นได้ " +
+    "ลำดับการเลือกเพลงตอนสู้: เพลงเฉพาะด่าน (ค่าเริ่มต้น คลื่นที่ 10 = บอสคลั่ง) › คลื่นสุดท้าย › บอส › เพลงประจำหมวดศัตรู › คลื่นต้น/กลาง/ท้าย " +
+    "ส่วนช่วงพักระหว่างคลื่นใช้เพลงสงบ (ตั้งว่าคลื่นไหนใช้เพลงอะไรได้ใน js/sound-config.js หัวข้อ waves)";
+  body.appendChild(wnote);
+  if (typeof WaveMusic !== "undefined") {
+    const wids = WaveMusic.ids();
+    const extra = Object.keys((window.SOUND_CONFIG && SOUND_CONFIG.waves && SOUND_CONFIG.waves.files) || {}).filter((k) => !wids.includes(k));
+    for (const id of wids) addRow(body, "music:wave:" + id, WaveMusic.THEMES[id].label, true);
+    for (const id of extra) addRow(body, "music:wave:" + id, "ธีมของคุณ: " + id, false);
+  }
 
   const h2 = document.createElement("h3");
   h2.textContent = "เสียงเอฟเฟกต์";
@@ -844,7 +874,10 @@ function startBattle() {
   battle = new Battle(W, H, defs, Math.random, layout.teams);
   battle.layout = layout;
   waveBanner = null;
-  if (layout.mode === "waves") battle.startSurvival(surviveConfig(waveCfg.cat, waveCfg.total, layout.n));
+  if (layout.mode === "waves") {
+    battle.startSurvival(surviveConfig(waveCfg.cat, waveCfg.total, layout.n));
+    waveMusicSet({ state: "break", n: 0, total: waveCfg.total, boss: false, category: waveCfg.cat });
+  }
   battle.fighters.forEach((f, i) => { f.trailHp = f.hp; f.skin = (playerSels[i] && playerSels[i].skin) || DEFAULT_SKIN; }); // แถบเลือดที่ค่อยๆ ลดตามหลัง
   particles = [];
   shards = [];
@@ -1505,8 +1538,10 @@ function handleEvents(events) {
       if (e.boss) shake = Math.max(shake, 8);
     } else if (e.type === "waveStart") {
       waveBanner = { text: "คลื่นที่ " + e.n + (e.total ? " / " + e.total : ""), sub: e.boss ? "👑 บอสมาแล้ว!" : "ศัตรู " + e.count + " ตัว", t: 2.2, boss: e.boss };
+      waveMusicSet({ state: "fight", n: e.n, total: e.total, boss: e.boss, category: battle.wave ? battle.wave.cfg.category : null });
     } else if (e.type === "waveClear") {
       waveBanner = { text: "เคลียร์คลื่น " + e.n + "!", sub: e.total && e.n >= e.total ? "" : "ฟื้นเลือดเล็กน้อย", t: 2.2, boss: false };
+      if (!(e.total && e.n >= e.total)) waveMusicSet({ state: "break", n: e.n, total: e.total, boss: false, category: battle.wave ? battle.wave.cfg.category : null });
     } else if (e.type === "tired") {
       floaters.push({ x: e.x, y: e.y - 70, text: "เหนื่อยแล้ว…", life: 1.1, color: "#ffd65a", size: 22 });
     } else if (e.type === "exhausted") {
@@ -4127,7 +4162,7 @@ function loop(ts) {
   }
   updateEffects(dt);
   render();
-  if (battle && !labMode) { updateHud(battle); updateMusic(battle); }
+  if (battle && !labMode) { updateHud(battle); updateMusic(battle); } else if (!battle && sfx.music) sfx.musicStop(0.8); // กลับเมนู = เพลงหยุด
   requestAnimationFrame(loop);
 }
 
