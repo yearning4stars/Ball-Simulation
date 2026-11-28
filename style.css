@@ -390,6 +390,7 @@ button.go-btn:hover { background: #e8b455; }
 .mc-pips b { font-size: 0.6rem; color: #8d877a; margin: 0 3px; }
 .mc-count { display: flex; align-items: center; gap: 4px; margin-top: 5px; font-size: 0.62rem; color: #9b9587; }
 .mc-n { padding: 1px 7px; font-size: 0.7rem; border-radius: 3px; background: #262626; border-color: #454038; color: inherit; font-weight: 500; }
+.mc-n.wide { padding: 2px 9px; }
 .mc-n.on { background: #d9a441; border-color: #d9a441; color: #1c1608; font-weight: 700; }
 
 .teams { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: stretch; margin-bottom: 6px; font-size: 0.75rem; }
