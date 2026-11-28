@@ -906,6 +906,7 @@ function setView(v) {
   document.body.dataset.view = v;
   closePicker();
   paused = false;
+  if (v !== "game") { sfx.musicReset(); musicState = { team: null, since: 0 }; } // ออกจากด่านแล้วเพลงธีมต้องหยุด
   if (v === "setup") {
     rebuildPlayers(); // ให้ภาพย่อตัวละครตรงกับรูปแบบที่เลือกอยู่
     mountLab();
@@ -4172,7 +4173,7 @@ function loop(ts) {
   }
   updateEffects(dt);
   render();
-  if (battle && !labMode) { updateHud(battle); updateMusic(battle); } else if (!battle && sfx.music) sfx.musicStop(0.8); // กลับเมนู = เพลงหยุด
+  if (battle && !labMode) { updateHud(battle); updateMusic(battle); } else if (sfx.music) sfx.musicStop(0.8); // ออกจากด่าน (เมนู/หน้าเตรียมสู้/แล็บ) = เพลงหยุด
   requestAnimationFrame(loop);
 }
 
